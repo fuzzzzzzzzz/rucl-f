@@ -4,3 +4,9 @@ project.private.config.json
 *.log
 .superpowers/
 cloudfunctions/**/node_modules/
+node_modules/
+miniprogram_npm/
+cloudfunctions/**/node_modules/
+project.private.config.json
+.env
+.env.local
