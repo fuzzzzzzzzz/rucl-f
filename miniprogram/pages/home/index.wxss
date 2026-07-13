@@ -1,1 +1,69 @@
-/* Shared styles live in app.wxss. */
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24rpx;
+  margin-bottom: 30rpx;
+}
+.hero-action {
+  height: 330rpx;
+  border: 6rpx solid #191919;
+  box-shadow: 10rpx 10rpx 0 #191919;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 30rpx;
+  font-weight: 900;
+}
+.hero-action text {
+  font-size: 20rpx;
+  margin-top: 8rpx;
+}
+.hero-action.lost {
+  background: #ff3b0a;
+  color: #fff;
+}
+.hero-action.found {
+  background: #ffec00;
+}
+.hero-icon {
+  font-size: 84rpx;
+  line-height: 1;
+  margin-bottom: 26rpx;
+}
+.principle-copy {
+  font-size: 28rpx;
+  line-height: 1.65;
+  color: #68453c;
+}
+.info {
+  float: right;
+  font-size: 38rpx;
+}
+.status-box {
+  background: #eee;
+  border: 4rpx solid #191919;
+  padding: 26rpx;
+  margin-top: 110rpx;
+  font-size: 26rpx;
+  line-height: 1.75;
+}
+.visual {
+  padding: 12rpx;
+  position: relative;
+}
+.visual image {
+  display: block;
+  width: 100%;
+  height: 260rpx;
+}
+.visual-label {
+  position: absolute;
+  left: 22rpx;
+  bottom: 22rpx;
+  background: #191919;
+  color: #fff;
+  padding: 8rpx 16rpx;
+  font-weight: 900;
+}

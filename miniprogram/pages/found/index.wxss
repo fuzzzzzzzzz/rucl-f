@@ -1,1 +1,33 @@
-/* Shared styles live in app.wxss. */
+.scan-box {
+  height: 600rpx;
+  border: 7rpx dashed #191919;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: 900;
+  margin: 36rpx 8rpx;
+}
+.scan-box image {
+  width: 100%;
+  height: 100%;
+}
+.camera {
+  font-size: 100rpx;
+  margin-bottom: 30rpx;
+}
+.privacy-alert {
+  text-align: center;
+  color: #68453c;
+  font-size: 27rpx;
+  font-style: italic;
+  line-height: 1.55;
+  margin: 34rpx 20rpx;
+}
+.post-page textarea.field {
+  height: 180rpx;
+}
+.neo-button--orange {
+  width: 100%;
+}

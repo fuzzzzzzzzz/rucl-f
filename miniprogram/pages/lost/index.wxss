@@ -1,1 +1,42 @@
-/* Shared styles live in app.wxss. */
+.search-page {
+  min-height: 1100rpx;
+  background: linear-gradient(135deg, transparent 72%, #eee 72%, #eee 73%, transparent 73%);
+}
+.input-card {
+  margin-top: 34rpx;
+}
+.section-title text {
+  font-size: 20rpx;
+}
+.match {
+  width: 100%;
+  font-size: 30rpx;
+}
+.match-banner {
+  border: 6rpx solid #191919;
+  box-shadow: 10rpx 10rpx 0 #191919;
+  background: #09e4b4;
+  padding: 34rpx 26rpx;
+  margin: 30rpx 10rpx 48rpx 0;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.5;
+}
+.locked {
+  border: 6rpx dashed #191919;
+  box-shadow: 10rpx 10rpx 0 #191919;
+  background: #e3e3e3;
+  padding: 60rpx 40rpx;
+  text-align: center;
+  line-height: 1.7;
+}
+.locked text {
+  font-size: 20rpx;
+}
+.lock-icon {
+  font-size: 70rpx;
+  margin-bottom: 26rpx;
+}
+.result {
+  margin-top: 44rpx;
+}

@@ -1,71 +1,97 @@
 page {
-  background: #f9f9f9;
-  color: #1b1b1b;
-  font-family: system-ui, sans-serif;
+  background: #fafafa;
+  color: #191919;
+  font-family: 'Courier New', 'Microsoft YaHei', monospace;
 }
 .page {
-  padding: 32rpx;
-  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
+  padding: 34rpx 28rpx 70rpx;
 }
 .brand {
-  font-size: 44rpx;
+  font-size: 48rpx;
   font-weight: 900;
-  letter-spacing: -2rpx;
+  letter-spacing: -3rpx;
+  line-height: 1.12;
 }
 .subtitle {
-  color: #5d3f38;
+  color: #68453c;
   font-size: 26rpx;
   line-height: 1.6;
 }
 .neo-card {
   background: #fff;
-  border: 6rpx solid #1b1b1b;
-  box-shadow: 10rpx 10rpx 0 #1b1b1b;
+  border: 6rpx solid #191919;
+  box-shadow: 10rpx 10rpx 0 #191919;
   padding: 28rpx;
-  margin: 24rpx 10rpx 34rpx 0;
+  margin: 24rpx 10rpx 36rpx 0;
 }
 .neo-button {
   border-radius: 0;
-  border: 6rpx solid #1b1b1b;
-  background: #f3e300;
-  color: #1b1b1b;
+  border: 6rpx solid #191919;
+  background: #ffec00;
+  color: #191919;
   font-weight: 900;
   line-height: 92rpx;
-  box-shadow: 8rpx 8rpx 0 #1b1b1b;
+  box-shadow: 8rpx 8rpx 0 #191919;
   margin: 20rpx 8rpx 28rpx 0;
 }
 .neo-button::after {
   border: 0;
 }
 .neo-button--orange {
-  background: #db3400;
+  background: #ff3b0a;
   color: #fff;
 }
 .neo-button--green {
-  background: #3effbf;
+  background: #14e6b2;
 }
 .field {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96rpx;
   background: #fff;
-  border: 5rpx solid #1b1b1b;
-  padding: 22rpx;
+  border: 6rpx solid #191919;
+  padding: 24rpx 28rpx;
   margin-top: 12rpx;
+  font-size: 30rpx;
 }
 .label {
   display: block;
-  font-weight: 800;
-  margin-top: 22rpx;
+  font-size: 27rpx;
+  font-weight: 900;
+  margin-top: 28rpx;
 }
 .tag {
   display: inline-block;
-  border: 4rpx solid #1b1b1b;
+  border: 4rpx solid #191919;
   padding: 6rpx 12rpx;
-  background: #3effbf;
+  background: #14e6b2;
   font-size: 22rpx;
-  font-weight: 800;
+  font-weight: 900;
 }
 .privacy {
-  background: #1b1b1b;
+  background: #191919;
   color: #fff;
   padding: 24rpx;
   line-height: 1.6;
+}
+.topbar {
+  margin: -34rpx -28rpx 42rpx;
+  padding: 34rpx 32rpx;
+  background: #191919;
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 900;
+}
+.section-title {
+  font-size: 30rpx;
+  font-weight: 900;
+  margin-bottom: 16rpx;
+}
+.rule {
+  height: 6rpx;
+  background: #191919;
+  margin: 12rpx 0 28rpx;
+}
+.plain {
+  font-family: 'Microsoft YaHei', sans-serif;
 }

@@ -72,6 +72,7 @@ async function createFoundCard(openid, input) {
     maskedName: maskName(name),
     maskedStudentNumber: maskStudentNumber(number),
     college: requireText(input.college, '学院', 60),
+    category: requireText(input.category, '卡片类别', 20),
     campusId: requireText(input.campusId, '校区', 40),
     locationName: requireText(input.locationName, '地点', 100),
     foundAt: new Date(input.foundAt),

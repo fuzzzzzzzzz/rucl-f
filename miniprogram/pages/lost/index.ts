@@ -1,10 +1,13 @@
+import { validateRucStudentNumber } from '../../shared/ruc'
+
 Page({
   data: { studentNumber: '', searched: false },
   onNumber(e: WechatMiniprogram.Input) {
-    this.setData({ studentNumber: e.detail.value })
+    this.setData({ studentNumber: e.detail.value.replace(/\D/g, '').slice(0, 10) })
   },
   search() {
-    if (this.data.studentNumber.length < 6) return wx.showToast({ title: '请输入完整学号', icon: 'none' })
+    const result = validateRucStudentNumber(this.data.studentNumber)
+    if (!result.valid) return wx.showToast({ title: result.message || '请检查学号', icon: 'none' })
     this.setData({ searched: true })
   },
 })
