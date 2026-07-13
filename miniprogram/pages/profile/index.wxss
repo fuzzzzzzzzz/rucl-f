@@ -47,6 +47,12 @@
   font-size: 18rpx;
   font-weight: 900;
 }
+.identity-state {
+  margin-top: 8rpx;
+  color: #6d6861;
+  font-size: 19rpx;
+  font-weight: 900;
+}
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;

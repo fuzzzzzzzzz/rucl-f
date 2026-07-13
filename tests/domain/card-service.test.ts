@@ -6,10 +6,12 @@ import {
   listMyFoundHistory,
   listMyLostHistory,
   listMessages,
+  listMyClaims,
   registerLostCard,
   saveUserProfile,
   searchPublicCardsByStudentNumber,
   submitFoundCard,
+  submitCardClaim,
 } from '../../miniprogram/services/card-service'
 
 describe('local card service', () => {
@@ -33,6 +35,12 @@ describe('local card service', () => {
   })
 
   it('returns only a safe summary when searching by a full student number', async () => {
+    await saveUserProfile({
+      name: '张小明',
+      studentNumber: '2023200931',
+      category: '本科生',
+      campusId: 'zhongguancun',
+    })
     await submitFoundCard({
       name: '张小明',
       studentNumber: '2023200931',
@@ -61,12 +69,21 @@ describe('local card service', () => {
       category: '本科生',
       locationCategory: '食堂',
       foundAt: '2026-07-13',
-      officialStoragePoint: '图书馆总服务台 · 服务台 · 已交给当班工作人员',
     })
+    expect(result).not.toHaveProperty('officialStoragePoint')
     expect(result).not.toHaveProperty('studentNumber')
     expect(result).not.toHaveProperty('pickupLocation')
     expect(result).not.toHaveProperty('storageLocation')
     expect(result).not.toHaveProperty('storagePhotoPath')
+
+    await expect(submitCardClaim(result.id, '2023200931', '')).resolves.toMatchObject({ decision: 'approved' })
+    expect(await listMyClaims()).toEqual([
+      expect.objectContaining({
+        cardId: result.id,
+        status: 'approved',
+        officialStoragePoint: '图书馆总服务台 · 服务台 · 已交给当班工作人员',
+      }),
+    ])
   })
 
   it('keeps a non-official storage location hidden after a basic match', async () => {

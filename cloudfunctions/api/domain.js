@@ -37,6 +37,19 @@ function requireMatchingStudentDigest(savedDigest, requestedDigest) {
   return requestedDigest
 }
 
+function normalizeIdentityStatus(user = {}) {
+  if (user.identityStatus === 'verified' || user.identityVerified === true) return 'verified'
+  if (user.identityStatus === 'pending' || (user.studentHmac && user.nameHmac)) return 'pending'
+  return 'unbound'
+}
+
+function requireVerifiedIdentity(user) {
+  if (normalizeIdentityStatus(user) !== 'verified') {
+    throw new Error('身份信息待管理员核验，通过后可查询和认领')
+  }
+  return user
+}
+
 function normalizeIdentityName(value) {
   return requireText(value, '姓名', 20).replace(/\s+/g, '')
 }
@@ -51,8 +64,8 @@ function requireMatchingIdentity(savedIdentity, requestedIdentity) {
   return requested
 }
 
-function resolveBasicClaimDecision({ studentMatch, nameMatch }) {
-  if (!studentMatch || !nameMatch) return 'rejected'
+function resolveBasicClaimDecision({ studentMatch, nameMatch, identityVerified }) {
+  if (!identityVerified || !studentMatch || !nameMatch) return 'rejected'
   return 'review'
 }
 
@@ -69,10 +82,10 @@ function publicCardProjection(card) {
   }
 }
 
-function matchedCardProjection(card) {
+function matchedCardProjection(card, options = {}) {
   const result = publicCardProjection(card)
   const storage = card.storageLocation || {}
-  if (storage.category === '官方交卡点') {
+  if (options.discloseOfficialStoragePoint === true && storage.category === '官方交卡点') {
     result.officialStoragePoint = [storage.place, storage.area, storage.detail].filter(Boolean).join(' · ')
   }
   return result
@@ -82,10 +95,12 @@ module.exports = {
   maskName,
   maskStudentNumber,
   matchedCardProjection,
+  normalizeIdentityStatus,
   publicCardProjection,
   requireCloudFilePath,
   requireMatchingIdentity,
   requireMatchingStudentDigest,
+  requireVerifiedIdentity,
   requireText,
   normalizeIdentityName,
   resolveBasicClaimDecision,

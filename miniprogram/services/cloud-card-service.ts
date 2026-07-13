@@ -1,5 +1,8 @@
 import type {
+  AdminClaimReviewItem,
+  AdminIdentityReviewItem,
   CardCategory,
+  ClaimSummary,
   FoundCardInput,
   FoundHistoryItem,
   LostReportInput,
@@ -8,6 +11,7 @@ import type {
   PublicCard,
   UserProfileInput,
 } from '../shared/models'
+import type { IdentityStatus } from '../shared/models'
 import type { CardStatus } from '../shared/workflow'
 
 interface CloudAssetIds {
@@ -42,6 +46,21 @@ interface CloudFoundHistory extends Omit<FoundHistoryItem, 'campusName' | 'found
 interface CloudLostHistory extends Omit<LostHistoryItem, 'campusName' | 'lostAt'> {
   campusId: string
   lostAt: string | Date
+}
+
+interface CloudClaimSummary extends Omit<ClaimSummary, 'campusName' | 'createdAt'> {
+  campusId: string
+  createdAt: string | Date
+}
+
+interface CloudAdminIdentity extends Omit<AdminIdentityReviewItem, 'campusName' | 'submittedAt'> {
+  campusId: string
+  submittedAt: string | Date
+}
+
+interface CloudAdminClaim extends Omit<AdminClaimReviewItem, 'campusName' | 'createdAt'> {
+  campusId: string
+  createdAt: string | Date
 }
 
 const campusNames: Record<string, string> = {
@@ -79,9 +98,21 @@ export function normalizeCloudPublicCard(card: CloudPublicCard): PublicCard {
   }
 }
 
+export function friendlyCloudErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || '')
+  if (message.includes('不支持的操作')) return '云端服务版本未更新，请联系管理员重新部署'
+  const businessMessage = message.match(/errMsg:\s*Error:\s*([^|\r\n]+?)(?:\s+at\s+exports|$)/)?.[1]?.trim()
+  if (businessMessage && businessMessage.length <= 80) return businessMessage
+  return '云端服务暂不可用，请稍后重试'
+}
+
 export async function callCloudApi<T>(action: string, input: Record<string, unknown> = {}): Promise<T> {
-  const response = await wx.cloud.callFunction({ name: 'api', data: { action, input } })
-  return response.result as T
+  try {
+    const response = await wx.cloud.callFunction({ name: 'api', data: { action, input } })
+    return response.result as T
+  } catch (error) {
+    throw new Error(friendlyCloudErrorMessage(error))
+  }
 }
 
 function uniqueCloudPath(directory: string, extension: string): string {
@@ -120,8 +151,8 @@ export async function removeCloudFiles(fileIds: string[]): Promise<void> {
   if (fileList.length) await wx.cloud.deleteFile({ fileList })
 }
 
-export async function syncUserProfile(input: UserProfileInput): Promise<void> {
-  await callCloudApi('saveUserProfile', input as unknown as Record<string, unknown>)
+export async function syncUserProfile(input: UserProfileInput): Promise<{ identityStatus: IdentityStatus }> {
+  return callCloudApi('saveUserProfile', input as unknown as Record<string, unknown>)
 }
 
 export async function createCloudFoundCard(input: FoundCardInput): Promise<{ id: string }> {
@@ -189,4 +220,60 @@ export async function listCloudLostHistory(): Promise<LostHistoryItem[]> {
     campusName: campusNames[record.campusId] || '中国人民大学',
     lostAt: (record.lostAt instanceof Date ? record.lostAt.toISOString() : String(record.lostAt)).slice(0, 10),
   }))
+}
+
+function dateOnly(value: string | Date): string {
+  return (value instanceof Date ? value.toISOString() : String(value)).slice(0, 10)
+}
+
+export async function submitCloudClaim(
+  cardId: string,
+  studentNumber: string,
+  privateFeature: string,
+): Promise<{ id: string; decision: 'review' }> {
+  return callCloudApi('submitClaim', { cardId, studentNumber, privateFeature })
+}
+
+export async function listCloudClaims(): Promise<ClaimSummary[]> {
+  const records = await callCloudApi<CloudClaimSummary[]>('listMyClaims')
+  return records.map((record) => ({
+    ...record,
+    campusName: campusNames[record.campusId] || '中国人民大学',
+    createdAt: dateOnly(record.createdAt),
+  }))
+}
+
+export async function listCloudPendingIdentities(): Promise<AdminIdentityReviewItem[]> {
+  const records = await callCloudApi<CloudAdminIdentity[]>('listPendingIdentityProfiles')
+  return records.map((record) => ({
+    ...record,
+    campusName: campusNames[record.campusId] || '中国人民大学',
+    submittedAt: dateOnly(record.submittedAt),
+  }))
+}
+
+export async function reviewCloudIdentity(
+  userId: string,
+  decision: 'approved' | 'rejected',
+  verifiedName = '',
+  verifiedStudentNumber = '',
+): Promise<void> {
+  await callCloudApi('reviewIdentityProfile', { userId, decision, verifiedName, verifiedStudentNumber })
+}
+
+export async function listCloudAdminClaims(): Promise<AdminClaimReviewItem[]> {
+  const records = await callCloudApi<CloudAdminClaim[]>('listAdminClaims')
+  return records.map((record) => ({
+    ...record,
+    campusName: campusNames[record.campusId] || '中国人民大学',
+    createdAt: dateOnly(record.createdAt),
+  }))
+}
+
+export async function reviewCloudClaim(claimId: string, decision: 'approved' | 'rejected'): Promise<void> {
+  await callCloudApi('reviewClaim', { claimId, decision })
+}
+
+export async function completeCloudHandover(claimId: string): Promise<void> {
+  await callCloudApi('completeHandover', { claimId })
 }

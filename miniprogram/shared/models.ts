@@ -1,6 +1,8 @@
 import type { CardStatus } from './workflow'
 
 export type CardCategory = '本科生' | '硕士生' | '博士生' | '教职工'
+export type IdentityStatus = 'unbound' | 'pending' | 'verified' | 'local_demo'
+export type ClaimStatus = 'review' | 'approved' | 'rejected' | 'returned'
 
 export interface UserProfileInput {
   name: string
@@ -11,6 +13,7 @@ export interface UserProfileInput {
 
 export interface UserProfile extends UserProfileInput {
   updatedAt: string
+  identityStatus: IdentityStatus
 }
 
 export interface DetailedLocation {
@@ -58,6 +61,34 @@ export interface MessageSummary {
   relatedCardId?: string
   createdAt?: string
   read?: boolean
+}
+
+export interface ClaimSummary {
+  id: string
+  cardId: string
+  status: ClaimStatus
+  maskedName: string
+  maskedStudentNumber: string
+  category: CardCategory
+  campusName: string
+  createdAt: string
+  officialStoragePoint?: string
+}
+
+export interface AdminIdentityReviewItem {
+  id: string
+  maskedName: string
+  maskedStudentNumber: string
+  category: CardCategory
+  campusName: string
+  submittedAt: string
+}
+
+export interface AdminClaimReviewItem extends ClaimSummary {
+  applicantMaskedName: string
+  applicantMaskedStudentNumber: string
+  featureMatch: boolean
+  storageSummary: string
 }
 
 export interface FoundHistoryItem {

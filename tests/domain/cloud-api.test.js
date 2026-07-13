@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url)
 const {
   requireMatchingIdentity,
   requireMatchingStudentDigest,
+  requireVerifiedIdentity,
   resolveBasicClaimDecision,
   matchedCardProjection,
   publicCardProjection,
@@ -62,15 +63,18 @@ describe('cloud API security boundary', () => {
       foundAt: new Date('2026-07-13T00:00:00.000Z'),
       status: 'matched',
     }
-    const official = matchedCardProjection({
-      ...baseCard,
-      storageLocation: {
-        category: '官方交卡点',
-        place: '图书馆总服务台',
-        area: '总服务台',
-        detail: '已交给当班工作人员',
+    const official = matchedCardProjection(
+      {
+        ...baseCard,
+        storageLocation: {
+          category: '官方交卡点',
+          place: '图书馆总服务台',
+          area: '总服务台',
+          detail: '已交给当班工作人员',
+        },
       },
-    })
+      { discloseOfficialStoragePoint: true },
+    )
     const privateStorage = matchedCardProjection({
       ...baseCard,
       storageLocation: {
@@ -84,6 +88,12 @@ describe('cloud API security boundary', () => {
     expect(official.officialStoragePoint).toBe('图书馆总服务台 · 总服务台 · 已交给当班工作人员')
     expect(official).not.toHaveProperty('storageLocation')
     expect(privateStorage).not.toHaveProperty('officialStoragePoint')
+    expect(
+      matchedCardProjection({
+        ...baseCard,
+        storageLocation: { category: '官方交卡点', place: '图书馆', area: '一层', detail: '服务台' },
+      }),
+    ).not.toHaveProperty('officialStoragePoint')
   })
 
   it('only accepts cloud files in the expected project directory', () => {
@@ -117,9 +127,44 @@ describe('cloud API security boundary', () => {
     ).toThrow('姓名和学号需要同时一致')
   })
 
+  it('blocks sensitive operations until an administrator verifies the identity', () => {
+    expect(requireVerifiedIdentity({ identityStatus: 'verified' })).toEqual({ identityStatus: 'verified' })
+    expect(() => requireVerifiedIdentity({ identityStatus: 'pending' })).toThrow('身份信息待管理员核验')
+    expect(() => requireVerifiedIdentity({ studentHmac: 'student', nameHmac: 'name' })).toThrow('身份信息待管理员核验')
+  })
+
   it('sends a basic name-and-number match to manual review', () => {
-    expect(resolveBasicClaimDecision({ studentMatch: false, nameMatch: true, featureMatch: true })).toBe('rejected')
-    expect(resolveBasicClaimDecision({ studentMatch: true, nameMatch: false, featureMatch: true })).toBe('rejected')
-    expect(resolveBasicClaimDecision({ studentMatch: true, nameMatch: true, featureMatch: true })).toBe('review')
+    expect(
+      resolveBasicClaimDecision({
+        studentMatch: false,
+        nameMatch: true,
+        featureMatch: true,
+        identityVerified: true,
+      }),
+    ).toBe('rejected')
+    expect(
+      resolveBasicClaimDecision({
+        studentMatch: true,
+        nameMatch: false,
+        featureMatch: true,
+        identityVerified: true,
+      }),
+    ).toBe('rejected')
+    expect(
+      resolveBasicClaimDecision({
+        studentMatch: true,
+        nameMatch: true,
+        featureMatch: true,
+        identityVerified: false,
+      }),
+    ).toBe('rejected')
+    expect(
+      resolveBasicClaimDecision({
+        studentMatch: true,
+        nameMatch: true,
+        featureMatch: true,
+        identityVerified: true,
+      }),
+    ).toBe('review')
   })
 })

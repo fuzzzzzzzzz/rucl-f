@@ -1,1 +1,101 @@
-/* Shared styles live in app.wxss. */
+.safety-note {
+  margin-bottom: 36rpx;
+  padding: 22rpx;
+  border: 5rpx solid #191919;
+  background: #f04418;
+  color: #fff;
+  font-size: 23rpx;
+  font-weight: 900;
+  line-height: 1.55;
+}
+.empty-state {
+  line-height: 1.6;
+}
+.retry {
+  margin-top: 18rpx;
+  border: 4rpx solid #191919;
+  border-radius: 0;
+  background: #ffec00;
+  font-weight: 900;
+}
+.queue-title {
+  margin-top: 50rpx;
+}
+.review-title {
+  font-size: 29rpx;
+  font-weight: 900;
+}
+.applicant {
+  margin-top: 16rpx;
+  padding: 14rpx;
+  border: 3rpx solid #191919;
+  background: #efede8;
+  font-size: 23rpx;
+  font-weight: 900;
+}
+.review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 18rpx;
+}
+.review-meta text {
+  padding: 6rpx 10rpx;
+  border: 3rpx solid #191919;
+  font-size: 20rpx;
+}
+.storage-detail {
+  margin-top: 18rpx;
+  padding: 14rpx;
+  border: 3rpx solid #191919;
+  background: #fff9c8;
+  font-size: 21rpx;
+  line-height: 1.5;
+}
+.storage-detail b,
+.storage-detail text {
+  display: block;
+}
+.review-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+.review-actions button,
+.handover-button {
+  border: 4rpx solid #191919;
+  border-radius: 0;
+  background: #efede8;
+  font-size: 22rpx;
+  font-weight: 900;
+}
+.review-actions button::after,
+.handover-button::after {
+  border: 0;
+}
+.review-actions .approve,
+.handover-button {
+  background: #18d9aa;
+}
+.identity-proof {
+  margin-top: 22rpx;
+  padding-top: 20rpx;
+  border-top: 3rpx solid #191919;
+}
+.proof-warning {
+  padding: 16rpx;
+  border: 3rpx solid #191919;
+  background: #fff9c8;
+  font-size: 21rpx;
+  line-height: 1.55;
+}
+.identity-proof .field {
+  min-height: 78rpx;
+  padding: 16rpx 20rpx;
+  font-size: 25rpx;
+}
+.handover-button {
+  width: 100%;
+  margin-top: 24rpx;
+}
