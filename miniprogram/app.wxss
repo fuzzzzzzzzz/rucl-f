@@ -1,97 +1,118 @@
 page {
-  background: #fafafa;
+  background: #faf8f2;
   color: #191919;
-  font-family: 'Courier New', 'Microsoft YaHei', monospace;
+  font-family: SimHei, 'Microsoft YaHei', Arial, sans-serif;
 }
+
 .page {
-  padding: 34rpx 28rpx 70rpx;
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 30rpx 28rpx 150rpx;
 }
-.brand {
-  font-size: 48rpx;
+
+.en,
+.number,
+input,
+textarea {
+  font-family: Arial, sans-serif;
+}
+
+.topbar {
+  margin: -30rpx -28rpx 38rpx;
+  padding: 30rpx 32rpx 28rpx;
+  background: #191919;
+  color: #fff;
+  font-size: 38rpx;
   font-weight: 900;
-  letter-spacing: -3rpx;
-  line-height: 1.12;
+  letter-spacing: 2rpx;
 }
-.subtitle {
-  color: #68453c;
-  font-size: 26rpx;
-  line-height: 1.6;
+
+.topbar .en {
+  display: block;
+  margin-top: 6rpx;
+  color: #ffec00;
+  font-size: 19rpx;
+  letter-spacing: 3rpx;
 }
+
 .neo-card {
+  box-sizing: border-box;
   background: #fff;
-  border: 6rpx solid #191919;
-  box-shadow: 10rpx 10rpx 0 #191919;
+  border: 5rpx solid #191919;
+  box-shadow: 9rpx 9rpx 0 #191919;
   padding: 28rpx;
-  margin: 24rpx 10rpx 36rpx 0;
+  margin: 24rpx 9rpx 36rpx 0;
 }
+
 .neo-button {
+  box-sizing: border-box;
   border-radius: 0;
-  border: 6rpx solid #191919;
+  border: 5rpx solid #191919;
   background: #ffec00;
   color: #191919;
   font-weight: 900;
-  line-height: 92rpx;
+  line-height: 1.25;
+  min-height: 100rpx;
+  padding: 20rpx 24rpx;
   box-shadow: 8rpx 8rpx 0 #191919;
-  margin: 20rpx 8rpx 28rpx 0;
+  margin: 22rpx 8rpx 30rpx 0;
 }
+
+.neo-button:active {
+  transform: translate(5rpx, 5rpx);
+  box-shadow: 3rpx 3rpx 0 #191919;
+}
+
 .neo-button::after {
   border: 0;
 }
+
 .neo-button--orange {
-  background: #ff3b0a;
+  background: #f04418;
   color: #fff;
 }
-.neo-button--green {
-  background: #14e6b2;
-}
+
 .field {
   box-sizing: border-box;
   width: 100%;
-  min-height: 96rpx;
+  min-height: 92rpx;
   background: #fff;
-  border: 6rpx solid #191919;
-  padding: 24rpx 28rpx;
+  border: 5rpx solid #191919;
+  padding: 22rpx 26rpx;
   margin-top: 12rpx;
-  font-size: 30rpx;
+  font-size: 29rpx;
 }
+
 .label {
   display: block;
   font-size: 27rpx;
   font-weight: 900;
   margin-top: 28rpx;
 }
-.tag {
-  display: inline-block;
-  border: 4rpx solid #191919;
-  padding: 6rpx 12rpx;
-  background: #14e6b2;
-  font-size: 22rpx;
-  font-weight: 900;
+
+.label .en {
+  font-size: 19rpx;
+  letter-spacing: 2rpx;
 }
-.privacy {
-  background: #191919;
-  color: #fff;
-  padding: 24rpx;
-  line-height: 1.6;
-}
-.topbar {
-  margin: -34rpx -28rpx 42rpx;
-  padding: 34rpx 32rpx;
-  background: #191919;
-  color: #fff;
-  font-size: 32rpx;
-  font-weight: 900;
-}
+
 .section-title {
   font-size: 30rpx;
   font-weight: 900;
-  margin-bottom: 16rpx;
+  line-height: 1.35;
 }
+
+.section-title .en {
+  display: block;
+  font-size: 19rpx;
+  letter-spacing: 2rpx;
+}
+
 .rule {
-  height: 6rpx;
+  height: 5rpx;
   background: #191919;
-  margin: 12rpx 0 28rpx;
+  margin: 16rpx 0 24rpx;
 }
-.plain {
-  font-family: 'Microsoft YaHei', sans-serif;
+
+.muted {
+  color: #6d6861;
 }

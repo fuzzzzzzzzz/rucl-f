@@ -1,0 +1,83 @@
+.history-page {
+  padding-bottom: 70rpx;
+}
+.empty-state {
+  font-size: 27rpx;
+  line-height: 1.6;
+}
+.error-state {
+  background: #ffe1d8;
+}
+.retry {
+  width: 220rpx;
+  margin: 22rpx 0 0;
+  border: 4rpx solid #191919;
+  border-radius: 0;
+  background: #ffec00;
+  color: #191919;
+  font-size: 23rpx;
+  font-weight: 900;
+  line-height: 68rpx;
+}
+.retry::after {
+  border: 0;
+}
+.history-card {
+  margin: 0 8rpx 28rpx 0;
+  padding: 24rpx;
+  border: 5rpx solid #191919;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  background: #fff;
+}
+.card-head,
+.meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+.card-name {
+  font-size: 29rpx;
+  font-weight: 900;
+}
+.student-number {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  font-weight: 900;
+}
+.status {
+  flex: 0 0 auto;
+  padding: 8rpx 12rpx;
+  border: 3rpx solid #191919;
+  background: #f04418;
+  color: #fff;
+  font-size: 19rpx;
+  font-weight: 900;
+}
+.yellow-status {
+  background: #ffec00;
+  color: #191919;
+}
+.meta {
+  margin-top: 20rpx;
+  padding: 14rpx 0;
+  border-top: 3rpx solid #191919;
+  border-bottom: 3rpx solid #191919;
+  font-size: 21rpx;
+  font-weight: 900;
+}
+.location {
+  display: grid;
+  grid-template-columns: 130rpx 1fr;
+  gap: 16rpx;
+  margin-top: 18rpx;
+  font-size: 23rpx;
+  line-height: 1.55;
+}
+.location b {
+  font-weight: 900;
+}
+.storage {
+  padding-top: 18rpx;
+  border-top: 2rpx dashed #8d8982;
+}

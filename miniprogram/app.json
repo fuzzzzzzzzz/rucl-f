@@ -1,8 +1,25 @@
 {
-  "pages": ["pages/home/index", "pages/lost/index", "pages/found/index", "pages/profile/index", "pages/messages/index", "pages/admin/index"],
-  "window": { "navigationBarTitleText": "人大校园卡找回", "navigationBarBackgroundColor": "#191919", "navigationBarTextStyle": "white", "backgroundColor": "#fafafa" },
+  "pages": [
+    "pages/home/index",
+    "pages/lost/index",
+    "pages/found/index",
+    "pages/profile/index",
+    "pages/profile-edit/index",
+    "pages/messages/index",
+    "pages/history/index",
+    "pages/admin/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "",
+    "navigationBarBackgroundColor": "#191919",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#faf8f2"
+  },
   "tabBar": {
-    "color": "#191919", "selectedColor": "#817700", "backgroundColor": "#ffffff", "borderStyle": "black",
+    "custom": true,
+    "color": "#191919",
+    "selectedColor": "#191919",
+    "backgroundColor": "#ffffff",
     "list": [
       { "pagePath": "pages/home/index", "text": "HOME" },
       { "pagePath": "pages/lost/index", "text": "SEARCH" },
@@ -10,5 +27,6 @@
       { "pagePath": "pages/profile/index", "text": "MY" }
     ]
   },
-  "style": "v2", "sitemapLocation": "sitemap.json"
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
 }

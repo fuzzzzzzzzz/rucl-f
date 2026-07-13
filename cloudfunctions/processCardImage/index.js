@@ -2,8 +2,11 @@ const cloud = require('wx-server-sdk')
 const sharp = require('sharp')
 const crypto = require('crypto')
 const https = require('https')
+const { parseDailyLimit, requireTemporaryFileId, startOfChinaDay } = require('./domain')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
+const db = cloud.database()
+const _ = db.command
 
 function assertConfigured() {
   if (!process.env.TENCENT_SECRET_ID || !process.env.TENCENT_SECRET_KEY) throw new Error('OCR尚未配置，请改为人工填写')
@@ -75,11 +78,28 @@ async function recognize(buffer) {
   return (response.TextDetections || []).map((item) => item.DetectedText).filter(Boolean)
 }
 
+async function reserveOcrRequest(openid) {
+  const dailyLimit = parseDailyLimit(process.env.OCR_DAILY_GLOBAL_LIMIT)
+  const perUserLimit = Math.min(10, dailyLimit)
+  const createdAt = _.gte(startOfChinaDay())
+  const [globalUsage, userUsage] = await Promise.all([
+    db.collection('auditLogs').where({ action: 'ocr.requested', createdAt }).count(),
+    db.collection('auditLogs').where({ openid, action: 'ocr.requested', createdAt }).count(),
+  ])
+  if (globalUsage.total >= dailyLimit) throw new Error('今日图片识别次数已用完，请手动填写卡片信息')
+  if (userUsage.total >= perUserLimit) throw new Error('你今天的图片识别次数已用完，请手动填写卡片信息')
+  await db.collection('auditLogs').add({
+    data: { openid, action: 'ocr.requested', targetId: '', metadata: {}, createdAt: db.serverDate() },
+  })
+}
+
 exports.main = async (event) => {
-  const rawFileId = String(event.fileId || '')
-  if (!rawFileId.startsWith('cloud://')) throw new Error('无效的临时图片')
+  const rawFileId = requireTemporaryFileId(event.fileId)
+  const { OPENID } = cloud.getWXContext()
   let maskedFileId = ''
   try {
+    if (!OPENID) throw new Error('请先登录后再识别图片')
+    await reserveOcrRequest(OPENID)
     const downloaded = await cloud.downloadFile({ fileID: rawFileId })
     if (downloaded.fileContent.length > 8 * 1024 * 1024) throw new Error('图片不能超过8MB')
     const [ocrLines, maskedBuffer] = await Promise.all([

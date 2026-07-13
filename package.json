@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "icons:generate": "node scripts/generate-material-icons.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
@@ -15,6 +16,7 @@
     "@typescript-eslint/parser": "^8.37.0",
     "eslint": "^9.31.0",
     "prettier": "^3.6.2",
+    "sharp": "^0.34.5",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.63.0",
     "vitest": "^3.2.4"

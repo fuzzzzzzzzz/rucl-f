@@ -1,1 +1,21 @@
-<view class="page"><view class="hero-grid"><view class="hero-action lost" bindtap="goLost"><view class="hero-icon">⌕</view><view>我丢卡了</view><text>[ I LOST MY CARD ]</text></view><view class="hero-action found" bindtap="goFound"><view class="hero-icon">✋</view><view>我捡到卡了</view><text>[ I FOUND A CARD ]</text></view></view><view class="neo-card principle"><view class="section-title">[ 使用说明 ] <text class="info">i</text></view><view class="rule"/><view class="principle-copy plain">系统会帮你核对信息。其他人看不到完整姓名和学号，确认是本人后才会显示卡片存放地点。</view><view class="status-box plain"><view>■ 姓名：张**</view><view>■ 学号：2023****18</view><view>■ 状态：信息已安全隐藏</view></view></view><view class="neo-card visual"><image src="/assets/campus-card-visual.jpg" mode="aspectFill"/><view class="visual-label">中国人民大学 · 校园卡找回</view></view></view>
+<view class="page home-page">
+  <view class="topbar">失卡招领<text class="en">RUC CAMPUS CARD</text></view>
+  <view class="hero-grid">
+    <view class="hero-action lost" bindtap="goLost"><image class="action-icon" src="/assets/icons/search-off-white.png" mode="aspectFit" /><view>我丢卡了</view><text class="en">[ I LOST MY CARD ]</text></view>
+    <view class="hero-action found" bindtap="goFound"><image class="action-icon" src="/assets/icons/front-hand.png" mode="aspectFit" /><view>我捡到卡了</view><text class="en">[ I FOUND A CARD ]</text></view>
+  </view>
+  <view class="neo-card guide">
+    <view class="section-heading"><image class="section-icon" src="/assets/icons/info.png" mode="aspectFit" /><view class="section-title">使用说明<text class="en">[ HOW IT WORKS ]</text></view></view><view class="rule" />
+    <view class="guide-row"><text class="guide-number number">1</text><text>系统会核对你填写的姓名和学号；</text></view>
+    <view class="guide-row"><text class="guide-number number">2</text><text>其他人只能看到隐藏后的姓名和学号；</text></view>
+    <view class="guide-row"><text class="guide-number number">3</text><text>姓名学号一致后，即可查看交卡地点。</text></view>
+    <view class="profile-status" bindtap="goProfileEdit">
+      <view class="profile-status-copy">
+        <block wx:if="{{hasProfile}}"><view>■ 姓名：{{maskedName}}</view><view>■ 学号：{{maskedStudentNumber}}</view><view>■ 状态：{{profileStatus}}</view></block>
+        <block wx:else><view class="empty-profile">尚未填写个人信息</view><text>点击填写，查询时自动带入</text></block>
+      </view>
+      <image class="profile-status-arrow" src="/assets/icons/chevron-right.png" mode="aspectFit" />
+    </view>
+  </view>
+  <view class="neo-card visual"><image src="/assets/campus-card-visual.jpg" mode="aspectFill" /><view class="visual-label">中国人民大学 · 校园卡找回</view></view>
+</view>

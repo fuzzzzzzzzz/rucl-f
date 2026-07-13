@@ -1,25 +1,148 @@
-# 云开发配置清单
+# 微信云开发开通与部署清单
 
-## 集合
+这份清单按操作顺序编写。完成前，小程序会继续使用本机演示数据；不会因为云端尚未开通而无法预览。
 
-创建 `users`、`campuses`、`colleges`、`locations`、`foundCards`、`lostReports`、`matches`、`claims`、`handovers`、`messages`、`reports`、`auditLogs`、`systemConfig`。
+## 1. 创建云环境
 
-所有业务写操作只允许通过云函数执行。客户端不得直接读取 `studentHmac`、私密特征、审核证据、微信身份标识和审计数据。公开卡片查询必须由云函数投影为脱敏结构。
+1. 打开微信开发者工具并进入本项目。
+2. 点击工具栏中的「云开发」。
+3. 根据页面提示创建一个开发环境。
+4. 创建完成后复制环境 ID，通常形如 `cloud1-xxxx`。
+5. 打开 `miniprogram/config/cloud.ts`，把环境 ID 填入 `CLOUD_ENV_ID` 的引号中。
+6. 保存并重新编译。MY 页显示「云端数据已连接」才表示连接成功。
 
-## 必要配置
+不要把 AppSecret、腾讯云密钥或其他密码写入这个文件。
 
-- `STUDENT_HMAC_SECRET`：至少32字节随机值，开发与生产环境不同。
-- `TENCENT_SECRET_ID` / `TENCENT_SECRET_KEY`：仅具备 OCR 调用权限。
-- `AI_REVIEW_ENABLED=false`：首版固定关闭。
-- `OCR_DAILY_GLOBAL_LIMIT`：试用期建议设置小额硬限制。
+## 2. 创建数据库集合
 
-## 人工验收
+在「云开发 → 数据库」中创建以下集合：
 
-- 配置隐私保护指引和用户隐私保护说明。
-- 配置订阅消息模板：匹配提醒、审核结果、交接提醒。
-- 添加体验成员并完成至少两台真机测试。
-- 上线前删除所有测试记录并轮换云函数密钥。
+- `users`
+- `foundCards`
+- `lostReports`
+- `matches`
+- `claims`
+- `handovers`
+- `messages`
+- `reports`
+- `auditLogs`
+- `campuses`
+- `locations`
+- `systemConfig`
 
-## 已知依赖风险
+所有集合的数据权限均选择「仅管理端可读写」。小程序页面不直接读写数据库，所有操作都经过云函数检查。
 
-截至本项目初始化时，`wx-server-sdk` 的当前版本仍通过 CloudBase 间接依赖被 `npm audit` 报告 6 项问题。降级会引入更多严重漏洞，因此暂不强制覆盖其内部依赖。部署前必须重新运行三个云函数目录的生产依赖审计，并优先升级到腾讯修复后的兼容版本。
+## 3. 创建数据库索引
+
+在对应集合的「索引管理」中添加以下组合索引。没有索引时，部分查询会在云端直接报错。
+
+| 集合          | 字段顺序                                              |
+| ------------- | ----------------------------------------------------- |
+| `users`       | `openid` 升序，并设置为唯一                           |
+| `foundCards`  | `publisherOpenid` 升序、`createdAt` 降序              |
+| `foundCards`  | `studentHmac` 升序、`status` 升序                     |
+| `foundCards`  | `status` 升序、`createdAt` 降序                       |
+| `lostReports` | `ownerOpenid` 升序、`createdAt` 降序                  |
+| `lostReports` | `ownerOpenid` 升序、`studentHmac` 升序、`status` 升序 |
+| `lostReports` | `studentHmac` 升序、`status` 升序                     |
+| `messages`    | `recipientOpenid` 升序、`createdAt` 降序              |
+| `matches`     | `foundCardId` 升序、`lostReportId` 升序，并设置为唯一 |
+| `claims`      | `cardId` 升序、`applicantOpenid` 升序、`status` 升序  |
+| `auditLogs`   | `openid` 升序、`createdAt` 降序                       |
+| `auditLogs`   | `action` 升序、`createdAt` 降序                       |
+| `auditLogs`   | `openid` 升序、`action` 升序、`createdAt` 降序        |
+
+## 4. 配置云存储权限
+
+进入「云开发 → 云存储 → 权限设置 → 自定义安全规则」，使用以下规则：
+
+```json
+{
+  "read": "resource.openid == auth.openid",
+  "write": "auth != null && auth.loginType != 'ANONYMOUS' && resource.openid == auth.openid && resource.size <= 8388608 && (/^temporary-cards\\//.test(resource.path) || /^storage-scenes\\//.test(resource.path))"
+}
+```
+
+这表示用户只能读取自己上传的文件，并且只能向本项目规定的两个目录上传。云函数仍可读取和删除这些文件。
+
+## 5. 配置云函数调用权限
+
+进入「云开发 → 云函数 → 权限控制」，只允许已登录的小程序用户调用前两个函数：
+
+```json
+{
+  "*": {
+    "invoke": false
+  },
+  "api": {
+    "invoke": "auth.loginType != 'ANONYMOUS' && auth != null"
+  },
+  "processCardImage": {
+    "invoke": "auth.loginType != 'ANONYMOUS' && auth != null"
+  },
+  "scheduledCleanup": {
+    "invoke": false
+  }
+}
+```
+
+`scheduledCleanup` 由定时任务运行，不需要让小程序页面直接调用。
+
+这里必须保留 `*` 通配配置，这是 CloudBase 权限规则的必填项。可对照 [CloudBase 云函数安全规则](https://docs.cloudbase.net/cloud-function/security-rules)。
+
+## 6. 设置云函数环境变量
+
+### `api` 云函数
+
+- `STUDENT_HMAC_SECRET`：至少 32 字节的随机字符串，开发和正式环境使用不同值。
+
+可在 PowerShell 中运行下面的命令生成随机值，生成后只粘贴到云函数环境变量中：
+
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+```
+
+### `processCardImage` 云函数
+
+- `TENCENT_SECRET_ID`
+- `TENCENT_SECRET_KEY`
+- `TENCENT_OCR_REGION`，建议先使用 `ap-guangzhou`
+- `OCR_DAILY_GLOBAL_LIMIT`：每天最多识别多少张图片；未填写时默认 100，试用阶段建议填 `30`
+
+腾讯云密钥只给予 OCR 所需权限，不要使用主账号的永久全权限密钥。没有配置 OCR 时，用户仍可以手动填写姓名和学号，原始卡片照片会被删除。
+
+## 7. 上传并部署云函数
+
+在微信开发者工具的目录树中依次右键以下文件夹，选择「上传并部署：云端安装依赖」：
+
+1. `cloudfunctions/api`
+2. `cloudfunctions/processCardImage`
+3. `cloudfunctions/scheduledCleanup`
+
+部署完成后，在云开发控制台为 `scheduledCleanup` 添加每天执行一次的定时触发器。
+
+## 8. 手工验收
+
+按下面顺序测试：
+
+1. MY 页显示「云端数据已连接」。
+2. 填写“我的信息”，退出页面后再次进入，信息仍然存在。
+3. 用测试学号登记一张失卡。
+4. 用另一个微信测试用户发布相同学号的拾卡记录。
+5. 原失主进入「MY → 消息提醒」，应看到“发现相似校园卡”。
+6. SEARCH 页面只显示隐藏后的姓名、学号和拾取地点大类。
+7. 未确认身份时，不应出现具体存放地点和存放地点照片。
+
+## 9. 上线前仍需完成
+
+- 在微信公众平台填写用户隐私保护说明。
+- 配置匹配提醒、审核结果和交接提醒的订阅消息模板。
+- 至少使用两台真机、两个微信账号完成发布和找回测试。
+- 删除测试记录，重新生成正式环境的 `STUDENT_HMAC_SECRET`。
+- 重新执行三个云函数目录的依赖安全检查。
+
+## 10. 当前依赖检查说明
+
+三个云函数当前使用微信官方 `wx-server-sdk 4.0.2`。本机在 2026-07-13 执行 `npm audit --omit=dev` 时，每个云函数都报告 6 个来自官方 SDK 内部依赖的警告，其中 5 个为高风险、1 个为中风险。
+
+现在不用你手动降级或强制替换依赖，那样可能造成云函数不兼容。正式上线前必须再次检查微信官方 SDK 是否发布了修复版本；若仍未修复，需要先完成风险评估再发布。

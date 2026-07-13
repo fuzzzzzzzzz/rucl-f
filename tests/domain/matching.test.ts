@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { evaluateClaim } from '../../miniprogram/shared/matching'
 
 describe('claim evaluation', () => {
-  it('approves an exact identity with consistent private features', () => {
+  it('sends even a strong basic match to manual review', () => {
     expect(
       evaluateClaim({
         identityMatch: true,
@@ -13,7 +13,7 @@ describe('claim evaluation', () => {
         featureConflicts: 0,
         riskFlags: 0,
       }).decision,
-    ).toBe('approved')
+    ).toBe('review')
   })
 
   it('rejects an identity mismatch', () => {

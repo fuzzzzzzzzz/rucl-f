@@ -1,15 +1,30 @@
-import { listPublicCards } from '../../services/card-service'
-import type { PublicCard } from '../../shared/models'
+import { getUserProfile } from '../../services/card-service'
+import { maskName, maskStudentNumber } from '../../shared/privacy'
 
 Page({
-  data: { cards: [] as PublicCard[], loading: true },
-  async onLoad() {
-    this.setData({ cards: await listPublicCards(), loading: false })
+  data: {
+    hasProfile: false,
+    maskedName: '',
+    maskedStudentNumber: '',
+    profileStatus: '尚未填写个人信息',
+  },
+  async onShow() {
+    this.getTabBar().setData({ selected: 0 })
+    const profile = await getUserProfile()
+    this.setData({
+      hasProfile: Boolean(profile),
+      maskedName: profile ? maskName(profile.name) : '',
+      maskedStudentNumber: profile ? maskStudentNumber(profile.studentNumber) : '',
+      profileStatus: profile ? '个人信息已填写' : '尚未填写个人信息',
+    })
   },
   goFound() {
-    wx.navigateTo({ url: '/pages/found/index' })
+    wx.switchTab({ url: '/pages/found/index' })
   },
   goLost() {
-    wx.navigateTo({ url: '/pages/lost/index' })
+    wx.switchTab({ url: '/pages/lost/index' })
+  },
+  goProfileEdit() {
+    wx.navigateTo({ url: '/pages/profile-edit/index' })
   },
 })

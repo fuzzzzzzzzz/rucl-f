@@ -1,0 +1,22 @@
+<view class="page history-page">
+  <view class="topbar">{{title}}<text class="en">{{englishTitle}}</text></view>
+  <view wx:if="{{loading}}" class="neo-card empty-state">正在读取历史记录…</view>
+  <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" bindtap="loadHistory">重新读取</button></view>
+  <block wx:elif="{{type === 'found'}}">
+    <view wx:if="{{foundRecords.length === 0}}" class="neo-card empty-state">目前还没有发布记录。</view>
+    <view wx:for="{{foundRecords}}" wx:key="id" class="history-card">
+      <view class="card-head"><view><view class="card-name">{{item.maskedName}} · {{item.category}}</view><view class="student-number number">{{item.maskedStudentNumber}}</view></view><view class="status">{{item.statusText}}</view></view>
+      <view class="meta"><text>{{item.campusName}}</text><text class="number">{{item.foundAt}}</text></view>
+      <view class="location"><b>拾取地点</b><text>{{item.pickupSummary}}</text></view>
+      <view class="location storage"><b>存放地点</b><text>{{item.storageSummary}}</text></view>
+    </view>
+  </block>
+  <block wx:else>
+    <view wx:if="{{lostRecords.length === 0}}" class="neo-card empty-state">目前还没有失卡登记。</view>
+    <view wx:for="{{lostRecords}}" wx:key="id" class="history-card">
+      <view class="card-head"><view><view class="card-name">{{item.maskedName}} · {{item.category}}</view><view class="student-number number">{{item.maskedStudentNumber}}</view></view><view class="status yellow-status">{{item.statusText}}</view></view>
+      <view class="meta"><text>{{item.campusName}}</text><text class="number">{{item.lostAt}}</text></view>
+      <view class="location"><b>大概丢失地点</b><text>{{item.locationDescription}}</text></view>
+    </view>
+  </block>
+</view>

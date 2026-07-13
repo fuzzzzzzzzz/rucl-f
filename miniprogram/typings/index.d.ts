@@ -1,3 +1,8 @@
 interface IAppOption {
-  globalData: { cloudEnabled: boolean; isAdmin: boolean }
+  globalData: {
+    cloudEnabled: boolean
+    cloudEnvId: string
+    dataMode: 'local' | 'cloud'
+    isAdmin: boolean
+  }
 }

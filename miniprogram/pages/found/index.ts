@@ -1,23 +1,49 @@
-import { campuses, campusLocations, submitFoundCard } from '../../services/card-service'
+import { campuses, submitFoundCard } from '../../services/card-service'
+import type { CardCategory, DetailedLocation } from '../../shared/models'
+import { getAreaOptions, getCategoryOptions, getPlaceOptions } from '../../shared/ruc-locations'
 import { cardCategories, validateRucStudentNumber } from '../../shared/ruc'
+
+function initialLocation(campusId: string, preferredCategory = '') {
+  const categories = getCategoryOptions(campusId)
+  const categoryIndex = Math.max(0, categories.indexOf(preferredCategory))
+  const places = getPlaceOptions(campusId, categories[categoryIndex])
+  const areas = getAreaOptions(campusId, categories[categoryIndex], places[0])
+  return { categories, categoryIndex, places, placeIndex: 0, areas, areaIndex: 0 }
+}
+
+const initialPickup = initialLocation(campuses[0].id)
+const initialStorage = initialLocation(campuses[0].id, '官方交卡点')
 
 Page({
   data: {
     campuses,
     campusIndex: 0,
-    locations: campusLocations.zhongguancun,
-    locationIndex: 0,
     cardCategories,
     categoryIndex: 0,
-    category: cardCategories[0] as string,
     name: '',
     studentNumber: '',
-    college: '',
-    locationName: campusLocations.zhongguancun[0],
     foundDate: '',
     feature: '',
     photoPath: '',
+    storagePhotoPath: '',
     busy: false,
+    pickupCategories: initialPickup.categories,
+    pickupCategoryIndex: initialPickup.categoryIndex,
+    pickupPlaces: initialPickup.places,
+    pickupPlaceIndex: initialPickup.placeIndex,
+    pickupAreas: initialPickup.areas,
+    pickupAreaIndex: initialPickup.areaIndex,
+    pickupDetail: '',
+    storageCategories: initialStorage.categories,
+    storageCategoryIndex: initialStorage.categoryIndex,
+    storagePlaces: initialStorage.places,
+    storagePlaceIndex: initialStorage.placeIndex,
+    storageAreas: initialStorage.areas,
+    storageAreaIndex: initialStorage.areaIndex,
+    storageDetail: '',
+  },
+  onShow() {
+    this.getTabBar().setData({ selected: 2 })
   },
   choosePhoto() {
     wx.chooseMedia({
@@ -27,18 +53,75 @@ Page({
       success: ({ tempFiles }) => this.setData({ photoPath: tempFiles[0].tempFilePath }),
     })
   },
+  chooseStoragePhoto() {
+    wx.chooseMedia({
+      count: 1,
+      mediaType: ['image'],
+      sourceType: ['camera', 'album'],
+      success: ({ tempFiles }) => this.setData({ storagePhotoPath: tempFiles[0].tempFilePath }),
+    })
+  },
   onCampusChange(e: WechatMiniprogram.PickerChange) {
     const campusIndex = Number(e.detail.value)
-    const locations = campusLocations[campuses[campusIndex].id]
-    this.setData({ campusIndex, locations, locationIndex: 0, locationName: locations[0] })
-  },
-  onLocationChange(e: WechatMiniprogram.PickerChange) {
-    const locationIndex = Number(e.detail.value)
-    this.setData({ locationIndex, locationName: this.data.locations[locationIndex] })
+    const campusId = campuses[campusIndex].id
+    const pickup = initialLocation(campusId)
+    const storage = initialLocation(campusId, '官方交卡点')
+    this.setData({
+      campusIndex,
+      pickupCategories: pickup.categories,
+      pickupCategoryIndex: pickup.categoryIndex,
+      pickupPlaces: pickup.places,
+      pickupPlaceIndex: 0,
+      pickupAreas: pickup.areas,
+      pickupAreaIndex: 0,
+      pickupDetail: '',
+      storageCategories: storage.categories,
+      storageCategoryIndex: storage.categoryIndex,
+      storagePlaces: storage.places,
+      storagePlaceIndex: 0,
+      storageAreas: storage.areas,
+      storageAreaIndex: 0,
+      storageDetail: '',
+    })
   },
   onCategoryChange(e: WechatMiniprogram.PickerChange) {
-    const categoryIndex = Number(e.detail.value)
-    this.setData({ categoryIndex, category: cardCategories[categoryIndex] })
+    this.setData({ categoryIndex: Number(e.detail.value) })
+  },
+  onPickupCategoryChange(e: WechatMiniprogram.PickerChange) {
+    const pickupCategoryIndex = Number(e.detail.value)
+    const campusId = campuses[this.data.campusIndex].id
+    const category = this.data.pickupCategories[pickupCategoryIndex]
+    const pickupPlaces = getPlaceOptions(campusId, category)
+    const pickupAreas = getAreaOptions(campusId, category, pickupPlaces[0])
+    this.setData({ pickupCategoryIndex, pickupPlaces, pickupPlaceIndex: 0, pickupAreas, pickupAreaIndex: 0 })
+  },
+  onPickupPlaceChange(e: WechatMiniprogram.PickerChange) {
+    const pickupPlaceIndex = Number(e.detail.value)
+    const campusId = campuses[this.data.campusIndex].id
+    const category = this.data.pickupCategories[this.data.pickupCategoryIndex]
+    const place = this.data.pickupPlaces[pickupPlaceIndex]
+    this.setData({ pickupPlaceIndex, pickupAreas: getAreaOptions(campusId, category, place), pickupAreaIndex: 0 })
+  },
+  onPickupAreaChange(e: WechatMiniprogram.PickerChange) {
+    this.setData({ pickupAreaIndex: Number(e.detail.value) })
+  },
+  onStorageCategoryChange(e: WechatMiniprogram.PickerChange) {
+    const storageCategoryIndex = Number(e.detail.value)
+    const campusId = campuses[this.data.campusIndex].id
+    const category = this.data.storageCategories[storageCategoryIndex]
+    const storagePlaces = getPlaceOptions(campusId, category)
+    const storageAreas = getAreaOptions(campusId, category, storagePlaces[0])
+    this.setData({ storageCategoryIndex, storagePlaces, storagePlaceIndex: 0, storageAreas, storageAreaIndex: 0 })
+  },
+  onStoragePlaceChange(e: WechatMiniprogram.PickerChange) {
+    const storagePlaceIndex = Number(e.detail.value)
+    const campusId = campuses[this.data.campusIndex].id
+    const category = this.data.storageCategories[this.data.storageCategoryIndex]
+    const place = this.data.storagePlaces[storagePlaceIndex]
+    this.setData({ storagePlaceIndex, storageAreas: getAreaOptions(campusId, category, place), storageAreaIndex: 0 })
+  },
+  onStorageAreaChange(e: WechatMiniprogram.PickerChange) {
+    this.setData({ storageAreaIndex: Number(e.detail.value) })
   },
   onName(e: WechatMiniprogram.Input) {
     this.setData({ name: e.detail.value })
@@ -46,8 +129,11 @@ Page({
   onNumber(e: WechatMiniprogram.Input) {
     this.setData({ studentNumber: e.detail.value.replace(/\D/g, '').slice(0, 10) })
   },
-  onCollege(e: WechatMiniprogram.Input) {
-    this.setData({ college: e.detail.value })
+  onPickupDetail(e: WechatMiniprogram.Input) {
+    this.setData({ pickupDetail: e.detail.value })
+  },
+  onStorageDetail(e: WechatMiniprogram.Input) {
+    this.setData({ storageDetail: e.detail.value })
   },
   onDate(e: WechatMiniprogram.PickerChange) {
     this.setData({ foundDate: String(e.detail.value) })
@@ -55,14 +141,41 @@ Page({
   onFeature(e: WechatMiniprogram.Input) {
     this.setData({ feature: e.detail.value })
   },
+  buildPickupLocation(): DetailedLocation {
+    return {
+      category: this.data.pickupCategories[this.data.pickupCategoryIndex],
+      place: this.data.pickupPlaces[this.data.pickupPlaceIndex],
+      area: this.data.pickupAreas[this.data.pickupAreaIndex],
+      detail: this.data.pickupDetail,
+    }
+  },
+  buildStorageLocation(): DetailedLocation {
+    return {
+      category: this.data.storageCategories[this.data.storageCategoryIndex],
+      place: this.data.storagePlaces[this.data.storagePlaceIndex],
+      area: this.data.storageAreas[this.data.storageAreaIndex],
+      detail: this.data.storageDetail,
+    }
+  },
   async submit() {
     const numberResult = validateRucStudentNumber(this.data.studentNumber)
     if (!numberResult.valid) return wx.showToast({ title: numberResult.message || '请检查学号', icon: 'none' })
     try {
       this.setData({ busy: true })
-      await submitFoundCard(this.data)
+      await submitFoundCard({
+        name: this.data.name,
+        studentNumber: this.data.studentNumber,
+        category: cardCategories[this.data.categoryIndex] as CardCategory,
+        campusId: campuses[this.data.campusIndex].id,
+        pickupLocation: this.buildPickupLocation(),
+        storageLocation: this.buildStorageLocation(),
+        storagePhotoPath: this.data.storagePhotoPath,
+        foundDate: this.data.foundDate,
+        feature: this.data.feature,
+        photoPath: this.data.photoPath,
+      })
       wx.showToast({ title: '发布成功' })
-      setTimeout(() => wx.navigateBack(), 700)
+      setTimeout(() => wx.switchTab({ url: '/pages/profile/index' }), 700)
     } catch (error) {
       wx.showToast({ title: error instanceof Error ? error.message : '发布失败', icon: 'none' })
     } finally {

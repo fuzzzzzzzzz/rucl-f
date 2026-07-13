@@ -1,66 +1,121 @@
 .user-card {
   display: flex;
   align-items: center;
-  border-bottom: 10rpx solid #191919;
-  padding: 18rpx 20rpx 38rpx;
-  margin-bottom: 40rpx;
+  border: 5rpx solid #191919;
+  box-shadow: 9rpx 9rpx 0 #191919;
+  background: #fff;
+  padding: 24rpx;
+  margin: 0 9rpx 38rpx 0;
 }
 .user-card image {
-  width: 110rpx;
-  height: 150rpx;
-  margin-right: 28rpx;
+  width: 112rpx;
+  height: 142rpx;
+  border: 4rpx solid #191919;
+  margin-right: 26rpx;
 }
 .user-main {
   flex: 1;
+  min-width: 0;
 }
-.user-main .brand {
-  font-size: 40rpx;
-}
-.user-main text {
-  background: #eee;
-  font-size: 22rpx;
-}
-.score {
-  align-self: flex-start;
-  background: #09dcae;
-  border-right: 8rpx solid #191919;
-  border-bottom: 8rpx solid #191919;
-  padding: 18rpx;
+.user-name {
+  font-size: 38rpx;
   font-weight: 900;
 }
-.score text {
-  display: block;
-  font-size: 34rpx;
+.identity {
+  display: inline-block;
+  margin: 8rpx 0;
+  padding: 5rpx 10rpx;
+  background: #ffec00;
+  border: 3rpx solid #191919;
+  font-size: 20rpx;
+}
+.student-number {
+  font-size: 24rpx;
+  font-weight: 900;
+}
+.campus {
+  font-size: 21rpx;
+  color: #6d6861;
+  margin-top: 7rpx;
+}
+.data-mode {
+  display: inline-block;
+  margin-top: 10rpx;
+  padding: 5rpx 9rpx;
+  border: 2rpx solid #191919;
+  background: #efede8;
+  font-size: 18rpx;
+  font-weight: 900;
 }
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 34rpx;
-  margin-bottom: 44rpx;
+  gap: 22rpx;
+  margin-bottom: 38rpx;
 }
-.stats > view {
-  border-right: 8rpx solid #191919;
-  border-bottom: 8rpx solid #191919;
-  padding: 18rpx;
-  min-height: 180rpx;
+.stat {
+  min-height: 190rpx;
+  border: 5rpx solid #191919;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  background: #fff;
+  padding: 20rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
-.count {
-  display: inline-block;
-  border: 4rpx solid #191919;
-  background: #eee;
-  padding: 10rpx 26rpx;
-  margin-top: 28rpx;
+.stat-title {
+  font-size: 27rpx;
+  font-weight: 900;
+  line-height: 1.35;
+}
+.stat .en {
+  display: block;
+  margin-top: 5rpx;
+  font-size: 17rpx;
+  letter-spacing: 2rpx;
+}
+.stat:active {
+  transform: translate(4rpx, 4rpx);
+  box-shadow: 4rpx 4rpx 0 #191919;
+}
+.stat-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10rpx;
+}
+.view-all {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 19rpx;
   font-weight: 900;
 }
-.count.red {
-  background: #c72c0a;
+.view-all image {
+  width: 30rpx;
+  height: 30rpx;
+}
+.count {
+  box-sizing: border-box;
+  width: 80rpx;
+  height: 58rpx;
+  line-height: 50rpx;
+  text-align: center;
+  border: 4rpx solid #191919;
+  background: #efede8;
+  font-size: 28rpx;
+  font-weight: 900;
+}
+.count-red {
+  background: #f04418;
   color: #fff;
 }
 .honors {
-  border-right: 8rpx solid #191919;
-  border-bottom: 8rpx solid #191919;
-  padding: 22rpx;
-  margin-bottom: 38rpx;
+  border: 5rpx solid #191919;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  background: #fff;
+  padding: 24rpx;
+  margin: 34rpx 8rpx 38rpx 0;
 }
 .badges {
   display: flex;
@@ -72,39 +127,73 @@
   flex-direction: column;
   align-items: center;
   gap: 12rpx;
+  font-size: 21rpx;
 }
-.badges text {
-  width: 110rpx;
-  height: 110rpx;
-  border-radius: 55rpx;
+.badge {
+  box-sizing: border-box;
+  width: 90rpx;
+  height: 90rpx;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 4rpx solid #191919;
-  box-shadow: 8rpx 8rpx 0 #191919;
-  font-size: 54rpx;
+  box-shadow: 6rpx 6rpx 0 #191919;
+}
+.badge image {
+  display: block;
+  width: 54rpx;
+  height: 54rpx;
 }
 .yellow {
   background: #ffec00;
 }
 .red-badge {
-  background: #ed3108;
+  background: #f04418;
   color: #fff;
 }
-.badges .muted {
-  color: #999;
-}
 .menu-row {
-  background: #f5f5f5;
-  padding: 30rpx;
-  margin: 18rpx 0;
-  font-size: 29rpx;
+  min-height: 96rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 4rpx solid #191919;
+  padding: 17rpx 20rpx;
+  margin: 17rpx 0;
+  font-size: 27rpx;
   font-weight: 900;
 }
-.menu-row text {
-  float: right;
-  font-size: 46rpx;
+.profile-entry {
+  background: #ffec00;
 }
-.menu-row.danger {
-  color: #c51414;
+.menu-icon {
+  box-sizing: border-box;
+  width: 52rpx;
+  height: 52rpx;
+  border: 3rpx solid #191919;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 18rpx;
+}
+.menu-icon image {
+  display: block;
+  width: 38rpx;
+  height: 38rpx;
+}
+.menu-copy {
+  flex: 1;
+}
+.menu-copy .en {
+  display: block;
+  font-size: 15rpx;
+  margin-top: 3rpx;
+  letter-spacing: 1rpx;
+}
+.arrow {
+  display: block;
+  flex: 0 0 auto;
+  width: 42rpx;
+  height: 42rpx;
 }

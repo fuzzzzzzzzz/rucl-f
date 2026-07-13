@@ -9,4 +9,8 @@ describe('privacy masking', () => {
   it('keeps the first four and last two student-number characters', () => {
     expect(maskStudentNumber('2023123418')).toBe('2023****18')
   })
+
+  it('never exposes a two-character full name', () => {
+    expect(maskName('李明')).toBe('李*')
+  })
 })
