@@ -1,0 +1,252 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>CAMPUS CARD GUARDIAN</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Space+Mono:wght@400;700&amp;family=JetBrains+Mono:wght@500;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100..900&amp;family=Space+Grotesk:wght@100..900&amp;family=Space+Mono:wght@100..900&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-secondary": "#ffffff",
+            "primary-container": "#db3400",
+            "surface-bright": "#f9f9f9",
+            "tertiary": "#00694b",
+            "primary-fixed-dim": "#ffb4a2",
+            "on-error-container": "#93000a",
+            "on-secondary-container": "#6c6400",
+            "outline-variant": "#e7bdb3",
+            "error": "#ba1a1a",
+            "on-surface-variant": "#5d3f38",
+            "on-tertiary-fixed": "#002115",
+            "tertiary-fixed-dim": "#00e1a5",
+            "secondary-fixed-dim": "#d8ca00",
+            "on-error": "#ffffff",
+            "on-surface": "#1b1b1b",
+            "surface-container-highest": "#e2e2e2",
+            "on-tertiary": "#ffffff",
+            "on-secondary-fixed": "#1f1c00",
+            "inverse-on-surface": "#f1f1f1",
+            "on-tertiary-fixed-variant": "#005139",
+            "on-primary-fixed": "#3c0700",
+            "on-secondary-fixed-variant": "#4e4800",
+            "secondary-fixed": "#f7e600",
+            "on-primary-fixed-variant": "#891d00",
+            "primary": "#af2800",
+            "tertiary-fixed": "#3effbf",
+            "surface-dim": "#dadada",
+            "error-container": "#ffdad6",
+            "outline": "#926f66",
+            "background": "#f9f9f9",
+            "secondary-container": "#f3e300",
+            "on-primary-container": "#fffbff",
+            "surface-container-high": "#e8e8e8",
+            "surface-container-low": "#f3f3f3",
+            "surface-variant": "#e2e2e2",
+            "on-primary": "#ffffff",
+            "surface-container-lowest": "#ffffff",
+            "surface": "#f9f9f9",
+            "on-background": "#1b1b1b",
+            "inverse-surface": "#303030",
+            "on-tertiary-container": "#f5fff7",
+            "primary-fixed": "#ffdad2",
+            "surface-tint": "#b42900",
+            "tertiary-container": "#008560",
+            "surface-container": "#eeeeee",
+            "inverse-primary": "#ffb4a2",
+            "secondary": "#676000"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "sm": "8px",
+            "gutter": "16px",
+            "xl": "32px",
+            "margin-mobile": "20px",
+            "border-width": "4px",
+            "lg": "24px",
+            "xs": "4px",
+            "unit": "4px",
+            "md": "16px"
+          },
+          "fontFamily": {
+            "headline-lg-mobile": ["Space Grotesk"],
+            "headline-lg": ["Space Grotesk"],
+            "headline-md": ["Space Grotesk"],
+            "body-lg": ["Space Mono"],
+            "body-md": ["Space Mono"],
+            "label-sm": ["JetBrains Mono"],
+            "headline-xl": ["Space Grotesk"],
+            "label-bold": ["JetBrains Mono"]
+          },
+          "fontSize": {
+            "headline-lg-mobile": ["28px", {"lineHeight": "32px", "fontWeight": "700"}],
+            "headline-lg": ["32px", {"lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+            "headline-md": ["24px", {"lineHeight": "28px", "fontWeight": "700"}],
+            "body-lg": ["18px", {"lineHeight": "26px", "fontWeight": "400"}],
+            "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+            "label-sm": ["12px", {"lineHeight": "14px", "fontWeight": "500"}],
+            "headline-xl": ["40px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+            "label-bold": ["14px", {"lineHeight": "16px", "fontWeight": "700"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      background-color: #FFFFFF;
+      font-family: 'JetBrains Mono', 'Space Mono', monospace;
+      -webkit-font-smoothing: antialiased;
+    }
+    
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .neo-shadow {
+      box-shadow: 6px 6px 0px #000000;
+    }
+
+    .neo-shadow-active:active {
+      box-shadow: 0px 0px 0px #000000;
+      transform: translate(4px, 4px);
+    }
+
+    .ticker-wrapper {
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .ticker-content {
+      display: inline-block;
+      animation: ticker 20s linear infinite;
+    }
+
+    @keyframes ticker {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+
+    .diagonal-pattern {
+      background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.05) 10px, rgba(0,0,0,0.05) 20px);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="flex flex-col min-h-screen pb-24">
+<!-- Top AppBar Mapping from Shared Components JSON -->
+<header class="w-full top-0 border-b-4 border-on-surface bg-on-surface dark:bg-on-surface flex items-center justify-center h-16 px-margin-mobile z-50 shadow-[6px_6px_0px_#000000]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-primary text-2xl" data-icon="security" style="font-variation-settings: &quot;FILL&quot; 1;">security</span>
+<h1 class="font-headline-md text-headline-md uppercase tracking-tighter text-on-primary dark:text-on-primary">CAMPUS CARD GUARDIAN</h1>
+</div>
+</header>
+<!-- Status Tag -->
+<div class="px-margin-mobile mt-4">
+<div class="inline-block border-2 border-on-surface px-3 py-1 bg-surface-container-lowest font-label-bold text-label-bold uppercase">
+      [ STATUS: SECURE_MATCHING ]
+    </div>
+</div>
+<main class="flex-grow px-margin-mobile mt-gutter flex flex-col gap-gutter overflow-y-auto">
+<!-- Center: Main Action Blocks -->
+<div class="bg-[#00F5B4] border-[4px] border-on-surface h-12 flex items-center ticker-wrapper relative mb-4"><div class="ticker-content font-label-bold text-on-surface px-4">🎉 5 mins ago: A lost card was successfully returned to Library desk... 🛡️ Secure match: ID 2023****88 recovered... 📍 Found: Engineering Building Hallway...</div></div><div class="grid grid-cols-2 gap-gutter h-64">
+<!-- Left: LOST -->
+<button class="bg-[#FF3E00] border-[4px] border-on-surface neo-shadow neo-shadow-active flex flex-col items-center justify-center p-4 transition-all overflow-hidden group relative"><span class="material-symbols-outlined text-white text-5xl mb-4 group-hover:scale-110 transition-transform" data-icon="search_off">search_off</span><span class="font-headline-md text-white text-center leading-tight">我丢卡了<br><span class="text-xs uppercase">[ I LOST MY CARD ]</span></span><div class="absolute inset-0 opacity-10 pointer-events-none diagonal-pattern"></div></button>
+<!-- Right: FOUND -->
+<button class="bg-[#FFEE00] border-[4px] border-on-surface neo-shadow neo-shadow-active flex flex-col items-center justify-center p-4 transition-all overflow-hidden group relative"><span class="material-symbols-outlined text-on-surface text-5xl mb-4 group-hover:scale-110 transition-transform" data-icon="front_hand">front_hand</span><span class="font-headline-md text-on-surface text-center leading-tight">我捡到卡了<br><span class="text-xs uppercase">[ I FOUND A CARD ]</span></span><div class="absolute inset-0 opacity-10 pointer-events-none diagonal-pattern"></div></button>
+</div>
+<!-- Ticker Section -->
+
+<!-- Info Section: System Principle -->
+<section class="bg-surface-container-lowest border-[4px] border-on-surface neo-shadow p-gutter mb-4">
+<div class="flex items-center justify-between border-b-4 border-on-surface pb-2 mb-4">
+<h2 class="font-headline-md uppercase">[ SYSTEM_PRINCIPLE ]</h2>
+<span class="material-symbols-outlined" data-icon="info_i">info_i</span>
+</div>
+<div class="space-y-4">
+<p class="font-body-md text-on-surface-variant leading-relaxed">
+          The Campus Card Guardian utilizes a zero-exposure matching algorithm. Lost data is encrypted until a physical identity verification is performed.
+        </p>
+<div class="bg-surface-container border-2 border-on-surface p-4 font-label-bold">
+<ul class="space-y-2">
+<li class="flex items-center gap-2">
+<span class="w-2 h-2 bg-primary"></span>
+              Name: 张**
+            </li>
+<li class="flex items-center gap-2">
+<span class="w-2 h-2 bg-primary"></span>
+              ID: 2023****18
+            </li>
+<li class="flex items-center gap-2">
+<span class="w-2 h-2 bg-primary"></span>
+              Status: HASHED_PROTECTION_ENABLED
+            </li>
+</ul>
+</div>
+</div>
+</section>
+<!-- Visual Anchor / Decorative Element -->
+<div class="border-[4px] border-on-surface p-1 neo-shadow bg-surface-container-high overflow-hidden">
+<div class="relative h-40 bg-white border-2 border-on-surface overflow-hidden">
+<div class="w-full h-full bg-cover bg-center" data-alt="A high-contrast Neo-Brutalist graphic illustration of a campus ID card floating in a digital grid space. The style uses vibrant orange and neon mint green colors with thick 4px black outlines. Sharp geometric shapes and technical data overlays like coordinate lines and hex codes surround the central card object. The lighting is harsh and flat, maintaining a clean light-mode aesthetic with no gradients." style="background-image: url(&quot;https://lh3.googleusercontent.com/aida-public/AB6AXuB_Jg7FFzwFuhEpYVnEq8BTQlySZ6KCbaQmISEtVoYhnCcKKqyKYCweBc8ynCUrby7zbQIVG_SQpNtF3Mlgi_9lrSR9Agn_4C69-yytKmkmkRSGeSfGb-UCn1BftR_SOTRHYQJBN3IK1jFxRndZkRErTnjxXHmUVbdFw2b-htS4ArqSMB1csS9T6mrUE6iA042mTjjbg1XGLyhxJIM2C-SuiXE9n_KSohXeJnGHkuv0SkJi2AdBc8c32We4jdtfg45qxA7gasJtYoQ&quot;);"></div>
+<div class="absolute bottom-2 left-2 bg-on-surface text-white px-2 py-0.5 text-xs font-label-bold">VISUAL_ID: 9942-X</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar Mapping from Shared Components JSON -->
+<nav class="fixed bottom-0 w-full z-50 border-t-4 border-on-surface flex justify-around items-center px-2 py-3 bg-surface">
+<!-- HOME Active -->
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary py-2 px-4 border-2 border-on-surface shadow-[4px_4px_0px_#000000] active:scale-95 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="home" style="font-variation-settings: &quot;FILL&quot; 1;">home</span>
+<span class="font-label-bold text-label-bold mt-1">HOME</span>
+</a>
+<!-- SEARCH Inactive -->
+<a class="flex flex-col items-center justify-center text-on-surface dark:text-on-surface-variant py-2 px-4 hover:bg-surface-container-high transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+<span class="font-label-bold text-label-bold mt-1">SEARCH</span>
+</a>
+<!-- POST Inactive -->
+<a class="flex flex-col items-center justify-center text-on-surface dark:text-on-surface-variant py-2 px-4 hover:bg-surface-container-high transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="add_box">add_box</span>
+<span class="font-label-bold text-label-bold mt-1">POST</span>
+</a>
+<!-- MY Inactive -->
+<a class="flex flex-col items-center justify-center text-on-surface dark:text-on-surface-variant py-2 px-4 hover:bg-surface-container-high transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-bold text-label-bold mt-1">MY</span>
+</a>
+</nav>
+<script>
+    // Simple micro-interaction for the ticker to reset and keep moving seamlessly
+    const tickerContent = document.querySelector('.ticker-content');
+    tickerContent.addEventListener('animationiteration', () => {
+      // Just a hook for future dynamic content injection
+    });
+
+    // Handle press states physically
+    const neoButtons = document.querySelectorAll('.neo-shadow-active');
+    neoButtons.forEach(btn => {
+      btn.addEventListener('touchstart', () => {
+        btn.classList.add('translate-x-[4px]', 'translate-y-[4px]', 'shadow-none');
+      });
+      btn.addEventListener('touchend', () => {
+        btn.classList.remove('translate-x-[4px]', 'translate-y-[4px]', 'shadow-none');
+      });
+    });
+  </script>
+
+
+</body></html>

@@ -1,0 +1,1 @@
+<view class="page"><view class="brand">ADMIN CONTROL</view><view class="neo-card"><view>异常认领复核：0</view><view>疑似重复记录：0</view><view>待处理举报：0</view><view>OCR 失败记录：0</view></view><view class="neo-card"><view style="font-weight:900">预制 AI 审核</view><view class="subtitle">首版默认关闭。开启前必须配置月度预算、密钥与审计。</view><switch checked="{{aiEnabled}}" bindchange="toggleAi" color="#af2800"/></view></view>

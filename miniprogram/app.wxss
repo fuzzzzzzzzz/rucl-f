@@ -1,0 +1,71 @@
+page {
+  background: #f9f9f9;
+  color: #1b1b1b;
+  font-family: system-ui, sans-serif;
+}
+.page {
+  padding: 32rpx;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
+}
+.brand {
+  font-size: 44rpx;
+  font-weight: 900;
+  letter-spacing: -2rpx;
+}
+.subtitle {
+  color: #5d3f38;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+.neo-card {
+  background: #fff;
+  border: 6rpx solid #1b1b1b;
+  box-shadow: 10rpx 10rpx 0 #1b1b1b;
+  padding: 28rpx;
+  margin: 24rpx 10rpx 34rpx 0;
+}
+.neo-button {
+  border-radius: 0;
+  border: 6rpx solid #1b1b1b;
+  background: #f3e300;
+  color: #1b1b1b;
+  font-weight: 900;
+  line-height: 92rpx;
+  box-shadow: 8rpx 8rpx 0 #1b1b1b;
+  margin: 20rpx 8rpx 28rpx 0;
+}
+.neo-button::after {
+  border: 0;
+}
+.neo-button--orange {
+  background: #db3400;
+  color: #fff;
+}
+.neo-button--green {
+  background: #3effbf;
+}
+.field {
+  background: #fff;
+  border: 5rpx solid #1b1b1b;
+  padding: 22rpx;
+  margin-top: 12rpx;
+}
+.label {
+  display: block;
+  font-weight: 800;
+  margin-top: 22rpx;
+}
+.tag {
+  display: inline-block;
+  border: 4rpx solid #1b1b1b;
+  padding: 6rpx 12rpx;
+  background: #3effbf;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+.privacy {
+  background: #1b1b1b;
+  color: #fff;
+  padding: 24rpx;
+  line-height: 1.6;
+}

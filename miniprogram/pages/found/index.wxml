@@ -1,0 +1,10 @@
+<view class="page"><view class="brand">拾卡发布</view><view class="subtitle">照片仅用于 OCR 与脱敏；失败时可人工填写。</view>
+<button class="neo-button neo-button--green" bindtap="choosePhoto">{{photoPath ? '重新选择照片' : '拍摄校园卡'}}</button><image wx:if="{{photoPath}}" class="neo-card" style="width:90%;height:280rpx" mode="aspectFit" src="{{photoPath}}"/>
+<text class="label">姓名（OCR 后请人工确认）</text><input class="field" placeholder="例如：张小明" bindinput="onName"/>
+<text class="label">学号（不会公开完整内容）</text><input class="field" placeholder="例如：2023123418" bindinput="onNumber"/>
+<text class="label">学院</text><input class="field" placeholder="例如：计算机学院" bindinput="onCollege"/>
+<text class="label">校区</text><picker range="{{campuses}}" range-key="name" value="{{campusIndex}}" bindchange="onCampusChange"><view class="field">{{campuses[campusIndex].name}}</view></picker>
+<text class="label">拾取地点</text><input class="field" placeholder="如：第一教学楼一层" bindinput="onLocation"/>
+<text class="label">拾取日期</text><picker mode="date" bindchange="onDate"><view class="field">{{foundDate || '请选择日期'}}</view></picker>
+<text class="label">不公开的卡片特征</text><textarea class="field" placeholder="卡套、贴纸、破损等，仅用于认领验证" bindinput="onFeature"/>
+<button class="neo-button neo-button--orange" loading="{{busy}}" bindtap="submit">确认脱敏发布</button></view>

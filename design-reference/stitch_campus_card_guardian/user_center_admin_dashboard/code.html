@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CAMPUS CARD GUARDIAN - User Center</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Space+Mono:ital,wght@0,400;0,700;1,400&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed-dim": "#00e1a5",
+                    "on-tertiary-fixed-variant": "#005139",
+                    "on-surface": "#1b1b1b",
+                    "surface-container-low": "#f3f3f3",
+                    "on-secondary-container": "#6c6400",
+                    "error-container": "#ffdad6",
+                    "surface-variant": "#e2e2e2",
+                    "primary-fixed": "#ffdad2",
+                    "primary-container": "#db3400",
+                    "on-error": "#ffffff",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "secondary": "#676000",
+                    "on-error-container": "#93000a",
+                    "tertiary-container": "#008560",
+                    "outline-variant": "#e7bdb3",
+                    "on-surface-variant": "#5d3f38",
+                    "on-primary-fixed": "#3c0700",
+                    "outline": "#926f66",
+                    "on-tertiary-container": "#f5fff7",
+                    "on-secondary": "#ffffff",
+                    "error": "#ba1a1a",
+                    "inverse-primary": "#ffb4a2",
+                    "on-secondary-fixed": "#1f1c00",
+                    "surface": "#f9f9f9",
+                    "primary": "#af2800",
+                    "inverse-surface": "#303030",
+                    "on-primary-container": "#fffbff",
+                    "secondary-fixed-dim": "#d8ca00",
+                    "on-primary": "#ffffff",
+                    "surface-container": "#eeeeee",
+                    "primary-fixed-dim": "#ffb4a2",
+                    "surface-dim": "#dadada",
+                    "on-tertiary-fixed": "#002115",
+                    "surface-bright": "#f9f9f9",
+                    "surface-tint": "#b42900",
+                    "inverse-on-surface": "#f1f1f1",
+                    "on-background": "#1b1b1b",
+                    "secondary-fixed": "#f7e600",
+                    "on-primary-fixed-variant": "#891d00",
+                    "tertiary-fixed": "#3effbf",
+                    "surface-container-highest": "#e2e2e2",
+                    "on-secondary-fixed-variant": "#4e4800",
+                    "tertiary": "#00694b",
+                    "secondary-container": "#f3e300",
+                    "surface-container-high": "#e8e8e8",
+                    "background": "#f9f9f9"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "margin-mobile": "20px",
+                    "unit": "4px",
+                    "sm": "8px",
+                    "md": "16px",
+                    "gutter": "16px",
+                    "xs": "4px",
+                    "border-width": "4px",
+                    "xl": "32px",
+                    "lg": "24px"
+            },
+            "fontFamily": {
+                    "body-md": ["Space Mono"],
+                    "label-sm": ["JetBrains Mono"],
+                    "body-lg": ["Space Mono"],
+                    "headline-md": ["Space Grotesk"],
+                    "headline-lg-mobile": ["Space Grotesk"],
+                    "headline-lg": ["Space Grotesk"],
+                    "headline-xl": ["Space Grotesk"],
+                    "label-bold": ["JetBrains Mono"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-sm": ["12px", {"lineHeight": "14px", "fontWeight": "500"}],
+                    "body-lg": ["18px", {"lineHeight": "26px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "28px", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "32px", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "headline-xl": ["40px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-bold": ["14px", {"lineHeight": "16px", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .neo-brutalist-shadow {
+            box-shadow: 6px 6px 0px #000000;
+        }
+        .neo-brutalist-shadow-small {
+            box-shadow: 4px 4px 0px #000000;
+        }
+        .neo-brutalist-shadow-active {
+            box-shadow: 0px 0px 0px #000000;
+            transform: translate(4px, 4px);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #ffffff;
+            color: #1b1b1b;
+        }
+        .honor-dashed {
+            background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='100' ry='100' stroke='%23000' stroke-width='4' stroke-dasharray='8%2c 8' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md min-h-screen pb-24 overflow-y-scroll">
+<!-- Top Bar -->
+<header class="bg-on-surface text-on-primary sticky top-0 z-50 w-full h-16 border-b-4 border-on-surface flex items-center justify-center px-margin-mobile neo-brutalist-shadow">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-fixed">security</span>
+<h1 class="font-headline-md text-headline-md tracking-tighter">个人中心 / [ USER_CENTER ]</h1>
+</div>
+</header>
+<main class="p-margin-mobile flex flex-col gap-lg">
+<!-- Section 1: User Profile -->
+<section class="bg-surface-container-lowest border-border-width border-on-surface p-md neo-brutalist-shadow flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-20 h-20 border-border-width border-on-surface bg-primary-fixed flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A stylized portrait illustration of a generic user in a neo-brutalist digital art style. The character features bold black outlines and a limited color palette of mint green and vibrant red. The background is a clean, flat yellow, maintaining a high-energy campus aesthetic suitable for a modern web application." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIz7LTczatVg8eR8SrsFcBN57K4N3pgUXcIlC379jS7xy8wed_FPM6uG1AuUx8UsOAlY93wdeAFaXj4XMSFuhUc7onObXvucV8M9U07tOO0eiwH2BJltaJNcasfGmcZvn6nZhWxSsXU6-spON3ta6cpBzbsmoxiCOHIJbI21bTmXlnCSb-iEGndubQwJWA4Qocq0MlcpomxSmdEWOO92UdC8PfcR1HLA2EewVUE8whJv2bC7s76q_Cx3PjmvIyyXPd3ErjsNzSAoI"/>
+</div>
+<div class="flex flex-col gap-xs">
+<div class="font-headline-md text-headline-md leading-tight">
+                        微信用户 <span class="text-body-md font-label-bold bg-surface-container-high px-1">[ AUTH_VERIFIED ]</span>
+</div>
+<div class="font-body-lg text-body-lg">学院：计算机学院</div>
+</div>
+</div>
+<div class="bg-tertiary-fixed-dim border-border-width border-on-surface px-md py-sm neo-brutalist-shadow-small flex flex-col items-center">
+<div class="font-label-bold text-label-bold">信用分: 100</div>
+<div class="font-label-sm text-label-sm">[ TRUST_SCORE ]</div>
+</div>
+</section>
+<!-- Section 2: History Grid -->
+<section class="grid grid-cols-2 gap-gutter">
+<button class="bg-surface-container-lowest border-border-width border-on-surface p-md neo-brutalist-shadow text-left group active:translate-x-1 active:translate-y-1 active:shadow-none transition-all">
+<div class="font-body-lg font-bold mb-1">我发表的招领</div>
+<div class="font-label-bold text-label-bold opacity-70 mb-4">[ MY_POSTS ]</div>
+<div class="inline-block bg-primary text-on-primary font-bold px-3 py-1 border-2 border-on-surface"> (1) </div>
+</button>
+<button class="bg-surface-container-lowest border-border-width border-on-surface p-md neo-brutalist-shadow text-left group active:translate-x-1 active:translate-y-1 active:shadow-none transition-all">
+<div class="font-body-lg font-bold mb-1">我登记的失卡</div>
+<div class="font-label-bold text-label-bold opacity-70 mb-4">[ MY_LOST_LOGS ]</div>
+<div class="inline-block bg-on-surface-variant text-on-surface-variant font-bold px-3 py-1 border-2 border-on-surface bg-surface-variant"> (0) </div>
+</button>
+</section>
+<!-- Section 3: Honor Wall -->
+<section class="bg-surface-container-lowest border-border-width border-on-surface p-md neo-brutalist-shadow">
+<div class="flex items-center justify-between mb-lg border-b-4 border-on-surface pb-sm">
+<h2 class="font-headline-md text-headline-md">校园感谢墙 / [ HONORS ]</h2>
+</div>
+<div class="flex justify-around py-md">
+<div class="flex flex-col items-center gap-sm">
+<div class="w-16 h-16 rounded-full bg-secondary-fixed border-border-width border-on-surface flex items-center justify-center neo-brutalist-shadow-small">
+<span class="material-symbols-outlined text-on-surface scale-125">volunteer_activism</span>
+</div>
+<span class="font-label-bold text-label-bold">热心同学</span>
+</div>
+<div class="flex flex-col items-center gap-sm">
+<div class="w-16 h-16 rounded-full bg-primary-container border-border-width border-on-surface flex items-center justify-center neo-brutalist-shadow-small">
+<span class="material-symbols-outlined text-on-primary scale-125">workspace_premium</span>
+</div>
+<span class="font-label-bold text-label-bold">拾金不昧</span>
+</div>
+<div class="flex flex-col items-center gap-sm opacity-40">
+<div class="w-16 h-16 rounded-full honor-dashed flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface scale-125">add</span>
+</div>
+<span class="font-label-bold text-label-bold">虚位以待</span>
+</div>
+</div>
+</section>
+<!-- Additional Actions -->
+<section class="flex flex-col gap-sm">
+<div class="bg-surface border-border-width border-on-surface p-md flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-lg font-bold">账号设置 / [ SETTINGS ]</span>
+</div>
+<span class="material-symbols-outlined">chevron_right</span>
+</div>
+<div class="bg-surface border-border-width border-on-surface p-md flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined">help</span>
+<span class="font-body-lg font-bold">帮助中心 / [ SUPPORT ]</span>
+</div>
+<span class="material-symbols-outlined">chevron_right</span>
+</div>
+<div class="bg-surface border-border-width border-on-surface p-md flex items-center justify-between hover:bg-error-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-md text-error">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-body-lg font-bold">退出登录 / [ LOGOUT ]</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Nav Bar -->
+<nav class="fixed bottom-0 w-full z-50 border-t-4 border-on-surface bg-surface flex justify-around items-center px-2 py-3">
+<!-- HOME -->
+<a class="flex flex-col items-center justify-center text-on-surface py-2 px-4 hover:bg-surface-container-high transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-bold text-label-bold">HOME</span>
+</a>
+<!-- SEARCH -->
+<a class="flex flex-col items-center justify-center text-on-surface py-2 px-4 hover:bg-surface-container-high transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined">search</span>
+<span class="font-label-bold text-label-bold">SEARCH</span>
+</a>
+<!-- POST -->
+<a class="flex flex-col items-center justify-center text-on-surface py-2 px-4 hover:bg-surface-container-high transition-colors active:scale-95" href="#">
+<span class="material-symbols-outlined">add_box</span>
+<span class="font-label-bold text-label-bold">POST</span>
+</a>
+<!-- MY (Active) -->
+<a class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container py-2 px-4 border-2 border-on-surface shadow-[4px_4px_0px_#000000] active:scale-95" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-label-bold text-label-bold">MY</span>
+</a>
+</nav>
+<script>
+        // Micro-interactions
+        document.querySelectorAll('button, .cursor-pointer').forEach(el => {
+            el.addEventListener('mousedown', () => {
+                if (el.classList.contains('neo-brutalist-shadow')) {
+                    el.style.boxShadow = '0px 0px 0px #000000';
+                    el.style.transform = 'translate(4px, 4px)';
+                }
+            });
+            el.addEventListener('mouseup', () => {
+                if (el.classList.contains('neo-brutalist-shadow')) {
+                    el.style.boxShadow = '6px 6px 0px #000000';
+                    el.style.transform = 'translate(0px, 0px)';
+                }
+            });
+            el.addEventListener('mouseleave', () => {
+                if (el.classList.contains('neo-brutalist-shadow')) {
+                    el.style.boxShadow = '6px 6px 0px #000000';
+                    el.style.transform = 'translate(0px, 0px)';
+                }
+            });
+        });
+    </script>
+</body></html>

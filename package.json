@@ -1,0 +1,22 @@
+{
+  "name": "campus-card-guardian",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts",
+    "format:check": "prettier --check .",
+    "verify": "npm run test && npm run typecheck && npm run lint && npm run format:check"
+  },
+  "devDependencies": {
+    "@types/wechat-miniprogram": "^3.4.9",
+    "@typescript-eslint/eslint-plugin": "^8.37.0",
+    "@typescript-eslint/parser": "^8.37.0",
+    "eslint": "^9.31.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^3.2.4"
+  }
+}

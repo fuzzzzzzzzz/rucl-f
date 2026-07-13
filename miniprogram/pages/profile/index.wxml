@@ -1,0 +1,1 @@
+<view class="page"><view class="brand">我的守护记录</view><view class="neo-card"><view>我的拾卡发布</view><view>我的失卡登记</view><view>我的认领申请</view><view>交接任务</view></view><view class="privacy">当前为本地演示模式。注册 AppID 后可启用真实微信登录与云端同步。</view><button wx:if="{{isAdmin}}" class="neo-button" bindtap="goAdmin">管理员控制台</button></view>

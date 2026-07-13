@@ -1,0 +1,30 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/found/index",
+    "pages/lost/index",
+    "pages/messages/index",
+    "pages/profile/index",
+    "pages/admin/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "校园卡守护者",
+    "navigationBarBackgroundColor": "#1b1b1b",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f9f9f9"
+  },
+  "tabBar": {
+    "color": "#555555",
+    "selectedColor": "#af2800",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/home/index", "text": "首页" },
+      { "pagePath": "pages/messages/index", "text": "消息" },
+      { "pagePath": "pages/profile/index", "text": "我的" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}
+

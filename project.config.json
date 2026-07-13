@@ -1,0 +1,17 @@
+{
+  "description": "校园卡隐私保护型智能匹配与归还平台",
+  "miniprogramRoot": "miniprogram/",
+  "cloudfunctionRoot": "cloudfunctions/",
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "compileHotReLoad": true,
+    "useCompilerPlugins": ["typescript"]
+  },
+  "compileType": "miniprogram",
+  "appid": "touristappid",
+  "projectname": "campus-card-guardian",
+  "condition": {}
+}

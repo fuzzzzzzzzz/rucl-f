@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="brand">CAMPUS CARD<br/>GUARDIAN</view>
+  <view class="subtitle">公开页面知道得尽量少，后台匹配得尽量准。</view>
+  <button class="neo-button neo-button--orange" bindtap="goLost">我丢卡了 · 安全查询</button>
+  <button class="neo-button neo-button--green" bindtap="goFound">我捡到卡了 · 脱敏发布</button>
+  <view class="privacy">🔒 请勿将完整卡面照片发到朋友圈、校园墙或公开群聊。原图仅用于识别与脱敏。</view>
+  <view class="neo-card" wx:for="{{cards}}" wx:key="id">
+    <text class="tag">{{item.campusName}}</text>
+    <view class="brand" style="font-size:34rpx;margin-top:16rpx">{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
+    <view class="subtitle">{{item.college}}｜{{item.locationName}}｜{{item.foundAt}}</view>
+  </view>
+</view>

@@ -1,0 +1,139 @@
+<!DOCTYPE html><html lang="zh-CN" class="light"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&amp;family=Space+Mono:wght@400;700&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=block" rel="stylesheet"><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">try{
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#af2800",
+                        "on-primary": "#ffffff",
+                        "secondary-container": "#f3e300",
+                        "on-secondary-container": "#6c6400",
+                        "tertiary": "#00694b",
+                        "tertiary-container": "#008560",
+                        "on-tertiary-container": "#f5fff7",
+                        "surface": "#f9f9f9",
+                        "on-surface": "#1b1b1b",
+                        "outline": "#926f66",
+                        "surface-container-lowest": "#ffffff",
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0px",
+                        "lg": "0px",
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "xl": "32px",
+                        "sm": "8px",
+                        "margin-mobile": "20px",
+                        "lg": "24px",
+                        "border-width": "4px",
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Space Grotesk"],
+                        "body-md": ["Space Mono"],
+                        "label-bold": ["JetBrains Mono"],
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "28px", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "label-bold": ["14px", {"lineHeight": "16px", "fontWeight": "700"}],
+                        "label-sm": ["12px", {"lineHeight": "14px", "fontWeight": "500"}],
+                    }
+                },
+            },
+        }
+    }catch(_e){}</script></head><body class="font-body-md text-on-surface" style="background-color: rgb(255, 255, 255); -webkit-tap-highlight-color: transparent; height: 844px; overflow: hidden;">
+    <!-- TopAppBar -->
+    <nav class="fixed top-0 w-full z-50 bg-on-surface text-on-primary border-b-4 border-on-surface shadow-[6px_6px_0px_#000000] flex items-center justify-between h-16 px-margin-mobile">
+        <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-on-primary">security</span>
+            <h1 class="font-headline-md text-[18px] uppercase tracking-tighter">
+                失卡智能查询 / <span class="font-label-bold text-[12px] opacity-80">[ LOST_CARD_QUERY ]</span>
+            </h1>
+        </div>
+        <button class="material-symbols-outlined text-on-primary hover:translate-x-1 hover:translate-y-1 transition-all">info</button>
+    </nav>
+
+    <main class="pt-20 pb-32 px-margin-mobile flex flex-col gap-6">
+        <!-- Section 1: Secure Query Input -->
+        <section class="flex flex-col gap-4 mt-4">
+            <div class="bg-white border-4 border-on-surface p-4 neo-shadow">
+                <label class="block font-label-bold mb-2 text-on-surface">
+                    请输入完整学号 / <span class="text-[10px]">[ ENTER_STUDENT_ID ]</span>
+                </label>
+                <input class="w-full border-4 border-on-surface p-3 font-body-md focus:bg-[#FFEE00] focus:outline-none transition-colors placeholder:text-neutral-400 placeholder:text-sm" placeholder="输入真实学号仅用于后台安全哈希比对" type="text">
+            </div>
+            <button class="w-full bg-[#FFEE00] border-4 border-on-surface py-4 font-headline-md neo-shadow neo-active transition-all">
+                开始智能匹配 / <span class="font-label-bold text-[14px]">[ MATCH_START ]</span>
+            </button>
+        </section>
+
+        <!-- Section 2: Match Success Alert (Updated Text) -->
+        <section>
+            <div class="bg-[#00F5B4] border-4 border-on-surface p-4 neo-shadow">
+                <h2 class="font-headline-md text-on-surface flex items-center gap-2 text-[20px]">
+                    🔒 发现匹配卡片！请先验证身份 / <span class="font-label-bold text-[10px]">[ MATCH_FOUND_LOCKED ]</span>
+                </h2>
+            </div>
+        </section>
+
+        <!-- Section 3: Encrypted State Box -->
+        <section class="">
+            <div class="bg-[#E0E0E0] border-4 border-dashed border-on-surface p-8 flex flex-col items-center justify-center text-center neo-shadow">
+                <span class="material-symbols-outlined text-4xl mb-4">lock</span>
+                <p class="font-label-bold text-sm leading-relaxed">
+                    ❌ 数据已安全加密。通过校园身份验证后解锁具体存放地点。 / <br>
+                    <span class="text-[10px]">[ DATA_ENCRYPTED_UNTIL_VERIFIED ]</span>
+                </p>
+            </div>
+        </section>
+
+        <!-- Section 4: Verification Input -->
+        <section class="flex flex-col gap-2">
+            <div class="bg-white border-4 border-on-surface p-4 neo-shadow">
+                <label class="block font-label-bold mb-2 text-on-surface">
+                    输入校园邮箱验证码 / <span class="text-[10px]">[ ENTER_VERIFICATION_CODE ]</span>
+                </label>
+                <input class="w-full border-4 border-on-surface p-3 font-label-bold tracking-widest text-center focus:bg-secondary-container focus:outline-none" placeholder="XXXXXX" type="text">
+            </div>
+            <p class="text-[11px] font-label-bold text-neutral-500 px-2">
+                系统已向该学号绑定的校园邮箱发送了一次性解锁密钥。
+            </p>
+        </section>
+
+        <!-- Section 5: Verify & Unlock Button -->
+        <section class="mb-4">
+            <button class="w-full bg-[#FF3E00] text-on-primary border-4 border-on-surface py-5 font-headline-md shadow-[6px_6px_0px_#000000] neo-active flex items-center justify-center gap-3">
+                <span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">verified_user</span>
+                验证并解锁招领信息 / <span class="font-label-bold text-[14px]">[ VERIFY_AND_UNLOCK_DATA ]</span>
+            </button>
+        </section>
+
+        <!---->
+        <section class="">
+            <div class="border-4 border-dashed border-on-surface p-4 bg-white/50">
+                <p class="text-xs italic leading-relaxed font-body-md">
+                    ⚠️ 安全提示：拾卡者无法看到你的完整隐私信息。认领前系统将触发多级校园身份核验。拉黑恶意冒领行为。
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Bottom Navigation Bar (Copied from SCREEN_2) -->
+    <nav class="bg-surface-container-lowest fixed bottom-0 w-full z-50 border-t-4 border-on-surface shadow-[0px_-4px_0px_#000000] flex justify-around items-center h-20 px-4">
+        <button class="text-on-surface p-2 flex flex-col items-center gap-1 active:translate-x-1 active:translate-y-1 transition-all">
+            <span class="material-symbols-outlined" data-icon="home">home</span>
+        </button>
+        <button class="bg-secondary-container text-on-secondary-container border-2 border-on-surface shadow-[4px_4px_0px_#000000] p-2 flex flex-col items-center gap-1 active:translate-x-1 active:translate-y-1 transition-all">
+            <span class="material-symbols-outlined" data-icon="search" style="font-variation-settings: &quot;FILL&quot; 1;">search</span>
+        </button>
+        <button class="text-on-surface-variant p-2 flex flex-col items-center gap-1 active:translate-x-1 active:translate-y-1 transition-all">
+            <span class="material-symbols-outlined" data-icon="add_box">add_box</span>
+        </button>
+        <button class="text-on-surface-variant p-2 flex flex-col items-center gap-1 active:translate-x-1 active:translate-y-1 transition-all">
+            <span class="material-symbols-outlined" data-icon="person">person</span>
+        </button>
+    </nav>
+
+    <!-- Background Atmospheric Effect -->
+    </body></html>
