@@ -44,5 +44,12 @@ describe('cloud deployment contract', () => {
         new Error('functions execute fail | errMsg: Error: 身份信息待管理员核验，通过后可查询和认领 at exports.main'),
       ),
     ).toBe('身份信息待管理员核验，通过后可查询和认领')
+    expect(
+      friendlyCloudErrorMessage(
+        new Error(
+          'functions execute fail | errMsg: Error: 身份信息待管理员核验，通过后可查询和认领 at requireVerifiedIdentity (/var/user/domain.js:40:11)',
+        ),
+      ),
+    ).toBe('身份信息待管理员核验，通过后可查询和认领')
   })
 })

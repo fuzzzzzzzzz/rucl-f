@@ -101,7 +101,9 @@ export function normalizeCloudPublicCard(card: CloudPublicCard): PublicCard {
 export function friendlyCloudErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error || '')
   if (message.includes('不支持的操作')) return '云端服务版本未更新，请联系管理员重新部署'
-  const businessMessage = message.match(/errMsg:\s*Error:\s*([^|\r\n]+?)(?:\s+at\s+exports|$)/)?.[1]?.trim()
+  const businessMessage = message
+    .match(/errMsg:\s*Error:\s*([^|\r\n]+?)(?=\s+at\s+\S+|[|\r\n]|$)/)?.[1]
+    ?.trim()
   if (businessMessage && businessMessage.length <= 80) return businessMessage
   return '云端服务暂不可用，请稍后重试'
 }
