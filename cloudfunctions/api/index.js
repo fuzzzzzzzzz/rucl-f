@@ -1,6 +1,7 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const {
+  completeHandoverRecords,
   maskName,
   maskStudentNumber,
   matchedCardProjection,
@@ -114,7 +115,7 @@ async function ensureIdentityBinding(openid, studentDigest) {
   } catch (error) {
     const raced = await bindingRef.get()
     if (!raced.data || raced.data.ownerOpenid !== openid) {
-      throw new Error('该学号已经绑定其他账号，请联系管理员核验')
+      throw new Error('该学号已经绑定其他账号，请联系管理员处理')
     }
   }
 }
@@ -182,7 +183,7 @@ async function saveUserProfile(openid, input) {
   const personNameHmac = nameHmac(name)
   const category = requireChoice(input.category, CARD_CATEGORIES, '卡片类别')
   const campusId = requireChoice(input.campusId, CAMPUS_IDS, '校区')
-  let identityStatus = 'pending'
+  const identityStatus = 'verified'
   await db.runTransaction(async (transaction) => {
     const [freshUser, binding] = await Promise.all([
       transaction.collection('users').doc(user._id).get(),
@@ -196,7 +197,7 @@ async function saveUserProfile(openid, input) {
       throw new Error('姓名和学号已锁定，如需更换请联系管理员重新核验')
     }
     if (binding.data && binding.data.ownerOpenid !== openid) {
-      throw new Error('该学号已经绑定其他账号，请联系管理员核验')
+      throw new Error('该学号已经绑定其他账号，请联系管理员处理')
     }
     if (!binding.data) {
       await transaction
@@ -206,7 +207,6 @@ async function saveUserProfile(openid, input) {
           data: { ownerOpenid: openid, createdAt: db.serverDate() },
         })
     }
-    identityStatus = normalizeIdentityStatus(freshUser.data) === 'verified' ? 'verified' : 'pending'
     await transaction
       .collection('users')
       .doc(user._id)
@@ -219,10 +219,7 @@ async function saveUserProfile(openid, input) {
           category,
           campusId,
           identityStatus,
-          identityVerified: identityStatus === 'verified',
-          ...(identityStatus === 'pending'
-            ? { identitySubmittedAt: freshUser.data.identitySubmittedAt || db.serverDate() }
-            : {}),
+          identityVerified: true,
           updatedAt: db.serverDate(),
         },
       })
@@ -313,7 +310,13 @@ async function findMatches(openid, input) {
     .get()
   const matches = result.data.filter((card) => card.nameHmac === user.nameHmac)
   await audit(openid, 'match.searched', '', { count: matches.length })
-  return matches.map(publicCardProjection)
+  const needsAdminReview = matches.length > 1
+  return matches.map((card) =>
+    matchedCardProjection(card, {
+      discloseOfficialStoragePoint: !needsAdminReview,
+      needsAdminReview,
+    }),
+  )
 }
 
 async function createLostReport(openid, input) {
@@ -545,7 +548,18 @@ async function submitClaim(openid, input) {
     .slice(0, 300)
     .toLowerCase()
   const claimId = crypto.createHash('sha256').update(`${cardId}:${openid}`).digest('hex')
+  const possibleMatches = await db
+    .collection('foundCards')
+    .where({
+      studentHmac: requestedDigest,
+      status: _.in(['pending_match', 'matched', 'claim_review', 'handover']),
+    })
+    .limit(20)
+    .get()
+  const matchingCards = possibleMatches.data.filter((card) => card.nameHmac === user.nameHmac)
+  const ambiguousMatch = matchingCards.length !== 1
   let publisherOpenid = ''
+  let claimDecision = 'review'
   await db.runTransaction(async (transaction) => {
     const [card, existing] = await Promise.all([
       transaction.collection('foundCards').doc(cardId).get(),
@@ -567,10 +581,11 @@ async function submitClaim(openid, input) {
     const decision = resolveBasicClaimDecision({
       studentMatch,
       nameMatch,
-      featureMatch,
-      identityVerified: true,
+      identityConfirmed: normalizeIdentityStatus(user) === 'verified',
+      ambiguousMatch,
     })
-    if (decision !== 'review') throw new Error('身份信息与该校园卡不匹配')
+    if (decision === 'rejected') throw new Error('姓名或学号与该校园卡不匹配')
+    claimDecision = decision
     publisherOpenid = card.data.publisherOpenid
     await transaction
       .collection('claims')
@@ -585,7 +600,7 @@ async function submitClaim(openid, input) {
           studentMatch,
           nameMatch,
           featureMatch,
-          status: 'review',
+          status: decision,
           createdAt: db.serverDate(),
         },
       })
@@ -593,15 +608,32 @@ async function submitClaim(openid, input) {
       .collection('foundCards')
       .doc(cardId)
       .update({
-        data: { status: 'claim_review', activeClaimId: claimId, updatedAt: db.serverDate() },
+        data: {
+          status: decision === 'approved' ? 'handover' : 'claim_review',
+          activeClaimId: claimId,
+          updatedAt: db.serverDate(),
+        },
       })
   })
+  const needsReview = claimDecision === 'review'
   await Promise.all([
-    createMessage(openid, '认领申请已提交', '管理员核验后会通知你，请勿重复提交。', cardId, claimId),
-    createMessage(publisherOpenid, '校园卡收到认领申请', '管理员正在核验失主身份。', cardId, claimId),
+    createMessage(
+      openid,
+      needsReview ? '认领申请已提交' : '姓名和学号核对一致',
+      needsReview ? '发现多条相似记录，管理员核对后会通知你。' : '认领已确认，请查看交接地点。',
+      cardId,
+      claimId,
+    ),
+    createMessage(
+      publisherOpenid,
+      needsReview ? '校园卡收到认领申请' : '校园卡已匹配到失主',
+      needsReview ? '发现多条相似记录，管理员正在核对。' : '姓名和学号已经核对一致。',
+      cardId,
+      claimId,
+    ),
   ])
-  await audit(openid, 'claim.submitted', claimId, { decision: 'review' })
-  return { id: claimId, decision: 'review' }
+  await audit(openid, 'claim.submitted', claimId, { decision: claimDecision, ambiguousMatch })
+  return { id: claimId, decision: claimDecision }
 }
 
 async function listMyClaims(openid) {
@@ -708,46 +740,29 @@ async function reviewClaim(openid, input) {
 async function completeHandover(openid, input) {
   await requireAdmin(openid)
   const claimId = requireText(input.claimId, '申请', 64)
-  let completedClaim
-  await db.runTransaction(async (transaction) => {
-    const claim = await transaction.collection('claims').doc(claimId).get()
-    if (!claim.data || claim.data.status !== 'approved') throw new Error('该认领申请不在待交接状态')
-    const card = await transaction.collection('foundCards').doc(claim.data.cardId).get()
-    if (!card.data || card.data.status !== 'handover' || card.data.activeClaimId !== claimId) {
-      throw new Error('该校园卡状态已变化，请刷新后重试')
-    }
-    completedClaim = claim.data
-    await transaction
-      .collection('foundCards')
-      .doc(claim.data.cardId)
-      .update({
-        data: { status: 'returned', returnedAt: db.serverDate(), updatedAt: db.serverDate() },
-      })
-    await transaction
-      .collection('claims')
-      .doc(claimId)
-      .update({
-        data: { status: 'returned', handedOverAt: db.serverDate(), handoverAdminOpenid: openid },
-      })
-    await transaction
-      .collection('handovers')
-      .doc(claimId)
-      .set({
-        data: {
-          claimId,
-          cardId: claim.data.cardId,
-          applicantOpenid: claim.data.applicantOpenid,
-          publisherOpenid: claim.data.publisherOpenid,
-          confirmedBy: openid,
-          completedAt: db.serverDate(),
-        },
-      })
-  })
-  await db
+  const preliminary = await db.collection('claims').doc(claimId).get()
+  if (!preliminary.data) throw new Error('该认领申请不存在')
+  const reports = await db
     .collection('lostReports')
-    .where({ ownerOpenid: completedClaim.applicantOpenid, studentHmac: completedClaim.studentHmac, status: 'active' })
-    .update({ data: { status: 'returned', returnedAt: db.serverDate() } })
-  await Promise.all([
+    .where({
+      ownerOpenid: preliminary.data.applicantOpenid,
+      studentHmac: preliminary.data.studentHmac,
+      status: 'active',
+    })
+    .limit(20)
+    .get()
+  let completion
+  await db.runTransaction(async (transaction) => {
+    completion = await completeHandoverRecords({
+      transaction,
+      claimId,
+      adminOpenid: openid,
+      lostReportIds: reports.data.map((report) => report._id),
+      serverDate: () => db.serverDate(),
+    })
+  })
+  const completedClaim = completion.completedClaim
+  const notifications = await Promise.allSettled([
     createMessage(
       completedClaim.applicantOpenid,
       '校园卡已确认归还',
@@ -763,6 +778,9 @@ async function completeHandover(openid, input) {
       claimId,
     ),
   ])
+  notifications.forEach((result) => {
+    if (result.status === 'rejected') console.error('handover notification failed', result.reason)
+  })
   await audit(openid, 'handover.completed', claimId)
   return { status: 'returned' }
 }

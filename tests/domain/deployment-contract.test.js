@@ -41,15 +41,15 @@ describe('cloud deployment contract', () => {
     ).toBe('云端服务版本未更新，请联系管理员重新部署')
     expect(
       friendlyCloudErrorMessage(
-        new Error('functions execute fail | errMsg: Error: 身份信息待管理员核验，通过后可查询和认领 at exports.main'),
+        new Error('functions execute fail | errMsg: Error: 请先填写姓名和学号 at exports.main'),
       ),
-    ).toBe('身份信息待管理员核验，通过后可查询和认领')
+    ).toBe('请先填写姓名和学号')
     expect(
       friendlyCloudErrorMessage(
         new Error(
-          'functions execute fail | errMsg: Error: 身份信息待管理员核验，通过后可查询和认领 at requireVerifiedIdentity (/var/user/domain.js:40:11)',
+          'functions execute fail | errMsg: Error: 请先填写姓名和学号 at requireVerifiedIdentity (/var/user/domain.js:40:11)',
         ),
       ),
-    ).toBe('身份信息待管理员核验，通过后可查询和认领')
+    ).toBe('请先填写姓名和学号')
   })
 })

@@ -29,6 +29,7 @@ interface CloudPublicCard {
   foundAt: string | Date
   status: CardStatus
   officialStoragePoint?: string
+  needsAdminReview?: boolean
   [key: string]: unknown
 }
 
@@ -95,15 +96,14 @@ export function normalizeCloudPublicCard(card: CloudPublicCard): PublicCard {
     foundAt: foundAt.slice(0, 10),
     status: card.status,
     ...(card.officialStoragePoint ? { officialStoragePoint: card.officialStoragePoint } : {}),
+    ...(card.needsAdminReview ? { needsAdminReview: true } : {}),
   }
 }
 
 export function friendlyCloudErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error || '')
   if (message.includes('不支持的操作')) return '云端服务版本未更新，请联系管理员重新部署'
-  const businessMessage = message
-    .match(/errMsg:\s*Error:\s*([^|\r\n]+?)(?=\s+at\s+\S+|[|\r\n]|$)/)?.[1]
-    ?.trim()
+  const businessMessage = message.match(/errMsg:\s*Error:\s*([^|\r\n]+?)(?=\s+at\s+\S+|[|\r\n]|$)/)?.[1]?.trim()
   if (businessMessage && businessMessage.length <= 80) return businessMessage
   return '云端服务暂不可用，请稍后重试'
 }
@@ -232,7 +232,7 @@ export async function submitCloudClaim(
   cardId: string,
   studentNumber: string,
   privateFeature: string,
-): Promise<{ id: string; decision: 'review' }> {
+): Promise<{ id: string; decision: 'review' | 'approved' }> {
   return callCloudApi('submitClaim', { cardId, studentNumber, privateFeature })
 }
 

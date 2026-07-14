@@ -38,14 +38,14 @@ function requireMatchingStudentDigest(savedDigest, requestedDigest) {
 }
 
 function normalizeIdentityStatus(user = {}) {
-  if (user.identityStatus === 'verified' || user.identityVerified === true) return 'verified'
-  if (user.identityStatus === 'pending' || (user.studentHmac && user.nameHmac)) return 'pending'
+  if (user.identityStatus === 'verified') return 'verified'
+  if (user.studentHmac && user.nameHmac) return 'verified'
   return 'unbound'
 }
 
 function requireVerifiedIdentity(user) {
   if (normalizeIdentityStatus(user) !== 'verified') {
-    throw new Error('身份信息待管理员核验，通过后可查询和认领')
+    throw new Error('请先填写姓名和学号')
   }
   return user
 }
@@ -64,9 +64,9 @@ function requireMatchingIdentity(savedIdentity, requestedIdentity) {
   return requested
 }
 
-function resolveBasicClaimDecision({ studentMatch, nameMatch, identityVerified }) {
-  if (!identityVerified || !studentMatch || !nameMatch) return 'rejected'
-  return 'review'
+function resolveBasicClaimDecision({ studentMatch, nameMatch, identityConfirmed, ambiguousMatch }) {
+  if (!identityConfirmed || !studentMatch || !nameMatch) return 'rejected'
+  return ambiguousMatch ? 'review' : 'approved'
 }
 
 function publicCardProjection(card) {
@@ -88,10 +88,67 @@ function matchedCardProjection(card, options = {}) {
   if (options.discloseOfficialStoragePoint === true && storage.category === '官方交卡点') {
     result.officialStoragePoint = [storage.place, storage.area, storage.detail].filter(Boolean).join(' · ')
   }
+  if (options.needsAdminReview === true) result.needsAdminReview = true
   return result
 }
 
+async function completeHandoverRecords({ transaction, claimId, adminOpenid, lostReportIds = [], serverDate }) {
+  const claim = await transaction.collection('claims').doc(claimId).get()
+  if (!claim.data || !['approved', 'returned'].includes(claim.data.status)) {
+    throw new Error('该认领申请不在待交接状态')
+  }
+
+  if (claim.data.status === 'returned') {
+    const handover = await transaction.collection('handovers').doc(claimId).get()
+    if (!handover.data) throw new Error('交接记录不完整，请联系管理员处理')
+  } else {
+    const card = await transaction.collection('foundCards').doc(claim.data.cardId).get()
+    if (!card.data || card.data.status !== 'handover' || card.data.activeClaimId !== claimId) {
+      throw new Error('该校园卡状态已变化，请刷新后重试')
+    }
+    await transaction
+      .collection('foundCards')
+      .doc(claim.data.cardId)
+      .update({ data: { status: 'returned', returnedAt: serverDate(), updatedAt: serverDate() } })
+    await transaction
+      .collection('claims')
+      .doc(claimId)
+      .update({ data: { status: 'returned', handedOverAt: serverDate(), handoverAdminOpenid: adminOpenid } })
+    await transaction
+      .collection('handovers')
+      .doc(claimId)
+      .set({
+        data: {
+          claimId,
+          cardId: claim.data.cardId,
+          applicantOpenid: claim.data.applicantOpenid,
+          publisherOpenid: claim.data.publisherOpenid,
+          confirmedBy: adminOpenid,
+          completedAt: serverDate(),
+        },
+      })
+  }
+
+  for (const reportId of lostReportIds) {
+    const report = await transaction.collection('lostReports').doc(reportId).get()
+    if (
+      report.data &&
+      report.data.status === 'active' &&
+      report.data.ownerOpenid === claim.data.applicantOpenid &&
+      report.data.studentHmac === claim.data.studentHmac
+    ) {
+      await transaction
+        .collection('lostReports')
+        .doc(reportId)
+        .update({ data: { status: 'returned', returnedAt: serverDate() } })
+    }
+  }
+
+  return { completedClaim: claim.data, alreadyCompleted: claim.data.status === 'returned' }
+}
+
 module.exports = {
+  completeHandoverRecords,
   maskName,
   maskStudentNumber,
   matchedCardProjection,

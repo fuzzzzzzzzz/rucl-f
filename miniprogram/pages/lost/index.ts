@@ -100,9 +100,13 @@ Page({
     if (!profile) return wx.showToast({ title: '请先填写并核验“我的信息”', icon: 'none' })
     try {
       this.setData({ claimSubmitting: true })
-      await submitCardClaim(this.data.selectedClaimCardId, profile.studentNumber, this.data.claimFeature)
+      const claim = await submitCardClaim(this.data.selectedClaimCardId, profile.studentNumber, this.data.claimFeature)
       this.setData({ claimedCardId: this.data.selectedClaimCardId, selectedClaimCardId: '', claimFeature: '' })
-      wx.showToast({ title: '认领申请已提交', icon: 'none' })
+      wx.showToast({
+        title: claim.decision === 'review' ? '有多条记录，等待管理员核对' : '姓名和学号一致，已确认',
+        icon: 'none',
+        duration: 2500,
+      })
     } catch (error) {
       wx.showToast({ title: error instanceof Error ? error.message : '申请失败，请稍后重试', icon: 'none' })
     } finally {

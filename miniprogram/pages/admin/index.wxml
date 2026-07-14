@@ -1,11 +1,10 @@
 <view class="page admin-page">
   <view class="topbar">管理员控制台<text class="en">ADMIN CONTROL</text></view>
-  <view class="safety-note">只有完成线下校园证件或学校系统核验后才能批准身份；不要仅凭姓名和掩码学号判断。</view>
+  <view class="safety-note">只有同一姓名和学号对应多条校园卡记录时，才需要管理员帮助核对。</view>
   <view wx:if="{{loading}}" class="neo-card empty-state">正在读取审核队列…</view>
   <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" bindtap="loadDashboard">重新读取</button></view>
   <block wx:else>
-    <view class="section-title">待核验身份<text class="en">[ IDENTITY REVIEW · {{identities.length}} ]</text></view>
-    <view wx:if="{{identities.length === 0}}" class="neo-card empty-state">没有待核验身份。</view>
+    <view wx:if="{{identities.length}}" class="section-title">历史待处理资料<text class="en">[ PROFILE REVIEW · {{identities.length}} ]</text></view>
     <view wx:for="{{identities}}" wx:key="id" class="neo-card review-card">
       <view class="review-title">{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
       <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>{{item.submittedAt}}</text></view>

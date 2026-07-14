@@ -30,9 +30,9 @@ Page({
       dataModeLabel: getApp<IAppOption>().globalData.dataMode === 'cloud' ? '云端数据已连接' : '当前使用本机演示数据',
       identityStatusLabel:
         profile?.identityStatus === 'verified'
-          ? '身份已核验'
+          ? '姓名和学号已登记'
           : profile?.identityStatus === 'pending'
-            ? '身份待管理员核验'
+            ? '资料正在处理'
             : profile?.identityStatus === 'local_demo'
               ? '本机演示身份'
               : '身份未绑定',

@@ -1,1 +1,18 @@
-<view class="page edit-page"><view class="topbar">我的信息<text class="en">PERSONAL INFORMATION</text></view><view class="notice"><view>{{identityStatusText}}</view><view>管理员仅在完成线下证件或学校系统核验后通过。</view><view>其他人只能看到隐藏后的信息。</view></view><text class="label">姓名 <text class="en">[ NAME ]</text></text><input class="field" disabled="{{identityLocked}}" value="{{name}}" placeholder="请输入校园卡上的姓名" bindinput="onName" /><text class="label">学号 <text class="en">[ STUDENT ID ]</text></text><input class="field" disabled="{{identityLocked}}" type="number" maxlength="10" value="{{studentNumber}}" placeholder="请输入10位学号" bindinput="onNumber" /><text class="label">卡片类别 <text class="en">[ TYPE ]</text></text><picker range="{{cardCategories}}" value="{{categoryIndex}}" bindchange="onCategoryChange"><view class="field picker-field">{{cardCategories[categoryIndex]}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker><text class="label">常用校区 <text class="en">[ CAMPUS ]</text></text><picker range="{{campuses}}" range-key="name" value="{{campusIndex}}" bindchange="onCampusChange"><view class="field picker-field">{{campuses[campusIndex].name}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker><button class="neo-button save-button" loading="{{busy}}" bindtap="save">{{identityLocked ? '更新非身份信息' : '提交身份核验'}}<text class="en">[ SAVE ]</text></button></view>
+<view class="page edit-page">
+  <view class="topbar">我的信息<text class="en">PERSONAL INFORMATION</text></view>
+  <view class="notice">
+    <view>{{identityStatusText}}</view>
+    <view>姓名和学号一致且只有一条卡片记录时，系统会直接确认。</view>
+    <view>如果出现多条相似记录，管理员会帮助核对。</view>
+    <view>其他人只能看到隐藏后的信息。</view>
+  </view>
+  <text class="label">姓名 <text class="en">[ NAME ]</text></text>
+  <input class="field" disabled="{{identityLocked}}" value="{{name}}" placeholder="请输入校园卡上的姓名" bindinput="onName" />
+  <text class="label">学号 <text class="en">[ STUDENT ID ]</text></text>
+  <input class="field" disabled="{{identityLocked}}" type="number" maxlength="10" value="{{studentNumber}}" placeholder="请输入10位学号" bindinput="onNumber" />
+  <text class="label">卡片类别 <text class="en">[ TYPE ]</text></text>
+  <picker range="{{cardCategories}}" value="{{categoryIndex}}" bindchange="onCategoryChange"><view class="field picker-field">{{cardCategories[categoryIndex]}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
+  <text class="label">常用校区 <text class="en">[ CAMPUS ]</text></text>
+  <picker range="{{campuses}}" range-key="name" value="{{campusIndex}}" bindchange="onCampusChange"><view class="field picker-field">{{campuses[campusIndex].name}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
+  <button class="neo-button save-button" loading="{{busy}}" bindtap="save">{{identityLocked ? '更新其他信息' : '保存我的信息'}}<text class="en">[ SAVE ]</text></button>
+</view>

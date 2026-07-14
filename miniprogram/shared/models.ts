@@ -52,6 +52,7 @@ export interface PublicCard {
   foundAt: string
   status: CardStatus
   officialStoragePoint?: string
+  needsAdminReview?: boolean
 }
 
 export interface MessageSummary {

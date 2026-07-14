@@ -2,7 +2,7 @@ import { listMyClaims } from '../../services/card-service'
 import type { ClaimSummary } from '../../shared/models'
 
 const statusText: Record<ClaimSummary['status'], string> = {
-  review: '等待管理员核验',
+  review: '等待管理员核对',
   approved: '等待现场交接',
   rejected: '申请未通过',
   returned: '已经归还',

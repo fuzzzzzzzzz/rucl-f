@@ -12,7 +12,7 @@ Page({
     studentNumber: '',
     busy: false,
     identityLocked: false,
-    identityStatusText: '首次保存后，姓名和学号将锁定并进入管理员核验。',
+    identityStatusText: '首次保存后，姓名和学号将锁定并用于找卡。',
   },
   async onLoad() {
     const profile = await getUserProfile()
@@ -28,10 +28,10 @@ Page({
       identityLocked: profile.identityStatus === 'pending' || profile.identityStatus === 'verified',
       identityStatusText:
         profile.identityStatus === 'verified'
-          ? '身份已核验；如需更换姓名或学号，请联系管理员。'
+          ? '姓名和学号已登记；如需更换，请联系管理员。'
           : profile.identityStatus === 'pending'
-            ? '身份正在等待管理员核验；姓名和学号已锁定。'
-            : '本机演示模式不会进行学校身份认证。',
+            ? '资料正在处理中；姓名和学号已锁定。'
+            : '本机演示模式只核对姓名和学号。',
     })
   },
   onName(e: WechatMiniprogram.Input) {
@@ -51,13 +51,13 @@ Page({
     if (!result.valid) return wx.showToast({ title: result.message || '请检查学号', icon: 'none' })
     try {
       this.setData({ busy: true })
-      const profile = await saveUserProfile({
+      await saveUserProfile({
         name: this.data.name,
         studentNumber: this.data.studentNumber,
         category: cardCategories[this.data.categoryIndex] as CardCategory,
         campusId: campuses[this.data.campusIndex].id,
       })
-      wx.showToast({ title: profile.identityStatus === 'pending' ? '已提交身份核验' : '保存成功', icon: 'none' })
+      wx.showToast({ title: '保存成功', icon: 'none' })
       setTimeout(() => wx.navigateBack(), 500)
     } catch (error) {
       wx.showToast({ title: error instanceof Error ? error.message : '保存失败', icon: 'none' })

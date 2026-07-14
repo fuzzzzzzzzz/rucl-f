@@ -34,7 +34,7 @@ describe('local card service', () => {
     expect(await getUserProfile()).not.toHaveProperty('college')
   })
 
-  it('returns only a safe summary when searching by a full student number', async () => {
+  it('shows an official hand-in point after a unique name-and-number match', async () => {
     await saveUserProfile({
       name: '张小明',
       studentNumber: '2023200931',
@@ -69,8 +69,8 @@ describe('local card service', () => {
       category: '本科生',
       locationCategory: '食堂',
       foundAt: '2026-07-13',
+      officialStoragePoint: '图书馆总服务台 · 服务台 · 已交给当班工作人员',
     })
-    expect(result).not.toHaveProperty('officialStoragePoint')
     expect(result).not.toHaveProperty('studentNumber')
     expect(result).not.toHaveProperty('pickupLocation')
     expect(result).not.toHaveProperty('storageLocation')
@@ -84,6 +84,37 @@ describe('local card service', () => {
         officialStoragePoint: '图书馆总服务台 · 服务台 · 已交给当班工作人员',
       }),
     ])
+  })
+
+  it('requires administrator review when the same identity matches more than one card', async () => {
+    await saveUserProfile({
+      name: '张小明',
+      studentNumber: '2023200931',
+      category: '本科生',
+      campusId: 'zhongguancun',
+    })
+    for (const place of ['图书馆总服务台', '学生事务中心']) {
+      await submitFoundCard({
+        name: '张小明',
+        studentNumber: '2023200931',
+        category: '本科生',
+        campusId: 'zhongguancun',
+        pickupLocation: { category: '教学楼', place: '明德主楼', area: '一层', detail: '大厅' },
+        storageLocation: { category: '官方交卡点', place, area: '服务台', detail: '已交工作人员' },
+        foundDate: '2026-07-13',
+      })
+    }
+
+    const results = await searchPublicCardsByStudentNumber('2023200931')
+    expect(results).toHaveLength(2)
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ needsAdminReview: true }),
+        expect.objectContaining({ needsAdminReview: true }),
+      ]),
+    )
+    expect(results.every((item) => !item.officialStoragePoint)).toBe(true)
+    await expect(submitCardClaim(results[0].id, '2023200931', '')).resolves.toMatchObject({ decision: 'review' })
   })
 
   it('keeps a non-official storage location hidden after a basic match', async () => {

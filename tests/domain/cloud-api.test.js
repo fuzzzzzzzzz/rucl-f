@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const {
+  completeHandoverRecords,
+  normalizeIdentityStatus,
   requireMatchingIdentity,
   requireMatchingStudentDigest,
   requireVerifiedIdentity,
@@ -127,19 +129,24 @@ describe('cloud API security boundary', () => {
     ).toThrow('姓名和学号需要同时一致')
   })
 
-  it('blocks sensitive operations until an administrator verifies the identity', () => {
+  it('requires a saved name and student number without trusting a legacy flag alone', () => {
     expect(requireVerifiedIdentity({ identityStatus: 'verified' })).toEqual({ identityStatus: 'verified' })
-    expect(() => requireVerifiedIdentity({ identityStatus: 'pending' })).toThrow('身份信息待管理员核验')
-    expect(() => requireVerifiedIdentity({ studentHmac: 'student', nameHmac: 'name' })).toThrow('身份信息待管理员核验')
+    expect(requireVerifiedIdentity({ studentHmac: 'student', nameHmac: 'name' })).toEqual({
+      studentHmac: 'student',
+      nameHmac: 'name',
+    })
+    expect(normalizeIdentityStatus({ identityVerified: true })).toBe('unbound')
+    expect(() => requireVerifiedIdentity({ identityVerified: true })).toThrow('请先填写姓名和学号')
   })
 
-  it('sends a basic name-and-number match to manual review', () => {
+  it('approves one exact match and sends ambiguous matches to manual review', () => {
     expect(
       resolveBasicClaimDecision({
         studentMatch: false,
         nameMatch: true,
         featureMatch: true,
-        identityVerified: true,
+        identityConfirmed: true,
+        ambiguousMatch: false,
       }),
     ).toBe('rejected')
     expect(
@@ -147,7 +154,8 @@ describe('cloud API security boundary', () => {
         studentMatch: true,
         nameMatch: false,
         featureMatch: true,
-        identityVerified: true,
+        identityConfirmed: true,
+        ambiguousMatch: false,
       }),
     ).toBe('rejected')
     expect(
@@ -155,7 +163,8 @@ describe('cloud API security boundary', () => {
         studentMatch: true,
         nameMatch: true,
         featureMatch: true,
-        identityVerified: false,
+        identityConfirmed: false,
+        ambiguousMatch: false,
       }),
     ).toBe('rejected')
     expect(
@@ -163,8 +172,73 @@ describe('cloud API security boundary', () => {
         studentMatch: true,
         nameMatch: true,
         featureMatch: true,
-        identityVerified: true,
+        identityConfirmed: true,
+        ambiguousMatch: false,
+      }),
+    ).toBe('approved')
+    expect(
+      resolveBasicClaimDecision({
+        studentMatch: true,
+        nameMatch: true,
+        identityConfirmed: true,
+        ambiguousMatch: true,
       }),
     ).toBe('review')
+  })
+
+  it('updates the claim, card, handover and active lost reports as one retry-safe unit', async () => {
+    const records = {
+      claims: {
+        'claim-1': {
+          _id: 'claim-1',
+          cardId: 'card-1',
+          applicantOpenid: 'owner-1',
+          publisherOpenid: 'finder-1',
+          studentHmac: 'student-1',
+          status: 'approved',
+        },
+      },
+      foundCards: { 'card-1': { _id: 'card-1', status: 'handover', activeClaimId: 'claim-1' } },
+      lostReports: {
+        'lost-1': { _id: 'lost-1', ownerOpenid: 'owner-1', studentHmac: 'student-1', status: 'active' },
+      },
+      handovers: {},
+    }
+    const transaction = {
+      collection(name) {
+        return {
+          doc(id) {
+            return {
+              async get() {
+                return { data: records[name][id] || null }
+              },
+              async update({ data }) {
+                records[name][id] = { ...records[name][id], ...data }
+              },
+              async set({ data }) {
+                records[name][id] = { _id: id, ...data }
+              },
+            }
+          },
+        }
+      },
+    }
+    const options = {
+      transaction,
+      claimId: 'claim-1',
+      adminOpenid: 'admin-1',
+      lostReportIds: ['lost-1'],
+      serverDate: () => 'SERVER_DATE',
+    }
+
+    const first = await completeHandoverRecords(options)
+    expect(first.alreadyCompleted).toBe(false)
+    expect(records.claims['claim-1'].status).toBe('returned')
+    expect(records.foundCards['card-1'].status).toBe('returned')
+    expect(records.lostReports['lost-1'].status).toBe('returned')
+    expect(records.handovers['claim-1']).toMatchObject({ cardId: 'card-1', confirmedBy: 'admin-1' })
+
+    const retry = await completeHandoverRecords(options)
+    expect(retry.alreadyCompleted).toBe(true)
   })
 })

@@ -182,9 +182,16 @@ export async function listPublicCards(): Promise<PublicCard[]> {
 
 export async function searchPublicCardsByStudentNumber(studentNumber: string): Promise<PublicCard[]> {
   if (isCloudMode()) return searchCloudCards(studentNumber)
-  return readStorage(FOUND_KEY, memoryFoundCards)
-    .filter((card) => card.studentNumber === studentNumber)
-    .map(toPublicCard)
+  const profile = await getUserProfile()
+  const matches = readStorage(FOUND_KEY, memoryFoundCards).filter(
+    (card) => card.studentNumber === studentNumber && (!profile || card.name.trim() === profile.name.trim()),
+  )
+  const needsAdminReview = matches.length > 1
+  return matches.map((card) => {
+    const result = needsAdminReview ? toPublicCard(card) : toMatchedCard(card)
+    if (needsAdminReview) result.needsAdminReview = true
+    return result
+  })
 }
 
 export async function registerLostCard(input: LostReportInput): Promise<{ id: string; matchCount: number }> {
@@ -289,15 +296,19 @@ export async function submitCardClaim(
   }
   const existing = readStorage(CLAIM_KEY, memoryClaims).find((item) => item.cardId === cardId)
   if (existing) throw new Error('这张校园卡已经提交过认领申请')
+  const matchingCards = readStorage(FOUND_KEY, memoryFoundCards).filter(
+    (item) => item.studentNumber === studentNumber && item.name.trim() === profile.name.trim(),
+  )
+  const decision = matchingCards.length > 1 ? 'review' : 'approved'
   const claim: StoredClaim = {
     id: `local-claim-${Date.now()}`,
     cardId,
-    status: 'approved',
+    status: decision,
     createdAt: new Date().toISOString(),
   }
   memoryClaims = [...readStorage(CLAIM_KEY, memoryClaims), claim]
   writeStorage(CLAIM_KEY, memoryClaims)
-  return { id: claim.id, decision: 'approved' }
+  return { id: claim.id, decision }
 }
 
 export async function listMyClaims(): Promise<ClaimSummary[]> {
