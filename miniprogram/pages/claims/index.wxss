@@ -1,0 +1,69 @@
+.empty-state {
+  line-height: 1.7;
+}
+.retry {
+  margin-top: 20rpx;
+  border: 4rpx solid #191919;
+  border-radius: 0;
+  background: #ffec00;
+  font-weight: 900;
+}
+.claim-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+.claim-name {
+  font-size: 29rpx;
+  font-weight: 900;
+}
+.claim-head .number {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  font-weight: 900;
+}
+.claim-status {
+  align-self: flex-start;
+  padding: 8rpx 12rpx;
+  border: 3rpx solid #191919;
+  background: #ffec00;
+  font-size: 20rpx;
+  font-weight: 900;
+}
+.status-approved,
+.status-returned {
+  background: #18d9aa;
+}
+.status-rejected {
+  background: #efede8;
+}
+.claim-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20rpx;
+  color: #6d6861;
+  font-size: 22rpx;
+}
+.handover-point,
+.claim-note {
+  margin-top: 22rpx;
+  padding: 20rpx;
+  border: 4rpx solid #191919;
+  background: #ffec00;
+  line-height: 1.6;
+}
+.handover-point b,
+.handover-point text,
+.handover-point small {
+  display: block;
+}
+.handover-point small {
+  margin-top: 12rpx;
+  padding-top: 12rpx;
+  border-top: 3rpx solid #191919;
+  font-size: 20rpx;
+}
+.claim-note {
+  background: #efede8;
+  font-size: 22rpx;
+}

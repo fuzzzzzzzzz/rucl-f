@@ -1,4 +1,9 @@
-import { getUserProfile, registerLostCard, searchPublicCardsByStudentNumber } from '../../services/card-service'
+import {
+  getUserProfile,
+  registerLostCard,
+  searchPublicCardsByStudentNumber,
+  submitCardClaim,
+} from '../../services/card-service'
 import type { PublicCard } from '../../shared/models'
 import { validateRucStudentNumber } from '../../shared/ruc'
 
@@ -14,6 +19,10 @@ Page({
     lostDate: '',
     lostLocation: '',
     lostFeature: '',
+    selectedClaimCardId: '',
+    claimFeature: '',
+    claimSubmitting: false,
+    claimedCardId: '',
   },
   async onShow() {
     this.getTabBar().setData({ selected: 1 })
@@ -75,6 +84,33 @@ Page({
       wx.showToast({ title: error instanceof Error ? error.message : '登记失败，请稍后重试', icon: 'none' })
     } finally {
       this.setData({ registering: false })
+    }
+  },
+  startClaim(e: WechatMiniprogram.TouchEvent) {
+    this.setData({ selectedClaimCardId: String(e.currentTarget.dataset.id || ''), claimFeature: '' })
+  },
+  cancelClaim() {
+    this.setData({ selectedClaimCardId: '', claimFeature: '' })
+  },
+  onClaimFeature(e: WechatMiniprogram.Input) {
+    this.setData({ claimFeature: e.detail.value.slice(0, 300) })
+  },
+  async submitClaim() {
+    const profile = await getUserProfile()
+    if (!profile) return wx.showToast({ title: '请先填写并核验“我的信息”', icon: 'none' })
+    try {
+      this.setData({ claimSubmitting: true })
+      const claim = await submitCardClaim(this.data.selectedClaimCardId, profile.studentNumber, this.data.claimFeature)
+      this.setData({ claimedCardId: this.data.selectedClaimCardId, selectedClaimCardId: '', claimFeature: '' })
+      wx.showToast({
+        title: claim.decision === 'review' ? '有多条记录，等待管理员核对' : '姓名和学号一致，已确认',
+        icon: 'none',
+        duration: 2500,
+      })
+    } catch (error) {
+      wx.showToast({ title: error instanceof Error ? error.message : '申请失败，请稍后重试', icon: 'none' })
+    } finally {
+      this.setData({ claimSubmitting: false })
     }
   },
 })

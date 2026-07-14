@@ -261,3 +261,40 @@
   font-size: 21rpx;
   font-weight: 400;
 }
+.claim-entry {
+  margin-top: 22rpx;
+  border: 4rpx solid #191919;
+  border-radius: 0;
+  background: #18d9aa;
+  font-size: 25rpx;
+  font-weight: 900;
+}
+.claim-entry::after,
+.claim-actions button::after {
+  border: 0;
+}
+.claim-form {
+  margin-top: 22rpx;
+  padding-top: 18rpx;
+  border-top: 3rpx solid #191919;
+}
+.claim-form .label {
+  margin-top: 0;
+  font-size: 23rpx;
+}
+.claim-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18rpx;
+  margin-top: 18rpx;
+}
+.claim-actions button {
+  border: 4rpx solid #191919;
+  border-radius: 0;
+  background: #efede8;
+  font-size: 23rpx;
+  font-weight: 900;
+}
+.claim-actions .claim-submit {
+  background: #ffec00;
+}

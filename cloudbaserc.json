@@ -8,8 +8,8 @@
       "name": "api",
       "type": "Event",
       "handler": "index.main",
-      "timeout": 3,
-      "runtime": "Nodejs16.13",
+      "timeout": 15,
+      "runtime": "Nodejs20.19",
       "memorySize": 256,
       "installDependency": true,
       "envVariables": {
@@ -20,14 +20,32 @@
       "name": "processCardImage",
       "type": "Event",
       "handler": "index.main",
-      "timeout": 3,
-      "runtime": "Nodejs16.13",
+      "timeout": 20,
+      "runtime": "Nodejs20.19",
       "memorySize": 256,
       "installDependency": true,
       "envVariables": {
+        "TENCENT_SECRET_ID": "{{env.TENCENT_SECRET_ID}}",
+        "TENCENT_SECRET_KEY": "{{env.TENCENT_SECRET_KEY}}",
         "TENCENT_OCR_REGION": "ap-guangzhou",
         "OCR_DAILY_GLOBAL_LIMIT": "30"
       }
+    },
+    {
+      "name": "scheduledCleanup",
+      "type": "Event",
+      "handler": "index.main",
+      "timeout": 60,
+      "runtime": "Nodejs20.19",
+      "memorySize": 256,
+      "installDependency": true,
+      "triggers": [
+        {
+          "name": "dailyCleanup",
+          "type": "timer",
+          "config": "0 0 3 * * * *"
+        }
+      ]
     }
   ]
 }

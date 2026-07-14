@@ -1,1 +1,24 @@
-<view class="page"><view class="brand">ADMIN CONTROL</view><view class="neo-card"><view>异常认领复核：0</view><view>疑似重复记录：0</view><view>待处理举报：0</view><view>OCR 失败记录：0</view></view><view class="neo-card"><view style="font-weight:900">预制 AI 审核</view><view class="subtitle">默认关闭；使用前设置预算和密钥。</view><switch checked="{{aiEnabled}}" bindchange="toggleAi" color="#af2800"/></view></view>
+<view class="page admin-page">
+  <view class="topbar">管理员控制台<text class="en">ADMIN CONTROL</text></view>
+  <view class="safety-note">只有同一姓名和学号对应多条校园卡记录时，才需要管理员帮助核对。</view>
+  <view wx:if="{{loading}}" class="neo-card empty-state">正在读取审核队列…</view>
+  <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" bindtap="loadDashboard">重新读取</button></view>
+  <block wx:else>
+    <view wx:if="{{identities.length}}" class="section-title">历史待处理资料<text class="en">[ PROFILE REVIEW · {{identities.length}} ]</text></view>
+    <view wx:for="{{identities}}" wx:key="id" class="neo-card review-card">
+      <view class="review-title">{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
+      <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>{{item.submittedAt}}</text></view>
+      <view wx:if="{{selectedIdentityId !== item.id}}" class="review-actions"><button data-id="{{item.id}}" data-decision="rejected" loading="{{busyId === item.id}}" bindtap="decideIdentity">退回</button><button class="approve" data-id="{{item.id}}" bindtap="startIdentityReview">开始现场核验</button></view>
+      <view wx:else class="identity-proof"><view class="proof-warning">请直接查看申请人的校园证件或学校系统，并录入完整信息。输入内容只用于本次 HMAC 比对，不会保存。</view><input class="field" value="{{verifiedName}}" maxlength="20" placeholder="证件上的完整姓名" bindinput="onVerifiedName" /><input class="field" type="number" value="{{verifiedStudentNumber}}" maxlength="10" placeholder="证件上的10位学号" bindinput="onVerifiedStudentNumber" /><view class="review-actions"><button bindtap="cancelIdentityReview">取消</button><button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyId === item.id}}" bindtap="decideIdentity">比对一致并通过</button></view></view>
+    </view>
+    <view class="section-title queue-title">认领与交接<text class="en">[ CLAIMS · {{claims.length}} ]</text></view>
+    <view wx:if="{{claims.length === 0}}" class="neo-card empty-state">没有待处理认领。</view>
+    <view wx:for="{{claims}}" wx:key="id" class="neo-card review-card">
+      <view class="review-title">卡片：{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
+      <view class="applicant">申请人：{{item.applicantMaskedName}} · {{item.applicantMaskedStudentNumber}}</view>
+      <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>私有特征{{item.featureMatch ? '相符' : '未确认'}}</text></view><view class="storage-detail"><b>当前存放</b><text>{{item.storageSummary}}</text></view>
+      <view wx:if="{{item.status === 'review'}}" class="review-actions"><button data-id="{{item.id}}" data-decision="rejected" loading="{{busyId === item.id}}" bindtap="decideClaim">拒绝</button><button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyId === item.id}}" bindtap="decideClaim">批准认领</button></view>
+      <button wx:else class="handover-button" data-id="{{item.id}}" loading="{{busyId === item.id}}" bindtap="finishHandover">现场核验证件并确认归还</button>
+    </view>
+  </block>
+</view>

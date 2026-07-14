@@ -1,0 +1,13 @@
+<view class="page claims-page">
+  <view class="topbar">我的认领<text class="en">MY CLAIMS</text></view>
+  <view wx:if="{{loading}}" class="neo-card empty-state">正在读取认领记录…</view>
+  <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" bindtap="loadClaims">重新读取</button></view>
+  <view wx:elif="{{claims.length === 0}}" class="neo-card empty-state">目前还没有认领申请。</view>
+  <view wx:for="{{claims}}" wx:key="id" class="neo-card claim-card">
+    <view class="claim-head"><view><view class="claim-name">{{item.maskedName}} · {{item.category}}</view><view class="number">{{item.maskedStudentNumber}}</view></view><view class="claim-status status-{{item.status}}">{{item.statusText}}</view></view>
+    <view class="claim-meta"><text>{{item.campusName}}</text><text>{{item.createdAt}}</text></view>
+    <view wx:if="{{item.officialStoragePoint}}" class="handover-point"><b>交接地点</b><text>{{item.officialStoragePoint}}</text><small>请携带有效校园证件，由工作人员核对后完成交接。</small></view>
+    <view wx:elif="{{item.status === 'approved'}}" class="claim-note">该卡尚未登记为官方交卡点，请等待管理员安排交接。</view>
+    <view wx:elif="{{item.status === 'review'}}" class="claim-note">存在多条相似记录，管理员核对完成前不会展示存放地点。</view>
+  </view>
+</view>

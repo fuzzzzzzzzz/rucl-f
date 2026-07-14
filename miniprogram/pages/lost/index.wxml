@@ -19,6 +19,20 @@
       <view class="registration-note">补充信息仅用于找卡，不会公开。</view>
       <button class="neo-button register-submit" loading="{{registering}}" bindtap="registerLost">确认登记<text class="en">[ SAVE LOST CARD ]</text></button>
     </view>
-    <view wx:for="{{results}}" wx:key="id" class="neo-card result-card"><view class="result-head"><text>{{item.maskedName}}</text><text class="result-type">{{item.category}}</text></view><view class="number">{{item.maskedStudentNumber}}</view><view class="result-meta"><text>{{item.campusName}}</text><text>{{item.locationCategory}}</text><text>{{item.foundAt}}</text></view><view wx:if="{{item.officialStoragePoint}}" class="official-point"><text class="official-label">领取地点</text><text>{{item.officialStoragePoint}}</text><text class="pickup-tip">领取时请让工作人员核对证件。</text></view><view wx:else class="result-note">暂未交到学校服务点，请等待确认。</view></view>
+    <view wx:for="{{results}}" wx:key="id" class="neo-card result-card">
+      <view class="result-head"><text>{{item.maskedName}}</text><text class="result-type">{{item.category}}</text></view>
+      <view class="number">{{item.maskedStudentNumber}}</view>
+      <view class="result-meta"><text>{{item.campusName}}</text><text>{{item.locationCategory}}</text><text>{{item.foundAt}}</text></view>
+      <view wx:if="{{item.officialStoragePoint}}" class="result-note">卡片存放地点：{{item.officialStoragePoint}}</view>
+      <view wx:elif="{{item.needsAdminReview}}" class="result-note">找到多条姓名和学号相同的记录，提交后由管理员帮助核对。</view>
+      <view wx:else class="result-note">卡片由个人暂时保管，提交后再安排安全交接。</view>
+      <button wx:if="{{claimedCardId !== item.id && selectedClaimCardId !== item.id}}" class="claim-entry" data-id="{{item.id}}" bindtap="startClaim">确认是我的卡</button>
+      <view wx:if="{{selectedClaimCardId === item.id}}" class="claim-form">
+        <text class="label">卡套或卡片特点（可选）</text>
+        <textarea class="field short-textarea" maxlength="300" value="{{claimFeature}}" placeholder="有多条相似记录时可帮助管理员核对" bindinput="onClaimFeature" />
+        <view class="claim-actions"><button bindtap="cancelClaim">取消</button><button class="claim-submit" loading="{{claimSubmitting}}" bindtap="submitClaim">确认提交</button></view>
+      </view>
+      <view wx:if="{{claimedCardId === item.id}}" class="registered-tip">已经确认，请在“我的认领”查看记录。</view>
+    </view>
   </view>
 </view>
