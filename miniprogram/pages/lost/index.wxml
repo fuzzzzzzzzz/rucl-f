@@ -2,7 +2,7 @@
   <view class="topbar">失卡安全查询<text class="en">LOST CARD SEARCH</text></view>
   <view class="neo-card input-card"><view class="section-title">请输入完整学号<text class="en">[ STUDENT ID ]</text></view><view class="rule" /><input class="field" type="number" maxlength="10" value="{{studentNumber}}" placeholder="10位数字，仅用于系统核对" bindinput="onNumber" /></view>
   <button class="neo-button match" loading="{{searching}}" bindtap="search"><text>开始查找</text><text class="en">[ START SEARCH ]</text></button>
-  <view class="match-banner"><image class="verify-icon" src="/assets/icons/verified-user.png" mode="aspectFit" /><view><view>姓名与学号核对</view><text class="en">NAME &amp; ID CHECK</text></view></view>
+  <view class="match-banner"><image class="verify-icon" src="/assets/icons/verified-user.png" mode="aspectFit" /><view><view>姓名与学号核对</view><text class="en">NAME & ID CHECK</text></view></view>
   <view class="locked"><view class="mosaic"><view wx:for="{{[0,1,2,3,4,5,6,7,8,9,10,11]}}" wx:key="*this" class="mosaic-block block-{{index}}" /></view><view class="locked-copy"><image class="lock-icon" src="/assets/icons/lock.png" mode="aspectFit" /><view>确认通过前，信息会保持模糊</view><text class="en">[ INFORMATION HIDDEN ]</text></view></view>
   <view wx:if="{{searched}}" class="results">
     <view class="section-title result-heading">查询结果<text class="en">[ SEARCH RESULT ]</text></view>
@@ -30,7 +30,7 @@
       <view wx:if="{{selectedClaimCardId === item.id}}" class="claim-form">
         <text class="label">卡套或卡片特点（可选）</text>
         <textarea class="field short-textarea" maxlength="300" value="{{claimFeature}}" placeholder="有多条相似记录时可帮助管理员核对" bindinput="onClaimFeature" />
-        <view class="claim-actions"><button bindtap="cancelClaim">取消</button><button class="claim-submit" loading="{{claimSubmitting}}" bindtap="submitClaim">确认提交</button></view>
+        <view class="claim-actions"><button bindtap="cancelClaim">取消</button><button class="claim-submit" loading="{{claimSubmitting}}" disabled="{{claimSubmitting}}" bindtap="submitClaim">确认提交</button></view>
       </view>
       <view wx:if="{{claimedCardId === item.id}}" class="registered-tip">已经确认，请在“我的认领”查看记录。</view>
     </view>

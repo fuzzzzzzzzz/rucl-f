@@ -289,9 +289,15 @@
   margin-top: 18rpx;
 }
 .claim-actions button {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
   border: 4rpx solid #191919;
   border-radius: 0;
   background: #efede8;
+  padding: 18rpx 10rpx;
+  line-height: 1.25;
   font-size: 23rpx;
   font-weight: 900;
 }

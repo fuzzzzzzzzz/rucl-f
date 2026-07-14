@@ -96,6 +96,7 @@ Page({
     this.setData({ claimFeature: e.detail.value.slice(0, 300) })
   },
   async submitClaim() {
+    if (this.data.claimSubmitting) return
     const profile = await getUserProfile()
     if (!profile) return wx.showToast({ title: '请先填写并核验“我的信息”', icon: 'none' })
     try {

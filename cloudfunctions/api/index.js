@@ -564,7 +564,7 @@ async function submitClaim(openid, input) {
   await db.runTransaction(async (transaction) => {
     const [card, existing] = await Promise.all([
       transaction.collection('foundCards').doc(cardId).get(),
-      transaction.collection('claims').doc(claimId).get(),
+      getOptionalDocument(transaction.collection('claims').doc(claimId)),
     ])
     if (existing.data) throw new Error('这张校园卡已经提交过认领申请')
     if (!card.data || ['claim_review', 'handover', 'returned', 'closed'].includes(card.data.status)) {

@@ -52,4 +52,10 @@ describe('cloud deployment contract', () => {
       ),
     ).toBe('请先填写姓名和学号')
   })
+
+  it('treats an absent deterministic claim record as a first submission', () => {
+    const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
+
+    expect(server).toMatch(/getOptionalDocument\(\s*transaction\.collection\(['"]claims['"]\)\.doc\(claimId\)\s*\)/)
+  })
 })

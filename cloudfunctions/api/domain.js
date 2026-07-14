@@ -97,7 +97,7 @@ function publicCardProjection(card) {
 function matchedCardProjection(card, options = {}) {
   const result = publicCardProjection(card)
   const storage = card.storageLocation || {}
-  if (options.discloseOfficialStoragePoint === true && storage.category === '官方交卡点') {
+  if (options.discloseOfficialStoragePoint === true && storage.place) {
     result.officialStoragePoint = [storage.place, storage.area, storage.detail].filter(Boolean).join(' · ')
   }
   if (options.needsAdminReview === true) result.needsAdminReview = true

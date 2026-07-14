@@ -117,19 +117,25 @@ describe('local card service', () => {
     await expect(submitCardClaim(results[0].id, '2023200931', '')).resolves.toMatchObject({ decision: 'review' })
   })
 
-  it('keeps a non-official storage location hidden after a basic match', async () => {
+  it('shows a staffed storage location after a unique verified match', async () => {
+    await saveUserProfile({
+      name: '李明',
+      studentNumber: '2024200123',
+      category: '硕士生',
+      campusId: 'tongzhou',
+    })
     await submitFoundCard({
       name: '李明',
       studentNumber: '2024200123',
       category: '硕士生',
       campusId: 'tongzhou',
       pickupLocation: { category: '学习空间', place: '北区学习中心', area: '一层', detail: '东侧自习区' },
-      storageLocation: { category: '其他', place: '其他地点', area: '不适用', detail: '拾卡同学暂时保管' },
+      storageLocation: { category: '食堂', place: '东区食堂', area: '一层', detail: '收银台工作人员' },
       foundDate: '2026-07-13',
     })
 
     const [result] = await searchPublicCardsByStudentNumber('2024200123')
-    expect(result).not.toHaveProperty('officialStoragePoint')
+    expect(result.officialStoragePoint).toBe('东区食堂 · 一层 · 收银台工作人员')
     expect(result).not.toHaveProperty('storageLocation')
   })
 

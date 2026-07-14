@@ -119,6 +119,30 @@ describe('cloud API security boundary', () => {
     ).not.toHaveProperty('officialStoragePoint')
   })
 
+  it('shows a staffed storage location after one exact identity match', () => {
+    const matched = matchedCardProjection(
+      {
+        _id: 'card-staffed',
+        maskedName: '韩**',
+        maskedStudentNumber: '2023****78',
+        category: '本科生',
+        campusId: 'zhongguancun',
+        pickupLocation: { category: '食堂' },
+        storageLocation: {
+          category: '食堂',
+          place: '东区食堂',
+          area: '一层',
+          detail: '收银台工作人员',
+        },
+        foundAt: new Date('2026-07-14T00:00:00.000Z'),
+        status: 'matched',
+      },
+      { discloseOfficialStoragePoint: true },
+    )
+
+    expect(matched.officialStoragePoint).toBe('东区食堂 · 一层 · 收银台工作人员')
+  })
+
   it('only accepts cloud files in the expected project directory', () => {
     expect(requireCloudFilePath('cloud://demo.example/masked-cards/one.jpg', 'masked-cards')).toBe(
       'cloud://demo.example/masked-cards/one.jpg',

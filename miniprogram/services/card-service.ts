@@ -167,7 +167,7 @@ function toPublicCard(card: StoredFoundCard): PublicCard {
 
 function toMatchedCard(card: StoredFoundCard): PublicCard {
   const result = toPublicCard(card)
-  if (card.storageLocation.category === '官方交卡点') {
+  if (card.storageLocation.place) {
     result.officialStoragePoint = [card.storageLocation.place, card.storageLocation.area, card.storageLocation.detail]
       .filter(Boolean)
       .join(' · ')
