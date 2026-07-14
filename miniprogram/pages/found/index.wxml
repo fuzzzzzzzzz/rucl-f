@@ -27,6 +27,6 @@
   </view>
 
   <text class="label">拾取日期 <text class="en">[ DATE ]</text></text><picker mode="date" bindchange="onDate"><view class="field picker-field">{{foundDate || '请选择日期'}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
-  <text class="label">卡片特点 <text class="en">[ PRIVATE CLUE ]</text></text><textarea class="field feature-field" placeholder="例如：蓝色卡套、背面有贴纸" bindinput="onFeature" />
+  <text class="label">卡片特点（选填） <text class="en">[ PRIVATE CLUE ]</text></text><textarea class="field feature-field" placeholder="例如：蓝色卡套、背面有贴纸" bindinput="onFeature" />
   <button class="neo-button neo-button--orange submit-button" loading="{{busy}}" bindtap="submit"><view class="submit-main"><image src="/assets/icons/verified-user-white.png" mode="aspectFit" />确认安全发布</view><text class="en">[ SUBMIT ]</text></button>
 </view>

@@ -15,7 +15,7 @@
       <view class="section-title">补充丢失信息<text class="en">[ LOST CARD DETAILS ]</text></view><view class="rule" />
       <text class="label">大概丢失日期 <text class="en">[ DATE ]</text></text><picker mode="date" bindchange="onLostDate"><view class="field picker-field">{{lostDate || '请选择日期'}}<image src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
       <text class="label">大概丢失地点 <text class="en">[ LOCATION · OPTIONAL ]</text></text><textarea class="field short-textarea" value="{{lostLocation}}" placeholder="例如：东区食堂一层" bindinput="onLostLocation" />
-      <text class="label">卡套或卡片特点 <text class="en">[ CARD DETAILS · OPTIONAL ]</text></text><textarea class="field short-textarea" value="{{lostFeature}}" placeholder="例如：蓝色卡套、背面有贴纸" bindinput="onLostFeature" />
+      <text class="label">卡套或卡片特点（选填） <text class="en">[ CARD DETAILS · OPTIONAL ]</text></text><textarea class="field short-textarea" value="{{lostFeature}}" placeholder="例如：蓝色卡套、背面有贴纸" bindinput="onLostFeature" />
       <view class="registration-note">补充信息仅用于找卡，不会公开。</view>
       <button class="neo-button register-submit" loading="{{registering}}" bindtap="registerLost">确认登记<text class="en">[ SAVE LOST CARD ]</text></button>
     </view>
@@ -28,7 +28,7 @@
       <view wx:else class="result-note">卡片由个人暂时保管，提交后再安排安全交接。</view>
       <button wx:if="{{claimedCardId !== item.id && selectedClaimCardId !== item.id}}" class="claim-entry" data-id="{{item.id}}" bindtap="startClaim">确认是我的卡</button>
       <view wx:if="{{selectedClaimCardId === item.id}}" class="claim-form">
-        <text class="label">卡套或卡片特点（可选）</text>
+        <text class="label">卡套或卡片特点（选填）</text>
         <textarea class="field short-textarea" maxlength="300" value="{{claimFeature}}" placeholder="有多条相似记录时可帮助管理员核对" bindinput="onClaimFeature" />
         <view class="claim-actions"><button bindtap="cancelClaim">取消</button><button class="claim-submit" loading="{{claimSubmitting}}" disabled="{{claimSubmitting}}" bindtap="submitClaim">确认提交</button></view>
       </view>
