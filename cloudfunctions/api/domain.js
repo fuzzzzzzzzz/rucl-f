@@ -64,6 +64,18 @@ function requireMatchingIdentity(savedIdentity, requestedIdentity) {
   return requested
 }
 
+async function getOptionalDocument(documentReference) {
+  try {
+    return await documentReference.get()
+  } catch (error) {
+    const message = String(error?.message || error?.errMsg || error || '')
+    if (message.includes('document.get:fail') && message.includes('does not exist')) {
+      return { data: null }
+    }
+    throw error
+  }
+}
+
 function resolveBasicClaimDecision({ studentMatch, nameMatch, identityConfirmed, ambiguousMatch }) {
   if (!identityConfirmed || !studentMatch || !nameMatch) return 'rejected'
   return ambiguousMatch ? 'review' : 'approved'
@@ -149,6 +161,7 @@ async function completeHandoverRecords({ transaction, claimId, adminOpenid, lost
 
 module.exports = {
   completeHandoverRecords,
+  getOptionalDocument,
   maskName,
   maskStudentNumber,
   matchedCardProjection,

@@ -2,6 +2,7 @@ const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const {
   completeHandoverRecords,
+  getOptionalDocument,
   maskName,
   maskStudentNumber,
   matchedCardProjection,
@@ -187,7 +188,7 @@ async function saveUserProfile(openid, input) {
   await db.runTransaction(async (transaction) => {
     const [freshUser, binding] = await Promise.all([
       transaction.collection('users').doc(user._id).get(),
-      transaction.collection('identityBindings').doc(studentDigest).get(),
+      getOptionalDocument(transaction.collection('identityBindings').doc(studentDigest)),
     ])
     if (!freshUser.data || freshUser.data.openid !== openid) throw new Error('账号状态异常，请重新登录')
     if (

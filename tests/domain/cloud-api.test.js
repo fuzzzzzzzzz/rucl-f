@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 const require = createRequire(import.meta.url)
 const {
   completeHandoverRecords,
+  getOptionalDocument,
   normalizeIdentityStatus,
   requireMatchingIdentity,
   requireMatchingStudentDigest,
@@ -16,6 +17,26 @@ const {
 } = require('../../cloudfunctions/api/domain')
 
 describe('cloud API security boundary', () => {
+  it('treats a missing identity binding as an unbound first-time profile', async () => {
+    const missingBinding = {
+      async get() {
+        throw new Error('document.get:fail document with _id student-digest does not exist')
+      },
+    }
+
+    await expect(getOptionalDocument(missingBinding)).resolves.toEqual({ data: null })
+  })
+
+  it('does not hide unexpected database errors while reading an identity binding', async () => {
+    const unavailableDatabase = {
+      async get() {
+        throw new Error('database network timeout')
+      },
+    }
+
+    await expect(getOptionalDocument(unavailableDatabase)).rejects.toThrow('database network timeout')
+  })
+
   it('validates the 10-digit RUC student number again on the server', () => {
     expect(validateStudentNumber('2023200931', 2026)).toBe('2023200931')
     expect(() => validateStudentNumber('202320093', 2026)).toThrow('请输入10位数字学号')
