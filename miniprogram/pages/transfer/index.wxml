@@ -1,0 +1,12 @@
+<view class="page transfer-page">
+  <view class="topbar">转交官方地点<text class="en">OFFICIAL HAND-IN</text></view>
+  <view class="neo-card notice">个人保管的卡片不会公开位置。请先将卡片交给官方地点，再在这里登记。</view>
+  <text class="label">官方地点 <text class="en">[ OFFICIAL POINT ]</text></text>
+  <picker range="{{places}}" value="{{placeIndex}}" bindchange="onPlace"><view class="field picker-field">{{places[placeIndex]}}<image src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
+  <text class="label">服务区域 <text class="en">[ AREA ]</text></text>
+  <picker range="{{areas}}" value="{{areaIndex}}" bindchange="onArea"><view class="field picker-field">{{areas[areaIndex]}}<image src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
+  <text class="label">具体存放位置 <text class="en">[ DETAIL ]</text></text>
+  <input class="field" maxlength="160" placeholder="例如：已交给当班工作人员" bindinput="onDetail" />
+  <view class="photo" bindtap="choosePhoto"><image wx:if="{{photoPath}}" src="{{photoPath}}" mode="aspectFill" /><block wx:else><image src="/assets/icons/add-a-photo.png" mode="aspectFit" /><text>拍摄存放地点周围环境（选填）</text></block></view>
+  <button class="neo-button" loading="{{busy}}" disabled="{{busy}}" bindtap="submit">确认已经转交<text class="en">[ CONFIRM ]</text></button>
+</view>

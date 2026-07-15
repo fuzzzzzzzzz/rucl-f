@@ -76,11 +76,13 @@ describe('local card service', () => {
     expect(result).not.toHaveProperty('storageLocation')
     expect(result).not.toHaveProperty('storagePhotoPath')
 
-    await expect(submitCardClaim(result.id, '2023200931', '')).resolves.toMatchObject({ decision: 'approved' })
+    await expect(submitCardClaim(result.id, '2023200931', '')).resolves.toMatchObject({
+      status: 'ready_for_pickup',
+    })
     expect(await listMyClaims()).toEqual([
       expect.objectContaining({
         cardId: result.id,
-        status: 'approved',
+        status: 'ready_for_pickup',
         officialStoragePoint: '图书馆总服务台 · 服务台 · 已交给当班工作人员',
       }),
     ])
@@ -114,10 +116,12 @@ describe('local card service', () => {
       ]),
     )
     expect(results.every((item) => !item.officialStoragePoint)).toBe(true)
-    await expect(submitCardClaim(results[0].id, '2023200931', '')).resolves.toMatchObject({ decision: 'review' })
+    await expect(submitCardClaim(results[0].id, '2023200931', '')).resolves.toMatchObject({
+      status: 'admin_review',
+    })
   })
 
-  it('shows a staffed storage location after a unique verified match', async () => {
+  it('does not reveal an ordinary staffed location after a unique match', async () => {
     await saveUserProfile({
       name: '李明',
       studentNumber: '2024200123',
@@ -135,7 +139,8 @@ describe('local card service', () => {
     })
 
     const [result] = await searchPublicCardsByStudentNumber('2024200123')
-    expect(result.officialStoragePoint).toBe('东区食堂 · 一层 · 收银台工作人员')
+    expect(result.officialStoragePoint).toBeUndefined()
+    expect(result.awaitingOfficialTransfer).toBe(true)
     expect(result).not.toHaveProperty('storageLocation')
   })
 

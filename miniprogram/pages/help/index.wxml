@@ -1,0 +1,4 @@
+<view class="page"><view class="topbar">帮助中心<text class="en">HELP CENTER</text></view>
+<view class="neo-card"><view class="section-title">丢卡后怎么做</view><view class="rule" /><view class="step">1. 先在“我的信息”填写卡面姓名和10位学号。</view><view class="step">2. 在 SEARCH 查询；没有结果时登记失卡，系统以后发现相似记录会发站内消息。</view><view class="step">3. 姓名和学号一致且只有一条记录时，确认卡片；多条记录由管理员核对。</view><view class="step">4. 卡片到达官方地点后，在“我的认领”查看并领取，拍摄已取到卡的照片完成任务。</view></view>
+<view class="neo-card"><view class="section-title">常见异常</view><view class="rule" /><view class="step"><b>卡片由个人保管：</b>不会显示对方位置，等拾卡者转交官方地点。</view><view class="step"><b>出现多条相似记录：</b>管理员选定前不会显示地点或照片。</view><view class="step"><b>资料写错：</b>在账号设置中申请解除锁定，管理员通过后重新填写。</view><view class="step"><b>云服务不可用：</b>正式版本不会改用本机假数据，请重试或稍后再操作。</view><view class="step"><b>发生交接争议：</b>由管理员查看必要的交接记录并处理。</view></view>
+<button class="neo-button" bindtap="goPrivacy">查看信息保存、更正和删除方法</button></view>

@@ -52,6 +52,73 @@
   background: #ffec00;
   line-height: 1.6;
 }
+
+.storage-photo {
+  display: block;
+  width: 100%;
+  height: 300rpx;
+  margin-top: 20rpx;
+  border: 4rpx solid #191919;
+}
+
+.complete-panel {
+  margin-top: 24rpx;
+  padding-top: 20rpx;
+  border-top: 3rpx solid #191919;
+}
+
+.proof-title {
+  font-weight: 900;
+}
+
+.proof-help {
+  margin-top: 8rpx;
+  color: #5f5a54;
+  font-size: 21rpx;
+  line-height: 1.6;
+}
+
+.proof-camera {
+  display: flex;
+  min-height: 220rpx;
+  margin-top: 18rpx;
+  align-items: center;
+  justify-content: center;
+  border: 4rpx dashed #191919;
+  background: #efede8;
+  font-weight: 900;
+}
+
+.proof-camera > image {
+  width: 64rpx;
+  height: 64rpx;
+  margin-right: 12rpx;
+}
+
+.proof-camera > image:first-child:last-child {
+  width: 100%;
+  height: 300rpx;
+  margin: 0;
+}
+
+.thanks-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 120rpx;
+  margin-top: 18rpx;
+  padding: 18rpx;
+  border: 4rpx solid #191919;
+  background: #fff;
+}
+
+.complete-button {
+  margin-top: 18rpx;
+  border: 4rpx solid #191919;
+  border-radius: 0;
+  box-shadow: 7rpx 7rpx 0 #191919;
+  background: #18d9aa;
+  font-weight: 900;
+}
 .handover-point b,
 .handover-point text,
 .handover-point small {

@@ -1,0 +1,31 @@
+.setting-row,
+.menu {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 3rpx solid #191919;
+  padding: 22rpx 0;
+  font-weight: 900;
+}
+.menu {
+  box-sizing: border-box;
+  border: 4rpx solid #191919;
+  background: #fff;
+  margin: 16rpx 0;
+  padding: 25rpx;
+}
+.warning {
+  background: #ffec00;
+}
+.status-box {
+  margin-top: 30rpx;
+  border: 4rpx solid #191919;
+  background: #efede8;
+  padding: 24rpx;
+  line-height: 1.7;
+}
+.tip {
+  font-size: 21rpx;
+  color: #625e58;
+  margin-top: 8rpx;
+}

@@ -1,8 +1,9 @@
 import type { CardStatus } from './workflow'
 
 export type CardCategory = '本科生' | '硕士生' | '博士生' | '教职工'
-export type IdentityStatus = 'unbound' | 'pending' | 'verified' | 'local_demo'
-export type ClaimStatus = 'review' | 'approved' | 'rejected' | 'returned'
+export type ProfileBindingStatus = 'unbound' | 'locked' | 'correction_pending' | 'local_demo'
+export type ClaimStatus =
+  'pending_match' | 'admin_review' | 'awaiting_official_transfer' | 'ready_for_pickup' | 'returned' | 'closed'
 
 export interface UserProfileInput {
   name: string
@@ -13,7 +14,7 @@ export interface UserProfileInput {
 
 export interface UserProfile extends UserProfileInput {
   updatedAt: string
-  identityStatus: IdentityStatus
+  profileBindingStatus: ProfileBindingStatus
 }
 
 export interface DetailedLocation {
@@ -53,6 +54,8 @@ export interface PublicCard {
   status: CardStatus
   officialStoragePoint?: string
   needsAdminReview?: boolean
+  awaitingOfficialTransfer?: boolean
+  storagePhotoUrl?: string
 }
 
 export interface MessageSummary {
@@ -74,15 +77,56 @@ export interface ClaimSummary {
   campusName: string
   createdAt: string
   officialStoragePoint?: string
+  storagePhotoUrl?: string
+  awaitingOfficialTransfer?: boolean
+}
+
+export interface AchievementProgress {
+  id: string
+  name: string
+  target: number
+  progress: number
+  unlocked: boolean
+  icon: string
+}
+
+export interface ThanksWallItem {
+  id: string
+  maskedFinderName: string
+  text: string
+  createdAt: string
 }
 
 export interface AdminIdentityReviewItem {
   id: string
+  userId?: string
   maskedName: string
   maskedStudentNumber: string
   category: CardCategory
   campusName: string
   submittedAt: string
+  reason?: string
+}
+
+export interface NotificationPreferences {
+  matchFound: boolean
+  reviewResult: boolean
+  officialTransfer: boolean
+  pickupReminder: boolean
+}
+
+export interface AccountSettings {
+  notificationPreferences: NotificationPreferences
+  profileBindingStatus: ProfileBindingStatus
+  version: string
+  cloudStatus: 'connected' | 'unavailable'
+}
+
+export interface AdminOperationSummary {
+  reports: Array<{ id: string; type: string; recordId: string; reason: string }>
+  risks: Array<{ id: string; cardId: string; completedAt?: string; riskStatus?: string }>
+  deletionRequests: Array<{ id: string; content: string }>
+  feedback: Array<{ id: string; content: string }>
 }
 
 export interface AdminClaimReviewItem extends ClaimSummary {
@@ -94,6 +138,7 @@ export interface AdminClaimReviewItem extends ClaimSummary {
 
 export interface FoundHistoryItem {
   id: string
+  campusId: string
   maskedName: string
   maskedStudentNumber: string
   category: CardCategory
@@ -102,6 +147,7 @@ export interface FoundHistoryItem {
   pickupSummary: string
   storageSummary: string
   status: CardStatus
+  needsOfficialTransfer?: boolean
 }
 
 export interface LostHistoryItem {

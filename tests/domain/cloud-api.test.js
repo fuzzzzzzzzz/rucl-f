@@ -119,7 +119,7 @@ describe('cloud API security boundary', () => {
     ).not.toHaveProperty('officialStoragePoint')
   })
 
-  it('shows a staffed storage location after one exact identity match', () => {
+  it('does not treat an ordinary staffed place as an official hand-in point', () => {
     const matched = matchedCardProjection(
       {
         _id: 'card-staffed',
@@ -140,7 +140,8 @@ describe('cloud API security boundary', () => {
       { discloseOfficialStoragePoint: true },
     )
 
-    expect(matched.officialStoragePoint).toBe('东区食堂 · 一层 · 收银台工作人员')
+    expect(matched).not.toHaveProperty('officialStoragePoint')
+    expect(matched.awaitingOfficialTransfer).toBe(true)
   })
 
   it('only accepts cloud files in the expected project directory', () => {

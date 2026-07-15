@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { resolveDataMode } from '../../miniprogram/shared/cloud-mode'
-import { buildCloudFoundCardInput, normalizeCloudPublicCard } from '../../miniprogram/services/cloud-card-service'
+import {
+  buildCloudFoundCardInput,
+  extractCardIdentity,
+  normalizeCloudPublicCard,
+} from '../../miniprogram/services/cloud-card-service'
 
 describe('cloud runtime mode', () => {
   it('stays in local demo mode until both an environment and wx.cloud are available', () => {
@@ -23,17 +27,17 @@ describe('cloud runtime mode', () => {
         photoPath: 'wxfile://raw-card.jpg',
         storagePhotoPath: 'wxfile://storage.jpg',
       },
-      { maskedImageFileId: 'cloud://masked.jpg', storagePhotoFileId: 'cloud://storage.jpg' },
+      { storagePhotoFileId: 'cloud://storage.jpg' },
     )
 
     expect(result).toMatchObject({
       foundAt: '2026-07-13',
       privateFeature: '蓝色卡套',
-      maskedImageFileId: 'cloud://masked.jpg',
       storagePhotoFileId: 'cloud://storage.jpg',
     })
     expect(result).not.toHaveProperty('photoPath')
     expect(result).not.toHaveProperty('storagePhotoPath')
+    expect(result).not.toHaveProperty('maskedImageFileId')
   })
 
   it('normalizes the cloud result to the same safe public-card shape as local mode', () => {
@@ -60,5 +64,13 @@ describe('cloud runtime mode', () => {
       status: 'pending_match',
       officialStoragePoint: '学生事务中心服务台 · 综合服务大厅 · 当班工作人员处',
     })
+  })
+
+  it('extracts a likely name and 10-digit student number from OCR lines', () => {
+    expect(extractCardIdentity(['中国人民大学', '张一凡', '2023200931', '本科生'])).toEqual({
+      name: '张一凡',
+      studentNumber: '2023200931',
+    })
+    expect(extractCardIdentity(['无法识别'])).toEqual({ name: '', studentNumber: '' })
   })
 })

@@ -1,0 +1,8 @@
+<view class="page"><view class="topbar">账号设置<text class="en">SETTINGS</text></view>
+<view class="neo-card"><view class="section-title">通知偏好<text class="en">[ NOTIFICATIONS ]</text></view><view class="rule" />
+<view class="setting-row"><text>找到可能匹配</text><switch checked="{{preferences.matchFound}}" data-key="matchFound" bindchange="togglePreference" color="#20d6b5" /></view>
+<view class="setting-row"><text>管理员处理结果</text><switch checked="{{preferences.reviewResult}}" data-key="reviewResult" bindchange="togglePreference" color="#20d6b5" /></view>
+<view class="setting-row"><text>已转交官方地点</text><switch checked="{{preferences.officialTransfer}}" data-key="officialTransfer" bindchange="togglePreference" color="#20d6b5" /></view>
+<view class="setting-row"><text>待完成交接</text><switch checked="{{preferences.pickupReminder}}" data-key="pickupReminder" bindchange="togglePreference" color="#20d6b5" /></view></view>
+<view class="menu" bindtap="goProfileEdit">申请修改姓名和学号</view><view class="menu" bindtap="goPrivacy">信息收集与保存说明</view><view class="menu" bindtap="clearCache">清理本机缓存</view><view class="menu" bindtap="submitFeedback">意见反馈</view><view class="menu warning" bindtap="requestDeletion">申请删除个人数据</view>
+<view class="status-box"><view>版本 <text class="number">{{version}}</text></view><view>{{cloudStatus}}</view><view class="tip">微信通知未配置或发送失败时，站内消息仍会保留，不影响业务状态。</view></view></view>
