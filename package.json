@@ -1,6 +1,6 @@
 {
   "name": "campus-card-guardian",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "icons:generate": "node scripts/generate-material-icons.mjs",
@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "format:check": "prettier --check .",
+    "security:check": "node scripts/check-dependency-risk.mjs",
     "verify": "npm run test && npm run typecheck && npm run lint && npm run format:check"
   },
   "devDependencies": {

@@ -1,9 +1,9 @@
 <view class="page post-page">
   <view class="topbar">拾卡安全发布<text class="en">FOUND CARD POST</text></view>
   <view class="scan-wrap"><view class="scan-box" bindtap="choosePhoto"><image wx:if="{{photoPath}}" class="card-preview" mode="aspectFit" src="{{photoPath}}" /><block wx:else><view class="scan-corner corner-tl" /><view class="scan-corner corner-tr" /><view class="scan-corner corner-bl" /><view class="scan-corner corner-br" /><image class="camera-icon" src="/assets/icons/photo-camera.png" mode="aspectFit" /><view>点击拍摄校园卡</view><text class="en">ALIGN CARD WITH FRAME</text></block></view></view>
-  <view class="privacy-alert">照片仅用于识别，不会公开。</view>
+  <view class="privacy-alert">{{photoBusy ? '正在识别，原图处理后会立即删除…' : '照片仅用于识别，处理后立即删除，不会公开。'}}</view>
 
-  <text class="label">姓名 <text class="en">[ NAME ]</text></text><input class="field" placeholder="拍照识别后请检查" bindinput="onName" />
+  <text class="label">姓名 <text class="en">[ NAME ]</text></text><input class="field" value="{{name}}" placeholder="拍照识别后请检查" bindinput="onName" />
   <text class="label">学号 <text class="en">[ STUDENT ID ]</text></text><input class="field" type="number" maxlength="10" value="{{studentNumber}}" placeholder="10位数字" bindinput="onNumber" />
   <text class="label">卡片类别 <text class="en">[ TYPE ]</text></text><picker range="{{cardCategories}}" value="{{categoryIndex}}" bindchange="onCategoryChange"><view class="field picker-field">{{cardCategories[categoryIndex]}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
   <text class="label">校区 <text class="en">[ CAMPUS ]</text></text><picker range="{{campuses}}" range-key="name" value="{{campusIndex}}" bindchange="onCampusChange"><view class="field picker-field">{{campuses[campusIndex].name}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>

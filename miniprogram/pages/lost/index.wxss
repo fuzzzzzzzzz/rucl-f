@@ -304,3 +304,20 @@
 .claim-actions .claim-submit {
   background: #ffec00;
 }
+.revealed-panel {
+  margin: 28rpx 0;
+  padding: 20rpx;
+  border: 4rpx solid #191919;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  background: #18d9aa;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.revealed-panel image {
+  display: block;
+  width: 100%;
+  height: 320rpx;
+  margin-bottom: 16rpx;
+  border: 3rpx solid #191919;
+}

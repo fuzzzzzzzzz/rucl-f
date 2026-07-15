@@ -58,4 +58,52 @@ describe('cloud deployment contract', () => {
 
     expect(server).toMatch(/getOptionalDocument\(\s*transaction\.collection\(['"]claims['"]\)\.doc\(claimId\)\s*\)/)
   })
+
+  it('never falls back to local records after a formal cloud login failure', () => {
+    const app = fs.readFileSync(path.join(root, 'miniprogram/app.ts'), 'utf8')
+
+    expect(app).toContain("runtimeMode = 'cloud_error'")
+    expect(app).not.toMatch(/\.catch\([\s\S]*?dataMode\s*=\s*['"]local['"]/)
+  })
+
+  it('keeps long-lived sensitive files server-owned on the free cloud plan', () => {
+    const rules = JSON.parse(fs.readFileSync(path.join(root, 'security/storage.rules.json'), 'utf8'))
+    const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
+    const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
+
+    expect(rules.read).toBe(false)
+    expect(rules.write).toContain('auth.openid')
+    expect(client).toContain("callCloudApi<PrivateUploadResult>('uploadPrivateImage'")
+    expect(client).toContain("callCloudApi('discardPrivateUpload'")
+    expect(client).not.toMatch(/uniqueCloudPath\(['"]storage-scenes['"]/)
+    expect(client).not.toMatch(/uniqueCloudPath\(['"]handover-proofs['"]/)
+    expect(server).toContain('async function uploadPrivateImage')
+    expect(server).toContain('cloud.uploadFile')
+    expect(server).toContain('uploadTokenHash')
+    expect(server).toContain('.doc(uploadTokenHash)')
+    expect(server).toContain('consumePrivateUpload(transaction')
+    expect(server).not.toContain('where({ uploadTokenHash })')
+    expect(server).toContain("action: 'private_image.uploaded'")
+    expect(server).toContain('PRIVATE_IMAGE_DAILY_LIMIT')
+    expect(server).toContain('discarding: true')
+    expect(server).toContain("'upload_failed'")
+    expect(server).not.toContain("case 'registerUploadedFile':")
+    expect(server).toContain('maxAge: 600')
+  })
+
+  it('ships a manual release gate for secret rotation, storage rules and three-account testing', () => {
+    const checklist = fs.readFileSync(path.join(root, 'docs/RELEASE-GATE.md'), 'utf8')
+    expect(checklist).toContain('AppSecret')
+    expect(checklist).toContain('云存储')
+    expect(checklist).toContain('拾卡者、失主、管理员')
+  })
+
+  it('uses cross-platform lock fingerprints and current GitHub action runtimes', () => {
+    const riskCheck = fs.readFileSync(path.join(root, 'scripts/check-dependency-risk.mjs'), 'utf8')
+    const workflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
+
+    expect(riskCheck).toContain("replace(/\\r\\n/g, '\\n')")
+    expect(workflow).toContain('actions/checkout@v7')
+    expect(workflow).toContain('actions/setup-node@v7')
+  })
 })

@@ -128,6 +128,18 @@
   justify-content: space-around;
   text-align: center;
 }
+.honor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 18rpx;
+}
+.more {
+  font-size: 20rpx;
+  font-weight: 900;
+  border-bottom: 3rpx solid #191919;
+  white-space: nowrap;
+}
 .badges > view {
   display: flex;
   flex-direction: column;
@@ -139,12 +151,19 @@
   box-sizing: border-box;
   width: 90rpx;
   height: 90rpx;
-  border-radius: 50%;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 4rpx solid #191919;
   box-shadow: 6rpx 6rpx 0 #191919;
+}
+.locked-badge {
+  background: #d4d1cb;
+}
+.award-count {
+  font-size: 17rpx;
+  color: #6d6861;
 }
 .badge image {
   display: block;

@@ -1,6 +1,9 @@
 import type {
   AdminClaimReviewItem,
   AdminIdentityReviewItem,
+  AdminOperationSummary,
+  AccountSettings,
+  AchievementProgress,
   CampusOption,
   ClaimSummary,
   FoundCardInput,
@@ -9,28 +12,46 @@ import type {
   LostHistoryItem,
   MessageSummary,
   PublicCard,
+  ThanksWallItem,
   UserProfile,
   UserProfileInput,
 } from '../shared/models'
 import { maskName, maskStudentNumber } from '../shared/privacy'
 import { validateRucStudentNumber } from '../shared/ruc'
 import {
+  closeCloudRecord,
   countCloudRecords,
   createCloudFoundCard,
+  forceCloseCloudRecord,
+  getCloudAccountSettings,
+  getCloudHandoverProof,
+  listCloudAchievements,
+  listCloudAdminOperations,
   listCloudCards,
   listCloudFoundHistory,
   listCloudLostHistory,
   listCloudMessages,
+  mergeCloudDuplicateFoundCards,
   registerCloudLostCard,
   searchCloudCards,
+  setCloudUserRestriction,
   syncUserProfile,
   completeCloudHandover,
+  confirmCloudClaimHandover,
   listCloudAdminClaims,
   listCloudClaims,
   listCloudPendingIdentities,
+  listCloudThanksWall,
+  reportCloudRecord,
+  requestCloudIdentityCorrection,
+  resolveCloudAdminOperation,
   reviewCloudClaim,
   reviewCloudIdentity,
+  reviewCloudRiskHandover,
   submitCloudClaim,
+  submitCloudAccountRequest,
+  transferCloudFoundCardToOfficial,
+  updateCloudNotificationPreferences,
 } from './cloud-card-service'
 
 interface StoredFoundCard extends FoundCardInput {
@@ -94,9 +115,9 @@ export async function saveUserProfile(input: UserProfileInput): Promise<UserProf
     ...input,
     name: input.name.trim(),
     updatedAt: new Date().toISOString(),
-    identityStatus: cloudResult?.identityStatus || 'local_demo',
+    profileBindingStatus: cloudResult?.profileBindingStatus || 'local_demo',
   }
-  if (isCloudMode()) getApp<IAppOption>().globalData.identityStatus = profile.identityStatus
+  if (isCloudMode()) getApp<IAppOption>().globalData.profileBindingStatus = profile.profileBindingStatus
   memoryProfile = profile
   writeStorage(PROFILE_KEY, profile)
   return profile
@@ -105,10 +126,10 @@ export async function saveUserProfile(input: UserProfileInput): Promise<UserProf
 export async function getUserProfile(): Promise<UserProfile | null> {
   const profile = readStorage(PROFILE_KEY, memoryProfile)
   if (!profile) return null
-  const identityStatus = isCloudMode()
-    ? getApp<IAppOption>().globalData.identityStatus || profile.identityStatus || 'unbound'
+  const profileBindingStatus = isCloudMode()
+    ? getApp<IAppOption>().globalData.profileBindingStatus || profile.profileBindingStatus || 'unbound'
     : 'local_demo'
-  return { ...profile, identityStatus }
+  return { ...profile, profileBindingStatus }
 }
 
 export async function submitFoundCard(input: FoundCardInput): Promise<{ id: string }> {
@@ -167,10 +188,12 @@ function toPublicCard(card: StoredFoundCard): PublicCard {
 
 function toMatchedCard(card: StoredFoundCard): PublicCard {
   const result = toPublicCard(card)
-  if (card.storageLocation.place) {
+  if (card.storageLocation.category === '官方交卡点' && card.storageLocation.place) {
     result.officialStoragePoint = [card.storageLocation.place, card.storageLocation.area, card.storageLocation.detail]
       .filter(Boolean)
       .join(' · ')
+  } else {
+    result.awaitingOfficialTransfer = true
   }
   return result
 }
@@ -258,11 +281,14 @@ export async function listMyFoundHistory(): Promise<FoundHistoryItem[]> {
     maskedName: maskName(card.name),
     maskedStudentNumber: maskStudentNumber(card.studentNumber),
     category: card.category,
+    campusId: card.campusId,
     campusName: campuses.find((campus) => campus.id === card.campusId)?.name || '中国人民大学',
     foundAt: card.foundDate,
     pickupSummary: locationSummary(card.pickupLocation),
     storageSummary: locationSummary(card.storageLocation),
     status: card.status,
+    needsOfficialTransfer:
+      card.storageLocation.category !== '官方交卡点' && !['returned', 'closed'].includes(card.status),
   }))
 }
 
@@ -286,7 +312,7 @@ export async function submitCardClaim(
   cardId: string,
   studentNumber: string,
   privateFeature = '',
-): Promise<{ id: string; decision: 'review' | 'approved' }> {
+): Promise<{ id: string; status: ClaimSummary['status']; card?: PublicCard }> {
   if (isCloudMode()) return submitCloudClaim(cardId, studentNumber, privateFeature)
   const profile = await getUserProfile()
   if (!profile || profile.studentNumber !== studentNumber) throw new Error('只能认领本人校园卡')
@@ -299,16 +325,21 @@ export async function submitCardClaim(
   const matchingCards = readStorage(FOUND_KEY, memoryFoundCards).filter(
     (item) => item.studentNumber === studentNumber && item.name.trim() === profile.name.trim(),
   )
-  const decision = matchingCards.length > 1 ? 'review' : 'approved'
+  const status: ClaimSummary['status'] =
+    matchingCards.length > 1
+      ? 'admin_review'
+      : card.storageLocation.category === '官方交卡点'
+        ? 'ready_for_pickup'
+        : 'awaiting_official_transfer'
   const claim: StoredClaim = {
     id: `local-claim-${Date.now()}`,
     cardId,
-    status: decision,
+    status,
     createdAt: new Date().toISOString(),
   }
   memoryClaims = [...readStorage(CLAIM_KEY, memoryClaims), claim]
   writeStorage(CLAIM_KEY, memoryClaims)
-  return { id: claim.id, decision }
+  return { id: claim.id, status, card: status === 'ready_for_pickup' ? toMatchedCard(card) : toPublicCard(card) }
 }
 
 export async function listMyClaims(): Promise<ClaimSummary[]> {
@@ -340,14 +371,15 @@ export async function listPendingIdentityProfiles(): Promise<AdminIdentityReview
   return listCloudPendingIdentities()
 }
 
-export async function reviewIdentityProfile(
-  userId: string,
-  decision: 'approved' | 'rejected',
-  verifiedName = '',
-  verifiedStudentNumber = '',
-): Promise<void> {
+export async function reviewIdentityProfile(requestId: string, decision: 'approved' | 'rejected'): Promise<void> {
   if (!isCloudMode()) throw new Error('本机演示模式没有管理员审核')
-  await reviewCloudIdentity(userId, decision, verifiedName, verifiedStudentNumber)
+  await reviewCloudIdentity(requestId, decision)
+}
+
+export async function requestIdentityCorrection(reason: string): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式不提交资料修改申请')
+  await requestCloudIdentityCorrection(reason)
+  getApp<IAppOption>().globalData.profileBindingStatus = 'correction_pending'
 }
 
 export async function listAdminClaims(): Promise<AdminClaimReviewItem[]> {
@@ -363,6 +395,111 @@ export async function reviewClaim(claimId: string, decision: 'approved' | 'rejec
 export async function completeHandover(claimId: string): Promise<void> {
   if (!isCloudMode()) throw new Error('本机演示模式没有管理员交接')
   await completeCloudHandover(claimId)
+}
+
+export async function confirmMyClaimHandover(
+  claimId: string,
+  proofPath: string,
+  thanksText = '',
+): Promise<{ status: 'returned'; thanksAccepted: boolean }> {
+  if (!isCloudMode()) throw new Error('本机演示模式不提交真实交接记录')
+  return confirmCloudClaimHandover(claimId, proofPath, thanksText)
+}
+
+export async function transferFoundCardToOfficial(
+  cardId: string,
+  storageLocation: FoundCardInput['storageLocation'],
+  storagePhotoPath = '',
+): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式不提交真实转交记录')
+  await transferCloudFoundCardToOfficial(cardId, storageLocation, storagePhotoPath)
+}
+
+export async function closeRecord(type: 'found' | 'lost', recordId: string, reason: string): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式不提交关闭操作')
+  await closeCloudRecord(type, recordId, reason)
+}
+
+export async function reportRecord(type: 'found' | 'lost' | 'claim', recordId: string, reason: string): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式不提交举报')
+  await reportCloudRecord(type, recordId, reason)
+}
+
+export async function getAccountSettings(): Promise<AccountSettings> {
+  if (!isCloudMode()) {
+    return {
+      notificationPreferences: { matchFound: true, reviewResult: true, officialTransfer: true, pickupReminder: true },
+      profileBindingStatus: 'local_demo',
+      version: '0.4.0',
+      cloudStatus: 'unavailable',
+    }
+  }
+  return getCloudAccountSettings()
+}
+
+export async function updateNotificationPreferences(
+  notificationPreferences: AccountSettings['notificationPreferences'],
+): Promise<void> {
+  if (!isCloudMode()) return
+  await updateCloudNotificationPreferences(notificationPreferences)
+}
+
+export async function submitAccountRequest(type: 'feedback' | 'data_deletion', content: string): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式不提交申请')
+  await submitCloudAccountRequest(type, content)
+}
+
+export async function listMyAchievements(): Promise<AchievementProgress[]> {
+  if (!isCloudMode()) return []
+  return listCloudAchievements()
+}
+
+export async function listThanksWall(): Promise<ThanksWallItem[]> {
+  if (!isCloudMode()) return []
+  return listCloudThanksWall()
+}
+
+export async function listAdminOperations(): Promise<AdminOperationSummary> {
+  if (!isCloudMode()) return { reports: [], risks: [], deletionRequests: [], feedback: [] }
+  return listCloudAdminOperations()
+}
+
+export async function reviewRiskHandover(
+  handoverId: string,
+  decision: 'valid' | 'invalid',
+  officialPointVerified: boolean,
+): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式没有风险复核')
+  await reviewCloudRiskHandover(handoverId, decision, officialPointVerified)
+}
+
+export async function resolveAdminOperation(
+  collection: 'recordReports' | 'dataDeletionRequests' | 'feedback',
+  id: string,
+  status: 'resolved' | 'rejected',
+): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式没有管理员队列')
+  await resolveCloudAdminOperation(collection, id, status)
+}
+
+export async function forceCloseRecord(type: 'found' | 'lost', recordId: string): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式没有强制关闭')
+  await forceCloseCloudRecord(type, recordId)
+}
+
+export async function mergeDuplicateFoundCards(canonicalId: string, duplicateId: string): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式没有重复合并')
+  await mergeCloudDuplicateFoundCards(canonicalId, duplicateId)
+}
+
+export async function setUserRestriction(userId: string, blocked: boolean): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式没有违规限制')
+  await setCloudUserRestriction(userId, blocked)
+}
+
+export async function getHandoverProof(handoverId: string): Promise<string> {
+  if (!isCloudMode()) throw new Error('本机演示模式没有交接照片')
+  return getCloudHandoverProof(handoverId)
 }
 
 export function clearLocalData(): void {

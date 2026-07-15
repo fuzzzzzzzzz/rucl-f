@@ -4,12 +4,12 @@
   <view wx:if="{{loading}}" class="neo-card empty-state">正在读取审核队列…</view>
   <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" bindtap="loadDashboard">重新读取</button></view>
   <block wx:else>
-    <view wx:if="{{identities.length}}" class="section-title">历史待处理资料<text class="en">[ PROFILE REVIEW · {{identities.length}} ]</text></view>
+    <view wx:if="{{identities.length}}" class="section-title">资料修改申请<text class="en">[ PROFILE CORRECTION · {{identities.length}} ]</text></view>
     <view wx:for="{{identities}}" wx:key="id" class="neo-card review-card">
       <view class="review-title">{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
       <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>{{item.submittedAt}}</text></view>
-      <view wx:if="{{selectedIdentityId !== item.id}}" class="review-actions"><button data-id="{{item.id}}" data-decision="rejected" loading="{{busyId === item.id}}" bindtap="decideIdentity">退回</button><button class="approve" data-id="{{item.id}}" bindtap="startIdentityReview">开始现场核验</button></view>
-      <view wx:else class="identity-proof"><view class="proof-warning">请直接查看申请人的校园证件或学校系统，并录入完整信息。输入内容只用于本次 HMAC 比对，不会保存。</view><input class="field" value="{{verifiedName}}" maxlength="20" placeholder="证件上的完整姓名" bindinput="onVerifiedName" /><input class="field" type="number" value="{{verifiedStudentNumber}}" maxlength="10" placeholder="证件上的10位学号" bindinput="onVerifiedStudentNumber" /><view class="review-actions"><button bindtap="cancelIdentityReview">取消</button><button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyId === item.id}}" bindtap="decideIdentity">比对一致并通过</button></view></view>
+      <view class="storage-detail"><b>修改原因</b><text>{{item.reason}}</text></view>
+      <view class="review-actions"><button data-id="{{item.id}}" data-decision="rejected" loading="{{busyId === item.id}}" bindtap="decideIdentity">保留原资料</button><button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyId === item.id}}" bindtap="decideIdentity">解除锁定</button></view>
     </view>
     <view class="section-title queue-title">认领与交接<text class="en">[ CLAIMS · {{claims.length}} ]</text></view>
     <view wx:if="{{claims.length === 0}}" class="neo-card empty-state">没有待处理认领。</view>
@@ -17,8 +17,18 @@
       <view class="review-title">卡片：{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
       <view class="applicant">申请人：{{item.applicantMaskedName}} · {{item.applicantMaskedStudentNumber}}</view>
       <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>私有特征{{item.featureMatch ? '相符' : '未确认'}}</text></view><view class="storage-detail"><b>当前存放</b><text>{{item.storageSummary}}</text></view>
-      <view wx:if="{{item.status === 'review'}}" class="review-actions"><button data-id="{{item.id}}" data-decision="rejected" loading="{{busyId === item.id}}" bindtap="decideClaim">拒绝</button><button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyId === item.id}}" bindtap="decideClaim">批准认领</button></view>
-      <button wx:else class="handover-button" data-id="{{item.id}}" loading="{{busyId === item.id}}" bindtap="finishHandover">现场核验证件并确认归还</button>
+      <view wx:if="{{item.status === 'admin_review'}}" class="review-actions"><button data-id="{{item.id}}" data-decision="rejected" loading="{{busyId === item.id}}" bindtap="decideClaim">拒绝</button><button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyId === item.id}}" bindtap="decideClaim">批准认领</button></view>
+      <button wx:elif="{{item.status === 'ready_for_pickup'}}" class="handover-button" data-id="{{item.id}}" loading="{{busyId === item.id}}" bindtap="finishHandover">管理员代为确认归还</button>
+      <view wx:else class="safety-note">等待拾卡者转交官方地点。</view>
     </view>
+    <view class="section-title queue-title">交接与奖励复核<text class="en">[ HANDOVER REVIEW · {{operations.risks.length}} ]</text></view>
+    <view wx:for="{{operations.risks}}" wx:key="id" class="neo-card review-card"><view class="review-title">交接记录 {{item.id}}</view><view class="review-meta"><text>{{item.riskStatus === 'review' ? '出现异常频率，奖励待复核' : '待确认是否在官方地点交接'}}</text></view><button data-id="{{item.id}}" bindtap="viewProof">仅为处理争议查看交接照片</button><view class="review-actions"><button data-id="{{item.id}}" data-decision="invalid" bindtap="reviewRisk">撤销记录</button><button class="approve" data-id="{{item.id}}" data-decision="valid" bindtap="reviewRisk">确认有效和官方交接</button></view></view>
+    <view class="section-title queue-title">举报与申请<text class="en">[ OPERATIONS ]</text></view>
+    <view wx:for="{{operations.reports}}" wx:key="id" class="neo-card review-card"><view>{{item.reason}}</view><view class="review-actions"><button data-collection="recordReports" data-id="{{item.id}}" bindtap="resolveOperation">仅标记完成</button><button class="approve" wx:if="{{item.type === 'found' || item.type === 'lost'}}" data-type="{{item.type}}" data-record="{{item.recordId}}" bindtap="forceCloseReported">强制关闭记录</button></view></view>
+    <view wx:for="{{operations.deletionRequests}}" wx:key="id" class="neo-card review-card"><view>数据删除申请：{{item.content}}</view><button data-collection="dataDeletionRequests" data-id="{{item.id}}" bindtap="resolveOperation">处理完成</button></view>
+    <view wx:for="{{operations.feedback}}" wx:key="id" class="neo-card review-card"><view>意见反馈：{{item.content}}</view><button data-collection="feedback" data-id="{{item.id}}" bindtap="resolveOperation">处理完成</button></view>
+    <view class="section-title queue-title">重复与违规处理<text class="en">[ RECORD TOOLS ]</text></view>
+    <view class="neo-card review-card"><view class="review-title">合并重复招领</view><input class="field" value="{{canonicalId}}" placeholder="要保留的记录ID" bindinput="onCanonicalId" /><input class="field" value="{{duplicateId}}" placeholder="要关闭的重复记录ID" bindinput="onDuplicateId" /><button class="approve" bindtap="mergeDuplicates">核对一致后合并</button></view>
+    <view class="neo-card review-card"><view class="review-title">违规账号限制</view><input class="field" value="{{restrictionUserId}}" placeholder="用户记录ID" bindinput="onRestrictionUserId" /><view class="review-actions"><button data-blocked="{{false}}" bindtap="changeRestriction">解除限制</button><button class="approve" data-blocked="{{true}}" bindtap="changeRestriction">限制操作</button></view></view>
   </block>
 </view>

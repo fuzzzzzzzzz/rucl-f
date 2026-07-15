@@ -1,7 +1,11 @@
 import { createRequire } from 'node:module'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const {
   parseDailyLimit,
   requireTemporaryFileId,
@@ -28,5 +32,13 @@ describe('OCR cloud function limits', () => {
     )
     expect(() => requireTemporaryFileId('cloud://demo.example/storage-scenes/one.jpg')).toThrow('无效的临时图片')
     expect(() => requireTemporaryFileId('https://example.com/one.jpg')).toThrow('无效的临时图片')
+  })
+
+  it('does not create a long-lived blurred copy of the campus card', () => {
+    const source = fs.readFileSync(path.join(root, 'cloudfunctions/processCardImage/index.js'), 'utf8')
+
+    expect(source).not.toContain('masked-cards/')
+    expect(source).not.toContain('maskedFileId')
+    expect(source).toContain('cloud.deleteFile({ fileList: [rawFileId] })')
   })
 })

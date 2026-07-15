@@ -1,0 +1,6 @@
+<view class="page"><view class="topbar">信息收集与保存<text class="en">PRIVACY NOTICE</text></view>
+<view class="neo-card"><view class="section-title">为什么收集</view><view class="rule" /><view class="copy">姓名和10位学号只用于把失卡登记与拾卡记录进行一致性核对；卡片类别和校区用于缩小范围；地点与环境照片用于领取；取卡照片只作为交接记录，不代表学校身份核验。</view></view>
+<view class="neo-card"><view class="section-title">保存多久</view><view class="rule" /><view class="copy">校园卡原图完成文字识别后立即安排删除。无人认领的环境照片14天后安排删除；记录归还或关闭后立即安排删除。取卡照片在交接完成7天后安排删除。删除失败会进入自动重试队列。</view></view>
+<view class="neo-card"><view class="section-title">谁能看到</view><view class="rule" /><view class="copy">公开页面只显示隐藏后的姓名和学号。多条匹配、个人保管或尚未确认时，不提供存放地点、照片地址或文件编号。取卡照片只有管理员处理争议时可以查看。</view></view>
+<view class="neo-card"><view class="section-title">如何更正或删除</view><view class="rule" /><view class="copy">姓名学号写错时，在“账号设置”申请解除锁定；其他资料可直接更新。需要删除数据时，在“账号设置”提交删除申请，由管理员核对正在进行的认领后处理。</view></view>
+<button class="neo-button" bindtap="goSettings">进入账号设置</button></view>

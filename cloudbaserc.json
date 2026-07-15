@@ -13,7 +13,9 @@
       "memorySize": 256,
       "installDependency": true,
       "envVariables": {
-        "STUDENT_HMAC_SECRET": "{{env.STUDENT_HMAC_SECRET}}"
+        "STUDENT_HMAC_SECRET": "{{env.STUDENT_HMAC_SECRET}}",
+        "SUBSCRIPTION_TEMPLATE_ID": "{{env.SUBSCRIPTION_TEMPLATE_ID}}",
+        "MINIPROGRAM_STATE": "developer"
       }
     },
     {

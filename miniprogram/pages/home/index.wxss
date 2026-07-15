@@ -118,3 +118,31 @@
   font-size: 22rpx;
   font-weight: 900;
 }
+.cloud-error {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  border: 5rpx solid #191919;
+  background: #f04418;
+  color: #fff;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  padding: 20rpx;
+  margin: 0 8rpx 30rpx 0;
+}
+.cloud-error view {
+  flex: 1;
+  min-width: 0;
+}
+.cloud-error text {
+  display: block;
+  font-size: 21rpx;
+  line-height: 1.45;
+  margin-top: 4rpx;
+}
+.cloud-error button {
+  flex: 0 0 auto;
+  border-radius: 0;
+  border: 3rpx solid #191919;
+  background: #ffec00;
+  font-weight: 900;
+}
