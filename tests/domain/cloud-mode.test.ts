@@ -27,13 +27,13 @@ describe('cloud runtime mode', () => {
         photoPath: 'wxfile://raw-card.jpg',
         storagePhotoPath: 'wxfile://storage.jpg',
       },
-      { storagePhotoFileId: 'cloud://storage.jpg' },
+      { storagePhotoUploadToken: 'a'.repeat(48) },
     )
 
     expect(result).toMatchObject({
       foundAt: '2026-07-13',
       privateFeature: '蓝色卡套',
-      storagePhotoFileId: 'cloud://storage.jpg',
+      storagePhotoUploadToken: 'a'.repeat(48),
     })
     expect(result).not.toHaveProperty('photoPath')
     expect(result).not.toHaveProperty('storagePhotoPath')

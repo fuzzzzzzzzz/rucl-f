@@ -32,6 +32,7 @@
 | `identityCorrectionRequests` | `status` 升序、`createdAt` 降序               |
 | `recordReports`              | `status` 升序、`createdAt` 降序               |
 | `fileCleanupJobs`            | `status` 升序、`notBefore` 升序               |
+| `uploadedFiles`              | `fileId` 升序                                 |
 | `uploadedFiles`              | `referenced` 升序、`createdAt` 升序           |
 | `auditLogs`                  | `openid`、`action` 升序，`createdAt` 降序     |
 
@@ -39,7 +40,15 @@
 
 ## 3. 云存储规则
 
-进入“云开发 → 云存储 → 权限设置 → 自定义安全规则”，应用 `security/storage.rules.json`：
+免费开发环境不支持自定义云存储规则。在“云开发 → 云存储 → 权限”中保持：
+
+> 仅创建者可读写
+
+长期保存的存放环境照片和取卡证明不由小程序直接调用 `wx.cloud.uploadFile`。小程序先把照片压缩到 1MB 以内，再调用 `uploadPrivateImage`；云函数保存文件并只向小程序返回一次性随机凭证，不返回文件 ID。后续发布、转交或完成交接时，云函数核对凭证所属账号和用途，业务记录中只保存服务端文件 ID。
+
+校园卡原图是例外：它只上传到 `temporary-cards/{openid}` 供 OCR 使用，识别函数在 `finally` 中立即删除；删除失败会进入 `fileCleanupJobs`。
+
+`security/storage.rules.json` 保留为将来升级到支持自定义规则的套餐时使用的更严格配置：
 
 ```json
 {
@@ -48,9 +57,7 @@
 }
 ```
 
-客户端不能读取文件；只有创建者可以写入。客户端把图片上传到 `temporary-cards/{openid}`、`storage-scenes/{openid}`、`handover-proofs/{openid}`，云函数会再次检查目录和上传登记。环境照片只有云函数完成认领权限检查后才生成短时地址；取卡照片只有管理员处理争议时能生成短时地址。
-
-规则保存后通常需要等待控制台生效，再按 `docs/RELEASE-GATE.md` 使用四类身份实测。
+在免费方案中，长期照片由云函数创建，因此普通小程序账号不是文件创建者。环境照片只有云函数完成认领权限检查后才生成短时地址；取卡照片只有管理员处理争议时能生成短时地址。这个边界仍必须按 `docs/RELEASE-GATE.md` 使用四类身份真机实测，不能只依赖代码判断。
 
 ## 4. 云函数与环境变量
 
