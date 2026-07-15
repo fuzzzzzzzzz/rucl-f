@@ -13,8 +13,8 @@
   ],
   "allowedDirectHigh": ["wx-server-sdk"],
   "locks": {
-    "cloudfunctions/api/package-lock.json": "13138BA04785632D578EC45F127CFFB6D2064967B7A901BB4C50D77856EB1D57",
-    "cloudfunctions/processCardImage/package-lock.json": "1E918A5D28BDB6389AB047F5F8D5C6D477B9AE19CD4B7C9294640F9B9C7B9DFF",
-    "cloudfunctions/scheduledCleanup/package-lock.json": "C7307F8FD215E781A1250864C11BC358129FCF274813BE46F9BEA49206235B7F"
+    "cloudfunctions/api/package-lock.json": "46314267CEFF6D1AB9D51C8C59CC59011325C73334333377904CD863AC93F644",
+    "cloudfunctions/processCardImage/package-lock.json": "735A663DE7A15D316BA36961DEC8969C93DEC942371CD1237E9A63CD02BC3FF8",
+    "cloudfunctions/scheduledCleanup/package-lock.json": "60A8118D0B8928581E7954F9318CDBE0FBB90C1414BCF38C91308391E0C87765"
   }
 }
