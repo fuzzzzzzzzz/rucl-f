@@ -1,9 +1,8 @@
 {
   "name": "campus-card-image-processor",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "main": "index.js",
   "dependencies": {
-    "sharp": "^0.34.2",
     "wx-server-sdk": "4.0.2"
   }
 }

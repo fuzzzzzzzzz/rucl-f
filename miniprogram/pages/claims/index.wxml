@@ -7,7 +7,18 @@
     <view class="claim-head"><view><view class="claim-name">{{item.maskedName}} · {{item.category}}</view><view class="number">{{item.maskedStudentNumber}}</view></view><view class="claim-status status-{{item.status}}">{{item.statusText}}</view></view>
     <view class="claim-meta"><text>{{item.campusName}}</text><text>{{item.createdAt}}</text></view>
     <view wx:if="{{item.officialStoragePoint}}" class="handover-point"><b>交接地点</b><text>{{item.officialStoragePoint}}</text><small>请携带有效校园证件，由工作人员核对后完成交接。</small></view>
-    <view wx:elif="{{item.status === 'approved'}}" class="claim-note">该卡尚未登记为官方交卡点，请等待管理员安排交接。</view>
-    <view wx:elif="{{item.status === 'review'}}" class="claim-note">存在多条相似记录，管理员核对完成前不会展示存放地点。</view>
+    <image wx:if="{{item.storagePhotoUrl}}" class="storage-photo" src="{{item.storagePhotoUrl}}" mode="aspectFill" />
+    <view wx:elif="{{item.status === 'awaiting_official_transfer'}}" class="claim-note">卡片暂由拾卡者保管，正在转交官方地点；此时不会显示拾卡者的位置。</view>
+    <view wx:elif="{{item.status === 'admin_review'}}" class="claim-note">存在多条相似记录，管理员核对完成前不会展示存放地点和照片。</view>
+    <view wx:if="{{item.status === 'ready_for_pickup'}}" class="complete-panel">
+      <view class="proof-title">领取后，请现场拍摄校园卡</view>
+      <view class="proof-help">该照片只是交接记录，不代表学校身份核验；发生争议时由管理员处理。</view>
+      <view class="proof-camera" data-id="{{item.id}}" bindtap="chooseProof">
+        <image wx:if="{{proofPaths[item.id]}}" src="{{proofPaths[item.id]}}" mode="aspectFill" />
+        <block wx:else><image src="/assets/icons/photo-camera.png" mode="aspectFit" /><text>现场拍摄已取到的卡</text></block>
+      </view>
+      <textarea class="thanks-input" data-id="{{item.id}}" maxlength="30" placeholder="给拾卡同学一句感谢（选填，最多30字）" bindinput="onThanks" />
+      <button class="complete-button" data-id="{{item.id}}" loading="{{busyId === item.id}}" disabled="{{busyId}}" bindtap="confirmReceived">我已取到卡，完成任务</button>
+    </view>
   </view>
 </view>

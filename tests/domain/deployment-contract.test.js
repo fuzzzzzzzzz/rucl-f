@@ -58,4 +58,30 @@ describe('cloud deployment contract', () => {
 
     expect(server).toMatch(/getOptionalDocument\(\s*transaction\.collection\(['"]claims['"]\)\.doc\(claimId\)\s*\)/)
   })
+
+  it('never falls back to local records after a formal cloud login failure', () => {
+    const app = fs.readFileSync(path.join(root, 'miniprogram/app.ts'), 'utf8')
+
+    expect(app).toContain("runtimeMode = 'cloud_error'")
+    expect(app).not.toMatch(/\.catch\([\s\S]*?dataMode\s*=\s*['"]local['"]/)
+  })
+
+  it('keeps sensitive cloud files unreadable to clients and uploads under the current user namespace', () => {
+    const rules = JSON.parse(fs.readFileSync(path.join(root, 'security/storage.rules.json'), 'utf8'))
+    const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
+    const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
+
+    expect(rules.read).toBe(false)
+    expect(rules.write).toContain('auth.openid')
+    expect(client).toContain('uploadNamespace')
+    expect(server).toContain('uploadNamespace: openid')
+    expect(server).toContain('maxAge: 600')
+  })
+
+  it('ships a manual release gate for secret rotation, storage rules and three-account testing', () => {
+    const checklist = fs.readFileSync(path.join(root, 'docs/RELEASE-GATE.md'), 'utf8')
+    expect(checklist).toContain('AppSecret')
+    expect(checklist).toContain('云存储')
+    expect(checklist).toContain('拾卡者、失主、管理员')
+  })
 })

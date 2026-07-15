@@ -1,6 +1,9 @@
 import type {
   AdminClaimReviewItem,
   AdminIdentityReviewItem,
+  AdminOperationSummary,
+  AccountSettings,
+  AchievementProgress,
   CardCategory,
   ClaimSummary,
   FoundCardInput,
@@ -9,13 +12,13 @@ import type {
   LostHistoryItem,
   MessageSummary,
   PublicCard,
+  ThanksWallItem,
   UserProfileInput,
 } from '../shared/models'
-import type { IdentityStatus } from '../shared/models'
+import type { ProfileBindingStatus } from '../shared/models'
 import type { CardStatus } from '../shared/workflow'
 
 interface CloudAssetIds {
-  maskedImageFileId?: string
   storagePhotoFileId?: string
 }
 
@@ -30,11 +33,12 @@ interface CloudPublicCard {
   status: CardStatus
   officialStoragePoint?: string
   needsAdminReview?: boolean
+  awaitingOfficialTransfer?: boolean
+  storagePhotoUrl?: string
   [key: string]: unknown
 }
 
 interface ImageProcessingResult {
-  maskedFileId?: string
   ocrLines?: string[]
   requiresPublisherConfirmation?: boolean
 }
@@ -79,9 +83,16 @@ export function buildCloudFoundCardInput(input: FoundCardInput, assets: CloudAss
     storageLocation: input.storageLocation,
     foundAt: input.foundDate,
     privateFeature: input.feature || '',
-    maskedImageFileId: assets.maskedImageFileId || '',
     storagePhotoFileId: assets.storagePhotoFileId || '',
   }
+}
+
+export function extractCardIdentity(lines: string[] = []): { name: string; studentNumber: string } {
+  const normalized = lines.map((line) => String(line || '').trim()).filter(Boolean)
+  const studentNumber = normalized.map((line) => line.match(/\b\d{10}\b/)?.[0] || '').find(Boolean) || ''
+  const ignored = /中国人民大学|校园卡|学生卡|本科生|硕士生|博士生|教职工|学号|姓名|无法识别/
+  const name = normalized.find((line) => /^[\u4e00-\u9fa5·]{2,6}$/.test(line) && !ignored.test(line)) || ''
+  return { name, studentNumber }
 }
 
 export function normalizeCloudPublicCard(card: CloudPublicCard): PublicCard {
@@ -97,6 +108,8 @@ export function normalizeCloudPublicCard(card: CloudPublicCard): PublicCard {
     status: card.status,
     ...(card.officialStoragePoint ? { officialStoragePoint: card.officialStoragePoint } : {}),
     ...(card.needsAdminReview ? { needsAdminReview: true } : {}),
+    ...(card.awaitingOfficialTransfer ? { awaitingOfficialTransfer: true } : {}),
+    ...(card.storagePhotoUrl ? { storagePhotoUrl: card.storagePhotoUrl } : {}),
   }
 }
 
@@ -118,7 +131,9 @@ export async function callCloudApi<T>(action: string, input: Record<string, unkn
 }
 
 function uniqueCloudPath(directory: string, extension: string): string {
-  return `${directory}/${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
+  const uploadNamespace = getApp<IAppOption>().globalData.uploadNamespace
+  if (!uploadNamespace) throw new Error('云端登录尚未完成，请稍后重试')
+  return `${directory}/${uploadNamespace}/${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
 }
 
 export async function uploadStoragePhoto(filePath: string): Promise<string> {
@@ -127,6 +142,7 @@ export async function uploadStoragePhoto(filePath: string): Promise<string> {
     cloudPath: uniqueCloudPath('storage-scenes', 'jpg'),
     filePath,
   })
+  await callCloudApi('registerUploadedFile', { fileId: uploaded.fileID, kind: 'storage_scene' })
   return uploaded.fileID
 }
 
@@ -153,25 +169,22 @@ export async function removeCloudFiles(fileIds: string[]): Promise<void> {
   if (fileList.length) await wx.cloud.deleteFile({ fileList })
 }
 
-export async function syncUserProfile(input: UserProfileInput): Promise<{ identityStatus: IdentityStatus }> {
+export async function syncUserProfile(
+  input: UserProfileInput,
+): Promise<{ profileBindingStatus: ProfileBindingStatus }> {
   return callCloudApi('saveUserProfile', input as unknown as Record<string, unknown>)
 }
 
 export async function createCloudFoundCard(input: FoundCardInput): Promise<{ id: string }> {
-  let maskedImageFileId = ''
   let storagePhotoFileId = ''
   try {
-    if (input.photoPath) {
-      const processed = await processCardPhoto(input.photoPath)
-      maskedImageFileId = processed.maskedFileId || ''
-    }
     if (input.storagePhotoPath) storagePhotoFileId = await uploadStoragePhoto(input.storagePhotoPath)
     return await callCloudApi<{ id: string }>(
       'createFoundCard',
-      buildCloudFoundCardInput(input, { maskedImageFileId, storagePhotoFileId }),
+      buildCloudFoundCardInput(input, { storagePhotoFileId }),
     )
   } catch (error) {
-    await removeCloudFiles([maskedImageFileId, storagePhotoFileId]).catch(() => undefined)
+    await removeCloudFiles([storagePhotoFileId]).catch(() => undefined)
     throw error
   }
 }
@@ -232,8 +245,16 @@ export async function submitCloudClaim(
   cardId: string,
   studentNumber: string,
   privateFeature: string,
-): Promise<{ id: string; decision: 'review' | 'approved' }> {
-  return callCloudApi('submitClaim', { cardId, studentNumber, privateFeature })
+): Promise<{ id: string; status: ClaimSummary['status']; card?: PublicCard }> {
+  const result = await callCloudApi<{ id: string; status: ClaimSummary['status']; card?: CloudPublicCard }>(
+    'submitClaim',
+    { cardId, studentNumber, privateFeature },
+  )
+  return {
+    id: result.id,
+    status: result.status,
+    ...(result.card ? { card: normalizeCloudPublicCard(result.card) } : {}),
+  }
 }
 
 export async function listCloudClaims(): Promise<ClaimSummary[]> {
@@ -254,13 +275,12 @@ export async function listCloudPendingIdentities(): Promise<AdminIdentityReviewI
   }))
 }
 
-export async function reviewCloudIdentity(
-  userId: string,
-  decision: 'approved' | 'rejected',
-  verifiedName = '',
-  verifiedStudentNumber = '',
-): Promise<void> {
-  await callCloudApi('reviewIdentityProfile', { userId, decision, verifiedName, verifiedStudentNumber })
+export async function reviewCloudIdentity(requestId: string, decision: 'approved' | 'rejected'): Promise<void> {
+  await callCloudApi('reviewIdentityProfile', { requestId, decision })
+}
+
+export async function requestCloudIdentityCorrection(reason: string): Promise<void> {
+  await callCloudApi('requestIdentityCorrection', { reason })
 }
 
 export async function listCloudAdminClaims(): Promise<AdminClaimReviewItem[]> {
@@ -278,4 +298,110 @@ export async function reviewCloudClaim(claimId: string, decision: 'approved' | '
 
 export async function completeCloudHandover(claimId: string): Promise<void> {
   await callCloudApi('completeHandover', { claimId })
+}
+
+export async function transferCloudFoundCardToOfficial(
+  cardId: string,
+  storageLocation: FoundCardInput['storageLocation'],
+  storagePhotoPath = '',
+): Promise<void> {
+  let storagePhotoFileId = ''
+  try {
+    if (storagePhotoPath) storagePhotoFileId = await uploadStoragePhoto(storagePhotoPath)
+    await callCloudApi('transferFoundCardToOfficial', { cardId, storageLocation, storagePhotoFileId })
+  } catch (error) {
+    await removeCloudFiles([storagePhotoFileId]).catch(() => undefined)
+    throw error
+  }
+}
+
+export async function confirmCloudClaimHandover(
+  claimId: string,
+  proofPath: string,
+  thanksText = '',
+): Promise<{ status: 'returned'; thanksAccepted: boolean }> {
+  const uploaded = await wx.cloud.uploadFile({
+    cloudPath: uniqueCloudPath('handover-proofs', 'jpg'),
+    filePath: proofPath,
+  })
+  try {
+    await callCloudApi('registerUploadedFile', { fileId: uploaded.fileID, kind: 'handover_proof' })
+    return await callCloudApi('confirmClaimHandover', { claimId, proofFileId: uploaded.fileID, thanksText })
+  } catch (error) {
+    await removeCloudFiles([uploaded.fileID]).catch(() => undefined)
+    throw error
+  }
+}
+
+export async function closeCloudRecord(type: 'found' | 'lost', recordId: string, reason: string): Promise<void> {
+  await callCloudApi('closeOwnRecord', { type, recordId, reason })
+}
+
+export async function reportCloudRecord(
+  type: 'found' | 'lost' | 'claim',
+  recordId: string,
+  reason: string,
+): Promise<void> {
+  await callCloudApi('reportRecord', { type, recordId, reason })
+}
+
+export async function getCloudAccountSettings(): Promise<AccountSettings> {
+  return callCloudApi('getAccountSettings')
+}
+
+export async function updateCloudNotificationPreferences(
+  notificationPreferences: AccountSettings['notificationPreferences'],
+): Promise<void> {
+  await callCloudApi('updateNotificationPreferences', { notificationPreferences })
+}
+
+export async function submitCloudAccountRequest(type: 'feedback' | 'data_deletion', content: string): Promise<void> {
+  await callCloudApi('submitAccountRequest', { type, content })
+}
+
+export async function listCloudAchievements(): Promise<AchievementProgress[]> {
+  return callCloudApi('listMyAchievements')
+}
+
+export async function listCloudThanksWall(): Promise<ThanksWallItem[]> {
+  const rows =
+    await callCloudApi<Array<Omit<ThanksWallItem, 'createdAt'> & { createdAt: string | Date }>>('listThanksWall')
+  return rows.map((row) => ({ ...row, createdAt: dateOnly(row.createdAt) }))
+}
+
+export async function listCloudAdminOperations(): Promise<AdminOperationSummary> {
+  return callCloudApi('listAdminOperations')
+}
+
+export async function reviewCloudRiskHandover(
+  handoverId: string,
+  decision: 'valid' | 'invalid',
+  officialPointVerified: boolean,
+): Promise<void> {
+  await callCloudApi('reviewRiskHandover', { handoverId, decision, officialPointVerified })
+}
+
+export async function resolveCloudAdminOperation(
+  collection: 'recordReports' | 'dataDeletionRequests' | 'feedback',
+  id: string,
+  status: 'resolved' | 'rejected',
+): Promise<void> {
+  await callCloudApi('resolveAdminOperation', { collection, id, status })
+}
+
+export async function forceCloseCloudRecord(type: 'found' | 'lost', recordId: string): Promise<void> {
+  await callCloudApi('forceCloseRecord', { type, recordId })
+}
+
+export async function mergeCloudDuplicateFoundCards(canonicalId: string, duplicateId: string): Promise<void> {
+  await callCloudApi('mergeDuplicateFoundCards', { canonicalId, duplicateId })
+}
+
+export async function setCloudUserRestriction(userId: string, blocked: boolean): Promise<void> {
+  await callCloudApi('setUserRestriction', { userId, blocked })
+}
+
+export async function getCloudHandoverProof(handoverId: string): Promise<string> {
+  const result = await callCloudApi<{ url: string }>('getHandoverProof', { handoverId })
+  return result.url
 }

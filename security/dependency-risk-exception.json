@@ -1,0 +1,20 @@
+{
+  "createdAt": "2026-07-14",
+  "reviewBy": "2026-08-13",
+  "reason": "微信官方最新版 wx-server-sdk 4.0.2 的间接依赖告警；npm 建议的自动修复会降级到旧主版本 2.5.3。业务代码不接受用户提供的外部请求 URL，云函数对输入长度、路径、身份和状态分别检查。",
+  "upstream": "https://www.npmjs.com/package/wx-server-sdk",
+  "allowedVulnerabilities": [
+    "@cloudbase/database",
+    "@cloudbase/node-sdk",
+    "axios",
+    "lodash.set",
+    "lodash.unset",
+    "wx-server-sdk"
+  ],
+  "allowedDirectHigh": ["wx-server-sdk"],
+  "locks": {
+    "cloudfunctions/api/package-lock.json": "13138BA04785632D578EC45F127CFFB6D2064967B7A901BB4C50D77856EB1D57",
+    "cloudfunctions/processCardImage/package-lock.json": "1E918A5D28BDB6389AB047F5F8D5C6D477B9AE19CD4B7C9294640F9B9C7B9DFF",
+    "cloudfunctions/scheduledCleanup/package-lock.json": "C7307F8FD215E781A1250864C11BC358129FCF274813BE46F9BEA49206235B7F"
+  }
+}

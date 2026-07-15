@@ -1,5 +1,6 @@
 <view class="page home-page">
   <view class="topbar">失卡招领<text class="en">RUC CAMPUS CARD</text></view>
+  <view wx:if="{{cloudError}}" class="cloud-error"><view><b>云端服务暂不可用</b><text>{{cloudError}}</text><text>为避免把假数据当成真实记录，当前不会改用本机数据。</text></view><button loading="{{retrying}}" bindtap="retryCloud">重试</button></view>
   <view class="hero-grid">
     <view class="hero-action lost" bindtap="goLost"><image class="action-icon" src="/assets/icons/search-off-white.png" mode="aspectFit" /><view>我丢卡了</view><text class="en">[ I LOST MY CARD ]</text></view>
     <view class="hero-action found" bindtap="goFound"><image class="action-icon" src="/assets/icons/front-hand.png" mode="aspectFit" /><view>我捡到卡了</view><text class="en">[ I FOUND A CARD ]</text></view>
@@ -8,7 +9,7 @@
     <view class="section-heading"><image class="section-icon" src="/assets/icons/info.png" mode="aspectFit" /><view class="section-title">使用说明<text class="en">[ HOW IT WORKS ]</text></view></view><view class="rule" />
     <view class="guide-row"><text class="guide-number number">1</text><text>系统会核对你填写的姓名和学号；</text></view>
     <view class="guide-row"><text class="guide-number number">2</text><text>其他人只能看到隐藏后的姓名和学号；</text></view>
-    <view class="guide-row"><text class="guide-number number">3</text><text>姓名学号一致后，即可查看交卡地点。</text></view>
+    <view class="guide-row"><text class="guide-number number">3</text><text>姓名学号一致且卡片已在官方地点后，才会显示存放地点。</text></view>
     <view class="profile-status" bindtap="goProfileEdit">
       <view class="profile-status-copy">
         <block wx:if="{{hasProfile}}"><view>■ 姓名：{{maskedName}}</view><view>■ 学号：{{maskedStudentNumber}}</view><view>■ 状态：{{profileStatus}}</view></block>

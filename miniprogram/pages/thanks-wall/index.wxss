@@ -1,0 +1,31 @@
+.wall-note {
+  border: 4rpx solid #191919;
+  background: #ffec00;
+  padding: 22rpx;
+  line-height: 1.55;
+}
+.thanks-card {
+  display: flex;
+  gap: 20rpx;
+  border: 5rpx solid #191919;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  background: #fff;
+  margin: 24rpx 8rpx 32rpx 0;
+  padding: 24rpx;
+}
+.thanks-card image {
+  width: 68rpx;
+  height: 68rpx;
+  flex: 0 0 68rpx;
+}
+.thanks-text {
+  font-size: 28rpx;
+  font-weight: 900;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.thanks-meta {
+  font-size: 21rpx;
+  color: #655f58;
+  margin-top: 12rpx;
+}

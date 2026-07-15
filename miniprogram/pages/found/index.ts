@@ -1,4 +1,5 @@
 import { campuses, submitFoundCard } from '../../services/card-service'
+import { extractCardIdentity, processCardPhoto } from '../../services/cloud-card-service'
 import type { CardCategory, DetailedLocation } from '../../shared/models'
 import { getAreaOptions, getCategoryOptions, getPlaceOptions } from '../../shared/ruc-locations'
 import { cardCategories, validateRucStudentNumber } from '../../shared/ruc'
@@ -27,6 +28,7 @@ Page({
     photoPath: '',
     storagePhotoPath: '',
     busy: false,
+    photoBusy: false,
     pickupCategories: initialPickup.categories,
     pickupCategoryIndex: initialPickup.categoryIndex,
     pickupPlaces: initialPickup.places,
@@ -50,8 +52,26 @@ Page({
       count: 1,
       mediaType: ['image'],
       sourceType: ['camera', 'album'],
-      success: ({ tempFiles }) => this.setData({ photoPath: tempFiles[0].tempFilePath }),
+      success: ({ tempFiles }) => void this.recognizePhoto(tempFiles[0].tempFilePath),
     })
+  },
+  async recognizePhoto(photoPath: string) {
+    this.setData({ photoPath, photoBusy: true })
+    try {
+      const processed = await processCardPhoto(photoPath)
+      const identity = extractCardIdentity(processed.ocrLines || [])
+      this.setData({
+        ...(identity.name ? { name: identity.name } : {}),
+        ...(identity.studentNumber ? { studentNumber: identity.studentNumber } : {}),
+      })
+      if (!identity.name || !identity.studentNumber) {
+        wx.showToast({ title: '部分信息未识别，请手动填写并检查', icon: 'none' })
+      }
+    } catch (error) {
+      wx.showToast({ title: error instanceof Error ? error.message : '识别失败，请手动填写', icon: 'none' })
+    } finally {
+      this.setData({ photoBusy: false })
+    }
   },
   chooseStoragePhoto() {
     wx.chooseMedia({

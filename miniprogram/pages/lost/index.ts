@@ -23,6 +23,8 @@ Page({
     claimFeature: '',
     claimSubmitting: false,
     claimedCardId: '',
+    informationRevealed: false,
+    revealedStoragePhotoUrl: '',
   },
   async onShow() {
     this.getTabBar().setData({ selected: 1 })
@@ -102,9 +104,25 @@ Page({
     try {
       this.setData({ claimSubmitting: true })
       const claim = await submitCardClaim(this.data.selectedClaimCardId, profile.studentNumber, this.data.claimFeature)
-      this.setData({ claimedCardId: this.data.selectedClaimCardId, selectedClaimCardId: '', claimFeature: '' })
+      const claimedCardId = this.data.selectedClaimCardId
+      const results = claim.card
+        ? this.data.results.map((item) => (item.id === claimedCardId ? { ...item, ...claim.card } : item))
+        : this.data.results
+      this.setData({
+        claimedCardId,
+        selectedClaimCardId: '',
+        claimFeature: '',
+        results,
+        informationRevealed: claim.status === 'ready_for_pickup',
+        revealedStoragePhotoUrl: claim.card?.storagePhotoUrl || '',
+      })
       wx.showToast({
-        title: claim.decision === 'review' ? '有多条记录，等待管理员核对' : '姓名和学号一致，已确认',
+        title:
+          claim.status === 'admin_review'
+            ? '有多条记录，等待管理员核对'
+            : claim.status === 'awaiting_official_transfer'
+              ? '姓名和学号一致，等待转交官方地点'
+              : '姓名和学号一致',
         icon: 'none',
         duration: 2500,
       })

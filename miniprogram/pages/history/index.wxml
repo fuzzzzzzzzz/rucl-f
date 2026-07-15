@@ -9,6 +9,8 @@
       <view class="meta"><text>{{item.campusName}}</text><text class="number">{{item.foundAt}}</text></view>
       <view class="location"><b>拾取地点</b><text>{{item.pickupSummary}}</text></view>
       <view class="location storage"><b>存放地点</b><text>{{item.storageSummary}}</text></view>
+      <button wx:if="{{item.needsOfficialTransfer}}" class="transfer-button" data-id="{{item.id}}" data-campus="{{item.campusId}}" bindtap="goTransfer">登记已转交的官方地点</button>
+      <view wx:if="{{item.status !== 'returned' && item.status !== 'closed'}}" class="record-actions"><button data-id="{{item.id}}" bindtap="reportItem">举报</button><button data-id="{{item.id}}" bindtap="closeItem">关闭记录</button></view>
     </view>
   </block>
   <block wx:else>
@@ -17,6 +19,7 @@
       <view class="card-head"><view><view class="card-name">{{item.maskedName}} · {{item.category}}</view><view class="student-number number">{{item.maskedStudentNumber}}</view></view><view class="status yellow-status">{{item.statusText}}</view></view>
       <view class="meta"><text>{{item.campusName}}</text><text class="number">{{item.lostAt}}</text></view>
       <view class="location"><b>大概丢失地点</b><text>{{item.locationDescription}}</text></view>
+      <view wx:if="{{item.status !== 'returned' && item.status !== 'closed'}}" class="record-actions"><button data-id="{{item.id}}" bindtap="reportItem">举报</button><button data-id="{{item.id}}" bindtap="closeItem">关闭记录</button></view>
     </view>
   </block>
 </view>

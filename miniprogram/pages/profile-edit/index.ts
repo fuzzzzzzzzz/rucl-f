@@ -1,4 +1,10 @@
-import { campuses, getUserProfile, saveUserProfile } from '../../services/card-service'
+import {
+  campuses,
+  getAccountSettings,
+  getUserProfile,
+  requestIdentityCorrection,
+  saveUserProfile,
+} from '../../services/card-service'
 import type { CardCategory } from '../../shared/models'
 import { cardCategories, validateRucStudentNumber } from '../../shared/ruc'
 
@@ -12,9 +18,17 @@ Page({
     studentNumber: '',
     busy: false,
     identityLocked: false,
+    correctionPending: false,
+    correctionReason: '',
     identityStatusText: '首次保存后，姓名和学号将锁定并用于找卡。',
   },
   async onLoad() {
+    try {
+      const settings = await getAccountSettings()
+      getApp<IAppOption>().globalData.profileBindingStatus = settings.profileBindingStatus
+    } catch {
+      // 正式环境故障时保存动作仍会由云函数拒绝，页面保留可重试提示。
+    }
     const profile = await getUserProfile()
     if (!profile) return
     this.setData({
@@ -25,12 +39,14 @@ Page({
         0,
         campuses.findIndex((item) => item.id === profile.campusId),
       ),
-      identityLocked: profile.identityStatus === 'pending' || profile.identityStatus === 'verified',
+      identityLocked:
+        profile.profileBindingStatus === 'locked' || profile.profileBindingStatus === 'correction_pending',
+      correctionPending: profile.profileBindingStatus === 'correction_pending',
       identityStatusText:
-        profile.identityStatus === 'verified'
-          ? '姓名和学号已登记；如需更换，请联系管理员。'
-          : profile.identityStatus === 'pending'
-            ? '资料正在处理中；姓名和学号已锁定。'
+        profile.profileBindingStatus === 'locked'
+          ? '姓名和学号已锁定；这只表示资料已登记，不代表学校身份核验。'
+          : profile.profileBindingStatus === 'correction_pending'
+            ? '资料修改申请正在处理；姓名和学号暂时保持锁定。'
             : '本机演示模式只核对姓名和学号。',
     })
   },
@@ -45,6 +61,24 @@ Page({
   },
   onCampusChange(e: WechatMiniprogram.PickerChange) {
     this.setData({ campusIndex: Number(e.detail.value) })
+  },
+  onCorrectionReason(e: WechatMiniprogram.Input) {
+    this.setData({ correctionReason: e.detail.value.slice(0, 160) })
+  },
+  async requestCorrection() {
+    if (this.data.correctionReason.trim().length < 4) {
+      return wx.showToast({ title: '请简单说明修改原因', icon: 'none' })
+    }
+    try {
+      this.setData({ busy: true })
+      await requestIdentityCorrection(this.data.correctionReason.trim())
+      this.setData({ correctionPending: true, identityStatusText: '资料修改申请正在处理，姓名和学号暂时保持锁定。' })
+      wx.showToast({ title: '修改申请已提交', icon: 'none' })
+    } catch (error) {
+      wx.showToast({ title: error instanceof Error ? error.message : '提交失败', icon: 'none' })
+    } finally {
+      this.setData({ busy: false })
+    }
   },
   async save() {
     const result = validateRucStudentNumber(this.data.studentNumber)

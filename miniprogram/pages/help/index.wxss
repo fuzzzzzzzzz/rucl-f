@@ -1,0 +1,6 @@
+.step {
+  font-size: 25rpx;
+  line-height: 1.7;
+  margin: 16rpx 0;
+  overflow-wrap: anywhere;
+}

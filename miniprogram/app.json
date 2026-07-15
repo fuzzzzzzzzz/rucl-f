@@ -8,6 +8,12 @@
     "pages/messages/index",
     "pages/history/index",
     "pages/claims/index",
+    "pages/transfer/index",
+    "pages/settings/index",
+    "pages/help/index",
+    "pages/privacy/index",
+    "pages/achievements/index",
+    "pages/thanks-wall/index",
     "pages/admin/index"
   ],
   "window": {

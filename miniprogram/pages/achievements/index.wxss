@@ -1,0 +1,62 @@
+.award-card {
+  display: flex;
+  gap: 24rpx;
+  border: 5rpx solid #191919;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  background: #d4d1cb;
+  margin: 22rpx 8rpx 30rpx 0;
+  padding: 22rpx;
+}
+.award-card.unlocked:nth-child(odd) {
+  background: #ffec00;
+}
+.award-card.unlocked:nth-child(even) {
+  background: #20d6b5;
+}
+.award-icon {
+  box-sizing: border-box;
+  width: 96rpx;
+  height: 96rpx;
+  flex: 0 0 96rpx;
+  border: 4rpx solid #191919;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.award-icon image {
+  width: 68rpx;
+  height: 68rpx;
+}
+.award-copy {
+  flex: 1;
+  min-width: 0;
+}
+.award-name {
+  font-size: 30rpx;
+  font-weight: 900;
+}
+.award-desc {
+  font-size: 22rpx;
+  line-height: 1.45;
+  margin: 6rpx 0;
+}
+.progress {
+  height: 14rpx;
+  border: 3rpx solid #191919;
+  background: #fff;
+}
+.progress view {
+  height: 100%;
+  background: #f04418;
+}
+.number {
+  font-size: 18rpx;
+  margin-top: 5rpx;
+}
+.note {
+  border: 4rpx solid #191919;
+  padding: 20rpx;
+  font-size: 21rpx;
+  line-height: 1.55;
+}

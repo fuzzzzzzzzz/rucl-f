@@ -1,0 +1,33 @@
+.notice {
+  margin-bottom: 28rpx;
+  background: #ffec00;
+  line-height: 1.65;
+}
+
+.picker-field image {
+  width: 42rpx;
+  height: 42rpx;
+}
+
+.photo {
+  display: flex;
+  min-height: 230rpx;
+  margin: 24rpx 0 30rpx;
+  align-items: center;
+  justify-content: center;
+  border: 4rpx dashed #191919;
+  background: #efede8;
+  font-weight: 900;
+}
+
+.photo image {
+  width: 60rpx;
+  height: 60rpx;
+  margin-right: 12rpx;
+}
+
+.photo > image:first-child:last-child {
+  width: 100%;
+  height: 300rpx;
+  margin: 0;
+}

@@ -81,3 +81,25 @@
   padding-top: 18rpx;
   border-top: 2rpx dashed #8d8982;
 }
+
+.transfer-button {
+  margin-top: 20rpx;
+  border: 4rpx solid #191919;
+  border-radius: 0;
+  box-shadow: 6rpx 6rpx 0 #191919;
+  background: #18d9aa;
+  font-size: 23rpx;
+  font-weight: 900;
+}
+.record-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+.record-actions button {
+  border: 3rpx solid #191919;
+  border-radius: 0;
+  font-size: 23rpx;
+  font-weight: 900;
+}
