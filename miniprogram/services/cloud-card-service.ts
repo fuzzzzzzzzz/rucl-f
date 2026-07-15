@@ -18,8 +18,12 @@ import type {
 import type { ProfileBindingStatus } from '../shared/models'
 import type { CardStatus } from '../shared/workflow'
 
-interface CloudAssetIds {
-  storagePhotoFileId?: string
+interface CloudAssetTokens {
+  storagePhotoUploadToken?: string
+}
+
+interface PrivateUploadResult {
+  uploadToken: string
 }
 
 interface CloudPublicCard {
@@ -73,7 +77,7 @@ const campusNames: Record<string, string> = {
   tongzhou: '通州校区',
 }
 
-export function buildCloudFoundCardInput(input: FoundCardInput, assets: CloudAssetIds) {
+export function buildCloudFoundCardInput(input: FoundCardInput, assets: CloudAssetTokens) {
   return {
     name: input.name,
     studentNumber: input.studentNumber,
@@ -83,7 +87,7 @@ export function buildCloudFoundCardInput(input: FoundCardInput, assets: CloudAss
     storageLocation: input.storageLocation,
     foundAt: input.foundDate,
     privateFeature: input.feature || '',
-    storagePhotoFileId: assets.storagePhotoFileId || '',
+    storagePhotoUploadToken: assets.storagePhotoUploadToken || '',
   }
 }
 
@@ -136,14 +140,52 @@ function uniqueCloudPath(directory: string, extension: string): string {
   return `${directory}/${uploadNamespace}/${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
 }
 
-export async function uploadStoragePhoto(filePath: string): Promise<string> {
-  if (!filePath) return ''
-  const uploaded = await wx.cloud.uploadFile({
-    cloudPath: uniqueCloudPath('storage-scenes', 'jpg'),
-    filePath,
+const MAX_PRIVATE_IMAGE_BYTES = 1024 * 1024
+
+function compressPrivateImage(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    wx.compressImage({
+      src: filePath,
+      quality: 55,
+      success: ({ tempFilePath }) => resolve(tempFilePath),
+      fail: reject,
+    })
   })
-  await callCloudApi('registerUploadedFile', { fileId: uploaded.fileID, kind: 'storage_scene' })
-  return uploaded.fileID
+}
+
+function readFileAsBase64(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    wx.getFileSystemManager().readFile({
+      filePath,
+      encoding: 'base64',
+      success: ({ data }) => resolve(String(data)),
+      fail: reject,
+    })
+  })
+}
+
+async function uploadPrivateImage(filePath: string, kind: 'storage_scene' | 'handover_proof'): Promise<string> {
+  if (!filePath) return ''
+  const compressedPath = await compressPrivateImage(filePath)
+  const contentBase64 = await readFileAsBase64(compressedPath)
+  const estimatedBytes = Math.floor((contentBase64.replace(/=+$/, '').length * 3) / 4)
+  if (!contentBase64 || estimatedBytes > MAX_PRIVATE_IMAGE_BYTES) {
+    throw new Error('照片压缩后仍然过大，请重新拍摄并减少画面细节')
+  }
+  const result = await callCloudApi<PrivateUploadResult>('uploadPrivateImage', {
+    kind,
+    mimeType: 'image/jpeg',
+    contentBase64,
+  })
+  return result.uploadToken
+}
+
+async function discardPrivateUpload(uploadToken: string): Promise<void> {
+  if (uploadToken) await callCloudApi('discardPrivateUpload', { uploadToken })
+}
+
+export async function uploadStoragePhoto(filePath: string): Promise<string> {
+  return uploadPrivateImage(filePath, 'storage_scene')
 }
 
 export async function processCardPhoto(filePath: string): Promise<ImageProcessingResult> {
@@ -176,15 +218,15 @@ export async function syncUserProfile(
 }
 
 export async function createCloudFoundCard(input: FoundCardInput): Promise<{ id: string }> {
-  let storagePhotoFileId = ''
+  let storagePhotoUploadToken = ''
   try {
-    if (input.storagePhotoPath) storagePhotoFileId = await uploadStoragePhoto(input.storagePhotoPath)
+    if (input.storagePhotoPath) storagePhotoUploadToken = await uploadStoragePhoto(input.storagePhotoPath)
     return await callCloudApi<{ id: string }>(
       'createFoundCard',
-      buildCloudFoundCardInput(input, { storagePhotoFileId }),
+      buildCloudFoundCardInput(input, { storagePhotoUploadToken }),
     )
   } catch (error) {
-    await removeCloudFiles([storagePhotoFileId]).catch(() => undefined)
+    await discardPrivateUpload(storagePhotoUploadToken).catch(() => undefined)
     throw error
   }
 }
@@ -305,12 +347,12 @@ export async function transferCloudFoundCardToOfficial(
   storageLocation: FoundCardInput['storageLocation'],
   storagePhotoPath = '',
 ): Promise<void> {
-  let storagePhotoFileId = ''
+  let storagePhotoUploadToken = ''
   try {
-    if (storagePhotoPath) storagePhotoFileId = await uploadStoragePhoto(storagePhotoPath)
-    await callCloudApi('transferFoundCardToOfficial', { cardId, storageLocation, storagePhotoFileId })
+    if (storagePhotoPath) storagePhotoUploadToken = await uploadStoragePhoto(storagePhotoPath)
+    await callCloudApi('transferFoundCardToOfficial', { cardId, storageLocation, storagePhotoUploadToken })
   } catch (error) {
-    await removeCloudFiles([storagePhotoFileId]).catch(() => undefined)
+    await discardPrivateUpload(storagePhotoUploadToken).catch(() => undefined)
     throw error
   }
 }
@@ -320,15 +362,11 @@ export async function confirmCloudClaimHandover(
   proofPath: string,
   thanksText = '',
 ): Promise<{ status: 'returned'; thanksAccepted: boolean }> {
-  const uploaded = await wx.cloud.uploadFile({
-    cloudPath: uniqueCloudPath('handover-proofs', 'jpg'),
-    filePath: proofPath,
-  })
+  const proofUploadToken = await uploadPrivateImage(proofPath, 'handover_proof')
   try {
-    await callCloudApi('registerUploadedFile', { fileId: uploaded.fileID, kind: 'handover_proof' })
-    return await callCloudApi('confirmClaimHandover', { claimId, proofFileId: uploaded.fileID, thanksText })
+    return await callCloudApi('confirmClaimHandover', { claimId, proofUploadToken, thanksText })
   } catch (error) {
-    await removeCloudFiles([uploaded.fileID]).catch(() => undefined)
+    await discardPrivateUpload(proofUploadToken).catch(() => undefined)
     throw error
   }
 }

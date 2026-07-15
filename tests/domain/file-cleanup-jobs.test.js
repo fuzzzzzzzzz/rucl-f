@@ -43,5 +43,6 @@ describe('file cleanup jobs', () => {
     const worker = fs.readFileSync(path.join(root, 'cloudfunctions/scheduledCleanup/index.js'), 'utf8')
     expect(worker).toContain("proofFileId: ''")
     expect(worker).toContain("collection('uploadedFiles')")
+    expect(worker).toContain('where({ fileId: job.fileId })')
   })
 })

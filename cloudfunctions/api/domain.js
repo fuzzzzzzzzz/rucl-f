@@ -39,6 +39,37 @@ function requireMatchingStudentDigest(savedDigest, requestedDigest) {
 
 const crypto = require('crypto')
 
+function decodePrivateImagePayload(value, mimeType, maxBytes = 1024 * 1024) {
+  if (mimeType !== 'image/jpeg') throw new Error('仅支持压缩后的 JPEG 照片')
+  const contentBase64 = String(value || '').trim()
+  if (!contentBase64 || contentBase64.length > Math.ceil(maxBytes / 3) * 4 + 4) {
+    throw new Error('照片为空或超过上传大小限制')
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(contentBase64)) throw new Error('照片内容格式错误')
+  const fileContent = Buffer.from(contentBase64, 'base64')
+  const normalizedInput = contentBase64.replace(/=+$/, '')
+  if (fileContent.toString('base64').replace(/=+$/, '') !== normalizedInput) {
+    throw new Error('照片内容格式错误')
+  }
+  if (
+    fileContent.length < 4 ||
+    fileContent.length > maxBytes ||
+    fileContent[0] !== 0xff ||
+    fileContent[1] !== 0xd8 ||
+    fileContent[fileContent.length - 2] !== 0xff ||
+    fileContent[fileContent.length - 1] !== 0xd9
+  ) {
+    throw new Error('照片不是有效的 JPEG 文件')
+  }
+  return fileContent
+}
+
+function privateUploadTokenHash(value) {
+  const token = String(value || '').trim()
+  if (!/^[a-f0-9]{48}$/.test(token)) throw new Error('照片上传凭证无效')
+  return crypto.createHash('sha256').update(token).digest('hex')
+}
+
 function normalizeProfileBindingStatus(user = {}) {
   if (user.profileBindingStatus === 'correction_pending') return 'correction_pending'
   if (user.profileBindingStatus === 'locked') return 'locked'
@@ -346,6 +377,8 @@ function subscriptionFallbackMessage({ title, body }) {
 }
 
 module.exports = {
+  decodePrivateImagePayload,
+  privateUploadTokenHash,
   completeHandoverRecords,
   getOptionalDocument,
   maskName,

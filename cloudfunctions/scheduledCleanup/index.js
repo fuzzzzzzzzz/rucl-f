@@ -137,10 +137,13 @@ async function processCleanupJobs(now) {
               }),
           ),
         )
-        const uploadId = crypto.createHash('sha256').update(job.fileId).digest('hex')
+        const registries = await db.collection('uploadedFiles').where({ fileId: job.fileId }).limit(100).get()
+        await Promise.all(registries.data.map((registry) => db.collection('uploadedFiles').doc(registry._id).remove()))
+        // Compatibility cleanup for records created before upload tokens became document IDs.
+        const legacyUploadId = crypto.createHash('sha256').update(job.fileId).digest('hex')
         await db
           .collection('uploadedFiles')
-          .doc(uploadId)
+          .doc(legacyUploadId)
           .remove()
           .catch(() => undefined)
         await db

@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import { Buffer } from 'node:buffer'
 import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
@@ -6,6 +7,8 @@ const {
   completeHandoverRecords,
   deriveAchievementProgress,
   evaluateHandoverRisk,
+  decodePrivateImagePayload,
+  privateUploadTokenHash,
   matchedCardProjection,
   normalizeProfileBindingStatus,
   normalizeClaimWorkflowStatus,
@@ -36,6 +39,22 @@ function createTransaction(records) {
 }
 
 describe('security hardening domain', () => {
+  it('accepts only a small genuine JPEG payload for server-owned private uploads', () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9])
+    expect(decodePrivateImagePayload(jpeg.toString('base64'), 'image/jpeg', 1024)).toEqual(jpeg)
+
+    expect(() => decodePrivateImagePayload('not-base64!', 'image/jpeg', 1024)).toThrow()
+    expect(() => decodePrivateImagePayload(Buffer.from('plain text').toString('base64'), 'image/jpeg', 1024)).toThrow()
+    expect(() => decodePrivateImagePayload(jpeg.toString('base64'), 'image/png', 1024)).toThrow()
+    expect(() => decodePrivateImagePayload(Buffer.alloc(1025, 1).toString('base64'), 'image/jpeg', 1024)).toThrow()
+  })
+
+  it('stores only a one-way digest of a private upload token', () => {
+    expect(privateUploadTokenHash('a'.repeat(48))).toMatch(/^[a-f0-9]{64}$/)
+    expect(privateUploadTokenHash('a'.repeat(48))).toBe(privateUploadTokenHash('a'.repeat(48)))
+    expect(() => privateUploadTokenHash('short')).toThrow()
+  })
+
   it('treats legacy verified profiles as locked self-reported information', () => {
     expect(normalizeProfileBindingStatus({ identityStatus: 'verified' })).toBe('locked')
     expect(normalizeProfileBindingStatus({ profileBindingStatus: 'correction_pending' })).toBe('correction_pending')

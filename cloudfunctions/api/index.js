@@ -3,6 +3,7 @@ const crypto = require('crypto')
 const {
   assertOwnerMayCloseRecord,
   completeHandoverRecords,
+  decodePrivateImagePayload,
   deriveAchievementProgress,
   evaluateHandoverRisk,
   getOptionalDocument,
@@ -14,6 +15,7 @@ const {
   normalizeIdentityStatus,
   normalizeProfileBindingStatus,
   normalizeCloseReason,
+  privateUploadTokenHash,
   publicCardProjection,
   queueCleanupJob,
   requireCloudFilePath,
@@ -160,39 +162,142 @@ async function authorizedCardProjection(card, disclose) {
   return matchedCardProjection(card, { discloseOfficialStoragePoint: canDisclose, storagePhotoUrl })
 }
 
-async function registerUploadedFile(openid, input) {
-  await requireActiveUser(openid)
-  const directories = { storage_scene: 'storage-scenes', handover_proof: 'handover-proofs' }
-  const kind = requireChoice(input.kind, Object.keys(directories), '文件类型')
-  const fileId = requireCloudFilePath(input.fileId, directories[kind])
-  if (!fileId.includes(`/${directories[kind]}/${openid}/`)) throw new Error('只能登记自己目录中的图片')
-  const id = crypto.createHash('sha256').update(fileId).digest('hex')
-  await db
-    .collection('uploadedFiles')
-    .doc(id)
-    .set({
-      data: { fileId, kind, ownerOpenid: openid, referenced: false, createdAt: db.serverDate() },
-    })
-  return { id }
-}
+const PRIVATE_IMAGE_DIRECTORIES = { storage_scene: 'storage-scenes', handover_proof: 'handover-proofs' }
+const MAX_PRIVATE_IMAGE_BYTES = 1024 * 1024
+const PRIVATE_IMAGE_DAILY_LIMIT = 20
 
-async function requireRegisteredUpload(openid, fileId, kind) {
-  if (!fileId) return
-  const id = crypto.createHash('sha256').update(fileId).digest('hex')
-  const record = await db.collection('uploadedFiles').doc(id).get()
-  if (!record.data || record.data.ownerOpenid !== openid || record.data.kind !== kind) {
-    throw new Error('图片不属于当前账号或尚未登记')
+async function uploadPrivateImage(openid, input) {
+  await requireActiveUser(openid)
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const recentUploads = await db
+    .collection('auditLogs')
+    .where({ openid, action: 'private_image.uploaded', createdAt: _.gte(since) })
+    .count()
+  if (recentUploads.total >= PRIVATE_IMAGE_DAILY_LIMIT) {
+    throw new Error('今天的照片上传次数已达上限，请稍后再试')
+  }
+  const kind = requireChoice(input.kind, Object.keys(PRIVATE_IMAGE_DIRECTORIES), '文件类型')
+  const fileContent = decodePrivateImagePayload(input.contentBase64, input.mimeType, MAX_PRIVATE_IMAGE_BYTES)
+  const uploadToken = crypto.randomBytes(24).toString('hex')
+  const uploadTokenHash = privateUploadTokenHash(uploadToken)
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const cloudPath = `${PRIVATE_IMAGE_DIRECTORIES[kind]}/server/${date}/${crypto.randomBytes(24).toString('hex')}.jpg`
+  let fileId = ''
+  let registryCreated = false
+  try {
+    const uploaded = await cloud.uploadFile({ cloudPath, fileContent })
+    fileId = requireCloudFilePath(uploaded.fileID, PRIVATE_IMAGE_DIRECTORIES[kind])
+    await db
+      .collection('uploadedFiles')
+      .doc(uploadTokenHash)
+      .set({
+        data: {
+          fileId,
+          kind,
+          ownerOpenid: openid,
+          uploadTokenHash,
+          serverOwned: true,
+          referenced: false,
+          createdAt: db.serverDate(),
+        },
+      })
+    registryCreated = true
+    await db.collection('auditLogs').add({
+      data: {
+        openid,
+        action: 'private_image.uploaded',
+        targetId: uploadTokenHash,
+        metadata: { kind, byteLength: fileContent.length },
+        createdAt: db.serverDate(),
+      },
+    })
+    return { uploadToken }
+  } catch (error) {
+    if (registryCreated) {
+      await db
+        .collection('uploadedFiles')
+        .doc(uploadTokenHash)
+        .remove()
+        .catch(() => undefined)
+    }
+    if (fileId) {
+      try {
+        await cloud.deleteFile({ fileList: [fileId] })
+      } catch (deleteError) {
+        await db
+          .runTransaction(async (transaction) => {
+            await queueCleanupJob(transaction, fileId, 'upload_failed', new Date(), () => db.serverDate())
+          })
+          .catch((queueError) =>
+            console.error('failed upload cleanup could not be queued', { deleteError, queueError }),
+          )
+      }
+    }
+    throw error
   }
 }
 
-async function markUploadedFileReferenced(fileId) {
-  if (!fileId) return
-  const id = crypto.createHash('sha256').update(fileId).digest('hex')
-  await db
+function privateUploadReference(uploadToken, kind, optional = false) {
+  if (!uploadToken && optional) return null
+  return { id: privateUploadTokenHash(uploadToken), kind }
+}
+
+async function requirePrivateUpload(database, openid, reference) {
+  if (!reference) return null
+  const result = await database.collection('uploadedFiles').doc(reference.id).get()
+  const record = result.data
+  if (
+    !record ||
+    record.ownerOpenid !== openid ||
+    record.kind !== reference.kind ||
+    record.serverOwned !== true ||
+    record.referenced === true
+  ) {
+    throw new Error('照片上传凭证无效、已使用或不属于当前账号')
+  }
+  return { _id: reference.id, ...record }
+}
+
+async function consumePrivateUpload(transaction, openid, reference, expectedFileId = '') {
+  const record = await requirePrivateUpload(transaction, openid, reference)
+  if (!record) return null
+  if (expectedFileId && record.fileId !== expectedFileId) throw new Error('照片上传凭证内容已经变化')
+  await transaction
     .collection('uploadedFiles')
-    .doc(id)
+    .doc(record._id)
     .update({ data: { referenced: true, referencedAt: db.serverDate() } })
-    .catch(() => undefined)
+  return record
+}
+
+async function discardPrivateUpload(openid, input) {
+  await requireActiveUser(openid)
+  const token = requireText(input.uploadToken, '照片上传凭证', 64)
+  const uploadTokenHash = privateUploadTokenHash(token)
+  let record = null
+  await db.runTransaction(async (transaction) => {
+    const result = await transaction.collection('uploadedFiles').doc(uploadTokenHash).get()
+    const current = result.data ? { _id: uploadTokenHash, ...result.data } : null
+    if (!current || current.ownerOpenid !== openid || current.referenced === true) return
+    await transaction
+      .collection('uploadedFiles')
+      .doc(uploadTokenHash)
+      .update({ data: { referenced: true, discarding: true, discardStartedAt: db.serverDate() } })
+    record = current
+  })
+  if (!record) return { discarded: false }
+  try {
+    await cloud.deleteFile({ fileList: [record.fileId] })
+    await db.collection('uploadedFiles').doc(record._id).remove()
+  } catch (error) {
+    await db.runTransaction(async (transaction) => {
+      await queueCleanupJob(transaction, record.fileId, 'upload_abandoned', new Date(), () => db.serverDate())
+      await transaction
+        .collection('uploadedFiles')
+        .doc(record._id)
+        .update({ data: { cleanupQueuedAt: db.serverDate() } })
+    })
+  }
+  return { discarded: true }
 }
 
 async function ensureIdentityBinding(openid, studentDigest) {
@@ -340,27 +445,31 @@ async function createFoundCard(openid, input) {
   const number = validateStudentNumber(input.studentNumber)
   const pickupLocation = requireLocation(input.pickupLocation, '拾取地点')
   const storageLocation = requireLocation(input.storageLocation, '存放地点')
-  const storagePhotoFileId = requireCloudFilePath(input.storagePhotoFileId, 'storage-scenes', true)
-  await requireRegisteredUpload(openid, storagePhotoFileId, 'storage_scene')
-  const data = {
-    publisherOpenid: openid,
-    studentHmac: studentHmac(number),
-    nameHmac: nameHmac(name),
-    maskedName: maskName(name),
-    maskedStudentNumber: maskStudentNumber(number),
-    category: requireChoice(input.category, CARD_CATEGORIES, '卡片类别'),
-    campusId: requireChoice(input.campusId, CAMPUS_IDS, '校区'),
-    pickupLocation,
-    storageLocation,
-    storagePhotoFileId,
-    foundAt: requireDate(input.foundAt, '拾取日期'),
-    privateFeature: String(input.privateFeature || '').slice(0, 300),
-    custodyStatus: isOfficialStorage(storageLocation) ? 'ready_at_official' : 'finder_custody',
-    status: 'pending_match',
-    createdAt: db.serverDate(),
-  }
-  const created = await db.collection('foundCards').add({ data })
-  await markUploadedFileReferenced(data.storagePhotoFileId)
+  const storagePhotoReference = privateUploadReference(input.storagePhotoUploadToken, 'storage_scene', true)
+  const cardId = crypto.randomBytes(16).toString('hex')
+  let data
+  await db.runTransaction(async (transaction) => {
+    const storagePhotoUpload = await consumePrivateUpload(transaction, openid, storagePhotoReference)
+    data = {
+      publisherOpenid: openid,
+      studentHmac: studentHmac(number),
+      nameHmac: nameHmac(name),
+      maskedName: maskName(name),
+      maskedStudentNumber: maskStudentNumber(number),
+      category: requireChoice(input.category, CARD_CATEGORIES, '卡片类别'),
+      campusId: requireChoice(input.campusId, CAMPUS_IDS, '校区'),
+      pickupLocation,
+      storageLocation,
+      storagePhotoFileId: storagePhotoUpload ? storagePhotoUpload.fileId : '',
+      foundAt: requireDate(input.foundAt, '拾取日期'),
+      privateFeature: String(input.privateFeature || '').slice(0, 300),
+      custodyStatus: isOfficialStorage(storageLocation) ? 'ready_at_official' : 'finder_custody',
+      status: 'pending_match',
+      createdAt: db.serverDate(),
+    }
+    await transaction.collection('foundCards').doc(cardId).set({ data })
+  })
+  const created = { _id: cardId }
   const lostReports = await db
     .collection('lostReports')
     .where({ studentHmac: data.studentHmac, status: 'active' })
@@ -905,10 +1014,11 @@ async function transferFoundCardToOfficial(openid, input) {
   const cardId = requireText(input.cardId, '卡片记录', 64)
   const storageLocation = requireLocation(input.storageLocation, '官方交卡点')
   if (!isOfficialStorage(storageLocation)) throw new Error('请选择官方交卡点')
-  const storagePhotoFileId = requireCloudFilePath(input.storagePhotoFileId, 'storage-scenes', true)
-  await requireRegisteredUpload(openid, storagePhotoFileId, 'storage_scene')
+  const storagePhotoReference = privateUploadReference(input.storagePhotoUploadToken, 'storage_scene', true)
   let claimToNotify = null
   await db.runTransaction(async (transaction) => {
+    const storagePhotoUpload = await consumePrivateUpload(transaction, openid, storagePhotoReference)
+    const storagePhotoFileId = storagePhotoUpload ? storagePhotoUpload.fileId : ''
     const card = await transaction.collection('foundCards').doc(cardId).get()
     if (!card.data || card.data.publisherOpenid !== openid) throw new Error('只能更新自己发布的校园卡')
     if (['returned', 'closed'].includes(card.data.status)) throw new Error('该记录已经结束')
@@ -956,7 +1066,6 @@ async function transferFoundCardToOfficial(openid, input) {
     )
   }
   await audit(openid, 'found_card.transferred_official', cardId)
-  await markUploadedFileReferenced(storagePhotoFileId)
   return { status: claimToNotify ? 'ready_for_pickup' : 'pending_match' }
 }
 
@@ -992,18 +1101,23 @@ async function confirmClaimHandover(openid, input) {
   const user = await requireActiveUser(openid)
   requireVerifiedIdentity(user)
   const claimId = requireText(input.claimId, '认领申请', 64)
-  const proofFileId = requireCloudFilePath(input.proofFileId, 'handover-proofs')
-  await requireRegisteredUpload(openid, proofFileId, 'handover_proof')
   const preliminary = await db.collection('claims').doc(claimId).get()
   if (!preliminary.data || preliminary.data.applicantOpenid !== openid) throw new Error('只能完成自己的认领任务')
   if (!['ready_for_pickup', 'returned'].includes(preliminary.data.status)) {
     throw new Error('校园卡尚未到达可领取的官方地点')
   }
   if (preliminary.data.status === 'returned') {
+    if (input.proofUploadToken) {
+      await discardPrivateUpload(openid, { uploadToken: input.proofUploadToken }).catch(() => undefined)
+    }
     const handover = await db.collection('handovers').doc(claimId).get()
     if (!handover.data) throw new Error('交接记录不完整，请联系管理员处理')
     return { status: 'returned', alreadyCompleted: true, thanksAccepted: Boolean(handover.data.thanksText) }
   }
+
+  const proofReference = privateUploadReference(input.proofUploadToken, 'handover_proof')
+  const proofUpload = await requirePrivateUpload(db, openid, proofReference)
+  const proofFileId = proofUpload.fileId
 
   const proof = await cloud.downloadFile({ fileID: proofFileId })
   if (!proof.fileContent || proof.fileContent.length === 0 || proof.fileContent.length > 8 * 1024 * 1024) {
@@ -1051,7 +1165,13 @@ async function confirmClaimHandover(openid, input) {
       serverDate: () => db.serverDate(),
       nowMs: now,
     })
+    if (!completion.alreadyCompleted) {
+      await consumePrivateUpload(transaction, openid, proofReference, proofFileId)
+    }
   })
+  if (completion.alreadyCompleted) {
+    await discardPrivateUpload(openid, { uploadToken: input.proofUploadToken }).catch(() => undefined)
+  }
   const completedClaim = completion.completedClaim
   await Promise.allSettled([
     createMessage(openid, '校园卡已确认归还', '本次认领任务已经完成。', completedClaim.cardId, claimId),
@@ -1064,7 +1184,6 @@ async function confirmClaimHandover(openid, input) {
     ),
   ])
   await audit(openid, 'handover.owner_completed', claimId, { riskStatus, thanksAccepted: Boolean(thanks.text) })
-  await markUploadedFileReferenced(proofFileId)
   return { status: 'returned', alreadyCompleted: completion.alreadyCompleted, thanksAccepted: Boolean(thanks.text) }
 }
 
@@ -1446,8 +1565,10 @@ exports.main = async (event) => {
       return saveUserProfile(OPENID, input)
     case 'requestIdentityCorrection':
       return requestIdentityCorrection(OPENID, input)
-    case 'registerUploadedFile':
-      return registerUploadedFile(OPENID, input)
+    case 'uploadPrivateImage':
+      return uploadPrivateImage(OPENID, input)
+    case 'discardPrivateUpload':
+      return discardPrivateUpload(OPENID, input)
     case 'createFoundCard':
       return createFoundCard(OPENID, input)
     case 'listPublicCards':

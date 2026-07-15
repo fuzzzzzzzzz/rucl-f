@@ -66,15 +66,28 @@ describe('cloud deployment contract', () => {
     expect(app).not.toMatch(/\.catch\([\s\S]*?dataMode\s*=\s*['"]local['"]/)
   })
 
-  it('keeps sensitive cloud files unreadable to clients and uploads under the current user namespace', () => {
+  it('keeps long-lived sensitive files server-owned on the free cloud plan', () => {
     const rules = JSON.parse(fs.readFileSync(path.join(root, 'security/storage.rules.json'), 'utf8'))
     const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
     const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
 
     expect(rules.read).toBe(false)
     expect(rules.write).toContain('auth.openid')
-    expect(client).toContain('uploadNamespace')
-    expect(server).toContain('uploadNamespace: openid')
+    expect(client).toContain("callCloudApi<PrivateUploadResult>('uploadPrivateImage'")
+    expect(client).toContain("callCloudApi('discardPrivateUpload'")
+    expect(client).not.toMatch(/uniqueCloudPath\(['"]storage-scenes['"]/)
+    expect(client).not.toMatch(/uniqueCloudPath\(['"]handover-proofs['"]/)
+    expect(server).toContain('async function uploadPrivateImage')
+    expect(server).toContain('cloud.uploadFile')
+    expect(server).toContain('uploadTokenHash')
+    expect(server).toContain('.doc(uploadTokenHash)')
+    expect(server).toContain('consumePrivateUpload(transaction')
+    expect(server).not.toContain('where({ uploadTokenHash })')
+    expect(server).toContain("action: 'private_image.uploaded'")
+    expect(server).toContain('PRIVATE_IMAGE_DAILY_LIMIT')
+    expect(server).toContain('discarding: true')
+    expect(server).toContain("'upload_failed'")
+    expect(server).not.toContain("case 'registerUploadedFile':")
     expect(server).toContain('maxAge: 600')
   })
 
