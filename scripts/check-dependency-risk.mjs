@@ -10,10 +10,8 @@ const today = new Date().toISOString().slice(0, 10)
 if (today > exception.reviewBy) throw new Error(`依赖风险例外已于 ${exception.reviewBy} 到期`)
 
 for (const [relativePath, expectedHash] of Object.entries(exception.locks)) {
-  const actualHash = createHash('sha256')
-    .update(readFileSync(resolve(root, relativePath)))
-    .digest('hex')
-    .toUpperCase()
+  const canonicalLockText = readFileSync(resolve(root, relativePath), 'utf8').replace(/\r\n/g, '\n')
+  const actualHash = createHash('sha256').update(canonicalLockText).digest('hex').toUpperCase()
   if (actualHash !== expectedHash) throw new Error(`${relativePath} 已变化，原风险例外不再匹配`)
   const directory = dirname(resolve(root, relativePath))
   let output = ''

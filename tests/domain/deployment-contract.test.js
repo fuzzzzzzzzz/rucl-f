@@ -84,4 +84,13 @@ describe('cloud deployment contract', () => {
     expect(checklist).toContain('云存储')
     expect(checklist).toContain('拾卡者、失主、管理员')
   })
+
+  it('uses cross-platform lock fingerprints and current GitHub action runtimes', () => {
+    const riskCheck = fs.readFileSync(path.join(root, 'scripts/check-dependency-risk.mjs'), 'utf8')
+    const workflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
+
+    expect(riskCheck).toContain("replace(/\\r\\n/g, '\\n')")
+    expect(workflow).toContain('actions/checkout@v7')
+    expect(workflow).toContain('actions/setup-node@v7')
+  })
 })
