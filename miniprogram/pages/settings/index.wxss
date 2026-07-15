@@ -17,6 +17,35 @@
 .warning {
   background: #ffec00;
 }
+.subscribe-button {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 24rpx 0 12rpx;
+  border: 4rpx solid #191919;
+  border-radius: 0;
+  background: #20d6b5;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  color: #191919;
+  font-weight: 900;
+  line-height: 1.2;
+  padding: 22rpx;
+}
+.subscribe-button::after {
+  border: 0;
+}
+.subscribe-button .en {
+  display: block;
+  margin-top: 6rpx;
+  font-family: Arial, sans-serif;
+  font-size: 20rpx;
+  letter-spacing: 3rpx;
+}
+.notification-tip {
+  margin-top: 18rpx;
+  color: #625e58;
+  font-size: 21rpx;
+  line-height: 1.7;
+}
 .status-box {
   margin-top: 30rpx;
   border: 4rpx solid #191919;
