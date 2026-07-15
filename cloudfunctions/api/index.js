@@ -135,8 +135,8 @@ async function createMessage(recipientOpenid, title, body, relatedCardId = '', r
       miniprogramState: process.env.MINIPROGRAM_STATE || 'developer',
       lang: 'zh_CN',
       data: {
-        thing1: { value: String(title).slice(0, 20) },
-        thing2: { value: String(body).slice(0, 20) },
+        thing1: { value: '校园卡' },
+        thing2: { value: String(title).slice(0, 20) },
       },
     })
   } catch (error) {

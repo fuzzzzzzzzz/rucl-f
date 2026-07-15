@@ -5,6 +5,7 @@ import {
   updateNotificationPreferences,
 } from '../../services/card-service'
 import type { NotificationPreferences } from '../../shared/models'
+import { requestWechatNotification } from '../../shared/subscription'
 
 Page({
   data: {
@@ -41,6 +42,12 @@ Page({
     } catch (error) {
       wx.showToast({ title: error instanceof Error ? error.message : '保存失败', icon: 'none' })
     }
+  },
+  async enableWechatNotifications() {
+    const result = await requestWechatNotification()
+    const title =
+      result === 'accepted' ? '微信通知已允许' : result === 'rejected' ? '未允许微信通知' : '暂时无法申请通知'
+    wx.showToast({ title, icon: 'none' })
   },
   clearCache() {
     wx.showModal({
