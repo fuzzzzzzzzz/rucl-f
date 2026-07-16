@@ -7,6 +7,7 @@ const {
   deriveAchievementProgress,
   evaluateHandoverRisk,
   getOptionalDocument,
+  withTransactionRetry,
   maskName,
   maskStudentNumber,
   matchedCardProjection,
@@ -384,46 +385,48 @@ async function saveUserProfile(openid, input) {
   const category = requireChoice(input.category, CARD_CATEGORIES, '卡片类别')
   const campusId = requireChoice(input.campusId, CAMPUS_IDS, '校区')
   const profileBindingStatus = 'locked'
-  await db.runTransaction(async (transaction) => {
-    const [freshUser, binding] = await Promise.all([
-      transaction.collection('users').doc(user._id).get(),
-      getOptionalDocument(transaction.collection('identityBindings').doc(studentDigest)),
-    ])
-    if (!freshUser.data || freshUser.data.openid !== openid) throw new Error('账号状态异常，请重新登录')
-    if (
-      freshUser.data.studentHmac &&
-      (freshUser.data.studentHmac !== studentDigest || freshUser.data.nameHmac !== personNameHmac)
-    ) {
-      throw new Error('姓名和学号已锁定，如需更换请联系管理员重新核验')
-    }
-    if (binding.data && binding.data.ownerOpenid !== openid) {
-      throw new Error('该学号已经绑定其他账号，请联系管理员处理')
-    }
-    if (!binding.data) {
+  await withTransactionRetry(() =>
+    db.runTransaction(async (transaction) => {
+      const [freshUser, binding] = await Promise.all([
+        transaction.collection('users').doc(user._id).get(),
+        getOptionalDocument(transaction.collection('identityBindings').doc(studentDigest)),
+      ])
+      if (!freshUser.data || freshUser.data.openid !== openid) throw new Error('账号状态异常，请重新登录')
+      if (
+        freshUser.data.studentHmac &&
+        (freshUser.data.studentHmac !== studentDigest || freshUser.data.nameHmac !== personNameHmac)
+      ) {
+        throw new Error('姓名和学号已锁定，如需更换请联系管理员重新核验')
+      }
+      if (binding.data && binding.data.ownerOpenid !== openid) {
+        throw new Error('该学号已经绑定其他账号，请联系管理员处理')
+      }
+      if (!binding.data) {
+        await transaction
+          .collection('identityBindings')
+          .doc(studentDigest)
+          .set({
+            data: { ownerOpenid: openid, createdAt: db.serverDate() },
+          })
+      }
       await transaction
-        .collection('identityBindings')
-        .doc(studentDigest)
-        .set({
-          data: { ownerOpenid: openid, createdAt: db.serverDate() },
+        .collection('users')
+        .doc(user._id)
+        .update({
+          data: {
+            studentHmac: studentDigest,
+            nameHmac: personNameHmac,
+            maskedName: maskName(name),
+            maskedStudentNumber: maskStudentNumber(number),
+            category,
+            campusId,
+            profileBindingStatus,
+            identityVerified: false,
+            updatedAt: db.serverDate(),
+          },
         })
-    }
-    await transaction
-      .collection('users')
-      .doc(user._id)
-      .update({
-        data: {
-          studentHmac: studentDigest,
-          nameHmac: personNameHmac,
-          maskedName: maskName(name),
-          maskedStudentNumber: maskStudentNumber(number),
-          category,
-          campusId,
-          profileBindingStatus,
-          identityVerified: false,
-          updatedAt: db.serverDate(),
-        },
-      })
-  })
+    }),
+  )
   await audit(openid, 'profile.saved', user._id)
   return {
     maskedName: maskName(name),

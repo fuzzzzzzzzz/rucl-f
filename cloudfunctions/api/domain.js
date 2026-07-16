@@ -125,6 +125,25 @@ async function getOptionalDocument(documentReference) {
   }
 }
 
+async function withTransactionRetry(operation, options = {}) {
+  const maxAttempts = Math.max(1, Number(options.maxAttempts || 3))
+  const wait = options.wait || ((delay) => new Promise((resolve) => setTimeout(resolve, delay)))
+  const baseDelay = Math.max(0, Number(options.baseDelay || 120))
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      const message = String(error?.message || error?.errMsg || error || '')
+      const temporary =
+        message.includes('ResourceUnavailable.TransactionBusy') ||
+        (message.includes('DATABASE_TRANSACTION_FAIL') && message.includes('Transaction is busy'))
+      if (!temporary || attempt === maxAttempts) throw error
+      await wait(baseDelay * 2 ** (attempt - 1))
+    }
+  }
+  throw new Error('transaction retry exhausted')
+}
+
 function resolveBasicClaimDecision({ studentMatch, nameMatch, identityConfirmed, ambiguousMatch }) {
   if (!identityConfirmed || !studentMatch || !nameMatch) return 'rejected'
   return ambiguousMatch ? 'review' : 'approved'
@@ -381,6 +400,7 @@ module.exports = {
   privateUploadTokenHash,
   completeHandoverRecords,
   getOptionalDocument,
+  withTransactionRetry,
   maskName,
   maskStudentNumber,
   matchedCardProjection,

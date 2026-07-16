@@ -14,9 +14,39 @@ const {
   publicCardProjection,
   requireCloudFilePath,
   validateStudentNumber,
+  withTransactionRetry,
 } = require('../../cloudfunctions/api/domain')
 
 describe('cloud API security boundary', () => {
+  it('retries temporary transaction-busy errors before returning a profile-save failure', async () => {
+    let attempts = 0
+    const result = await withTransactionRetry(
+      async () => {
+        attempts += 1
+        if (attempts < 3) throw new Error('[ResourceUnavailable.TransactionBusy] Transaction is busy')
+        return 'saved'
+      },
+      { wait: async () => undefined },
+    )
+
+    expect(result).toBe('saved')
+    expect(attempts).toBe(3)
+  })
+
+  it('does not retry permanent transaction errors', async () => {
+    let attempts = 0
+    await expect(
+      withTransactionRetry(
+        async () => {
+          attempts += 1
+          throw new Error('student number already bound')
+        },
+        { wait: async () => undefined },
+      ),
+    ).rejects.toThrow('student number already bound')
+    expect(attempts).toBe(1)
+  })
+
   it('treats a missing identity binding as an unbound first-time profile', async () => {
     const missingBinding = {
       async get() {
