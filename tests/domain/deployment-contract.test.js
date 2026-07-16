@@ -40,6 +40,8 @@ describe('cloud deployment contract', () => {
     expect(server).toContain("'你收到一条感谢'")
     expect(server).toContain("'thanks'")
     expect(server).toContain('async function markMessagesRead')
+    expect(server).toContain('async function backfillThanksMessages')
+    expect(server).toContain('thanks-${handover._id}')
     expect(server).toContain("case 'markMessagesRead':")
     expect(client).toContain("callCloudApi('markMessagesRead')")
   })
