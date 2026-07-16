@@ -321,3 +321,24 @@
   margin-bottom: 16rpx;
   border: 3rpx solid #191919;
 }
+
+.revealed-title {
+  font-size: 27rpx;
+  font-weight: 900;
+}
+
+.revealed-point {
+  margin-top: 14rpx;
+  padding: 16rpx;
+  border: 3rpx solid #191919;
+  background: #ffec00;
+  font-size: 25rpx;
+  font-weight: 900;
+  line-height: 1.55;
+}
+
+.revealed-help {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  line-height: 1.55;
+}

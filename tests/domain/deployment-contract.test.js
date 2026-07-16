@@ -33,6 +33,17 @@ describe('cloud deployment contract', () => {
     expect(clientActions.filter((action) => !serverActions.has(action))).toEqual([])
   })
 
+  it('notifies the finder about accepted thanks and supports clearing unread messages', () => {
+    const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
+    const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
+
+    expect(server).toContain("'你收到一条感谢'")
+    expect(server).toContain("'thanks'")
+    expect(server).toContain('async function markMessagesRead')
+    expect(server).toContain("case 'markMessagesRead':")
+    expect(client).toContain("callCloudApi('markMessagesRead')")
+  })
+
   it('does not expose a raw cloud stack trace in the mini-program UI', () => {
     expect(
       friendlyCloudErrorMessage(

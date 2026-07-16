@@ -17,7 +17,12 @@
       </block>
     </view>
   </view>
-  <view wx:else class="revealed-panel"><image wx:if="{{revealedStoragePhotoUrl}}" src="{{revealedStoragePhotoUrl}}" mode="aspectFill" /><view>信息核对一致，可以查看存放照片和下方领取信息。</view></view>
+  <view wx:else class="revealed-panel">
+    <image wx:if="{{revealedStoragePhotoUrl}}" src="{{revealedStoragePhotoUrl}}" mode="aspectFill" />
+    <view class="revealed-title">姓名和学号一致，领取信息已显示</view>
+    <view wx:if="{{revealedStoragePoint}}" class="revealed-point">领取地点：{{revealedStoragePoint}}</view>
+    <view class="revealed-help">请根据照片确认周围环境并前往领取。</view>
+  </view>
   <view wx:if="{{searched}}" class="results">
     <view class="section-title result-heading">查询结果<text class="en">[ SEARCH RESULT ]</text></view>
     <view wx:if="{{results.length === 0}}" class="neo-card empty-result">
@@ -38,15 +43,15 @@
       <view class="number">{{item.maskedStudentNumber}}</view>
       <view class="result-meta"><text>{{item.campusName}}</text><text>{{item.locationCategory}}</text><text>{{item.foundAt}}</text></view>
       <view wx:if="{{item.officialStoragePoint}}" class="result-note">卡片存放地点：{{item.officialStoragePoint}}</view>
-      <view wx:elif="{{item.needsAdminReview}}" class="result-note">找到多条姓名和学号相同的记录，提交后由管理员帮助核对。</view>
+      <view wx:elif="{{item.needsAdminReview}}" class="result-note">该记录存在异常，提交后由管理员帮助核对。</view>
       <view wx:else class="result-note">尚未提供可辨认的存放环境照片，暂不显示具体地点。</view>
       <button wx:if="{{claimedCardId !== item.id && selectedClaimCardId !== item.id}}" class="claim-entry" data-id="{{item.id}}" bindtap="startClaim">确认是我的卡</button>
       <view wx:if="{{selectedClaimCardId === item.id}}" class="claim-form">
         <text class="label">卡套或卡片特点（选填）</text>
-        <textarea class="field short-textarea" maxlength="300" value="{{claimFeature}}" placeholder="有多条相似记录时可帮助管理员核对" bindinput="onClaimFeature" />
+        <textarea class="field short-textarea" maxlength="300" value="{{claimFeature}}" placeholder="如有卡套、贴纸或破损等特点可在此补充" bindinput="onClaimFeature" />
         <view class="claim-actions"><button bindtap="cancelClaim">取消</button><button class="claim-submit" loading="{{claimSubmitting}}" disabled="{{claimSubmitting}}" bindtap="submitClaim">确认提交</button></view>
       </view>
-      <view wx:if="{{claimedCardId === item.id}}" class="registered-tip">已经确认，请在“我的认领”完成交接任务。</view>
+      <view wx:if="{{claimedCardId === item.id}}" class="registered-tip">上方已显示存放照片和领取地点。取到卡后，请在“我的认领”拍照完成交接。</view>
     </view>
   </view>
 </view>

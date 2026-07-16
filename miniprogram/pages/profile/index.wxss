@@ -192,6 +192,63 @@
 .profile-entry {
   background: #ffec00;
 }
+.thanks-alert {
+  border: 5rpx solid #191919;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  background: #20cfad;
+  padding: 22rpx 24rpx;
+  margin: 30rpx 8rpx 38rpx 0;
+}
+.thanks-alert-head,
+.thanks-alert-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  font-weight: 900;
+}
+.thanks-alert-head {
+  font-size: 31rpx;
+}
+.unread-pill,
+.notification-count {
+  box-sizing: border-box;
+  min-width: 46rpx;
+  border: 3rpx solid #191919;
+  background: #f04418;
+  color: #fff;
+  text-align: center;
+  font-family: Arial, sans-serif;
+  font-weight: 900;
+}
+.unread-pill {
+  padding: 5rpx 10rpx;
+  font-size: 18rpx;
+  white-space: nowrap;
+}
+.thanks-alert-body {
+  margin: 18rpx 0;
+  border-top: 3rpx solid #191919;
+  border-bottom: 3rpx solid #191919;
+  padding: 17rpx 0;
+  font-size: 26rpx;
+  line-height: 1.55;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+.thanks-alert-foot {
+  justify-content: flex-end;
+  font-size: 20rpx;
+}
+.thanks-alert-foot image {
+  width: 34rpx;
+  height: 34rpx;
+}
+.notification-count {
+  padding: 4rpx 9rpx;
+  margin-right: 12rpx;
+  font-size: 20rpx;
+}
 .menu-icon {
   box-sizing: border-box;
   width: 52rpx;
