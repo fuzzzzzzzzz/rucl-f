@@ -333,9 +333,17 @@ async function completeHandoverRecords({
 function validatePublicThanks(value) {
   const text = String(value || '').trim()
   if (!text) return { accepted: true, text: '' }
-  const forbidden =
+  const directContact =
     /(1\d{10})|(微信|微.?信|wechat|wx\s*[:：]?\s*[a-z0-9_-]{4,})|(qq\s*[:：]?\s*\d{5,})|(https?:\/\/|www\.|[a-z0-9-]+\.(com|cn|net))|(@[a-z0-9_-]{3,})/i
-  if (text.length > 30 || forbidden.test(text)) return { accepted: false, text: '' }
+  const compact = text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\s·•._\-—:：,，/\\|]+/g, '')
+  const hiddenContact = /(vx|wx|v信|薇信|威信|扣扣|qq)|((加|联系|私聊|找)v)|1\d{10}/i
+  const abusive = /(傻[逼比]|煞笔|脑残|滚蛋|废物|妈的|草泥马|操你|艹你|去死|狗东西|垃圾人)/i
+  if (text.length > 30 || directContact.test(text) || hiddenContact.test(compact) || abusive.test(compact)) {
+    return { accepted: false, text: '' }
+  }
   return { accepted: true, text }
 }
 

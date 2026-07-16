@@ -275,7 +275,12 @@ describe('security hardening domain', () => {
   it('keeps return completion independent from unsafe thanks text', () => {
     expect(validatePublicThanks('谢谢你帮我找回校园卡')).toEqual({ accepted: true, text: '谢谢你帮我找回校园卡' })
     expect(validatePublicThanks('加微信 abc123 联系我')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('加 vx abc_123')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('v x：abc123')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('加薇信 abc123')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('扣扣 123456')).toMatchObject({ accepted: false, text: '' })
     expect(validatePublicThanks('谢谢 13800138000')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('你真是个傻逼')).toMatchObject({ accepted: false, text: '' })
     expect(validatePublicThanks('太感谢了'.repeat(10))).toMatchObject({ accepted: false, text: '' })
   })
 
