@@ -119,6 +119,9 @@ export function normalizeCloudPublicCard(card: CloudPublicCard): PublicCard {
 
 export function friendlyCloudErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error || '')
+  if (/EXCEED_MAX_PAYLOAD_SIZE|request data size|payload too large|request entity too large/i.test(message)) {
+    return '照片数据过大，请重新拍摄并减少画面细节'
+  }
   if (message.includes('不支持的操作')) return '云端服务版本未更新，请联系管理员重新部署'
   const businessMessage = message.match(/errMsg:\s*Error:\s*([^|\r\n]+?)(?=\s+at\s+\S+|[|\r\n]|$)/)?.[1]?.trim()
   if (businessMessage && businessMessage.length <= 80) return businessMessage
@@ -140,13 +143,15 @@ function uniqueCloudPath(directory: string, extension: string): string {
   return `${directory}/${uploadNamespace}/${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
 }
 
-const MAX_PRIVATE_IMAGE_BYTES = 1024 * 1024
+const MAX_PRIVATE_IMAGE_BYTES = 384 * 1024
 
 function compressPrivateImage(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     wx.compressImage({
       src: filePath,
-      quality: 55,
+      quality: 35,
+      compressedWidth: 960,
+      compressedHeight: 960,
       success: ({ tempFilePath }) => resolve(tempFilePath),
       fail: reject,
     })

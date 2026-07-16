@@ -53,6 +53,21 @@ describe('cloud deployment contract', () => {
     ).toBe('请先填写姓名和学号')
   })
 
+  it('explains oversized private-photo requests instead of reporting a generic cloud outage', () => {
+    expect(friendlyCloudErrorMessage(new Error('EXCEED_MAX_PAYLOAD_SIZE: request data size exceeds limit'))).toBe(
+      '照片数据过大，请重新拍摄并减少画面细节',
+    )
+  })
+
+  it('keeps private photos below a conservative callFunction payload boundary', () => {
+    const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
+
+    expect(client).toContain('const MAX_PRIVATE_IMAGE_BYTES = 384 * 1024')
+    expect(client).toContain('quality: 35')
+    expect(client).toContain('compressedWidth: 960')
+    expect(client).toContain('compressedHeight: 960')
+  })
+
   it('treats an absent deterministic claim record as a first submission', () => {
     const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
 
