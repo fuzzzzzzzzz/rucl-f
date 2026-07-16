@@ -57,6 +57,9 @@ describe('security hardening domain', () => {
 
   it('treats legacy verified profiles as locked self-reported information', () => {
     expect(normalizeProfileBindingStatus({ identityStatus: 'verified' })).toBe('locked')
+    expect(normalizeProfileBindingStatus({ profileBindingStatus: 'unbound', identityStatus: 'verified' })).toBe(
+      'unbound',
+    )
     expect(normalizeProfileBindingStatus({ profileBindingStatus: 'correction_pending' })).toBe('correction_pending')
     expect(normalizeProfileBindingStatus({ studentHmac: 'student', nameHmac: 'name' })).toBe('locked')
     expect(normalizeProfileBindingStatus({ identityVerified: true })).toBe('unbound')

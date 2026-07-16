@@ -73,6 +73,7 @@ function privateUploadTokenHash(value) {
 function normalizeProfileBindingStatus(user = {}) {
   if (user.profileBindingStatus === 'correction_pending') return 'correction_pending'
   if (user.profileBindingStatus === 'locked') return 'locked'
+  if (user.profileBindingStatus === 'unbound') return 'unbound'
   if (user.identityStatus === 'verified' || (user.studentHmac && user.nameHmac)) return 'locked'
   return 'unbound'
 }
