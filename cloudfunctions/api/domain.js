@@ -82,11 +82,12 @@ function normalizeIdentityStatus(user = {}) {
   return normalizeProfileBindingStatus(user)
 }
 
-function normalizeClaimWorkflowStatus(status, officialStorage = false) {
+function normalizeClaimWorkflowStatus(status, storageReady = false) {
   if (status === 'review') return 'admin_review'
   if (status === 'approved' || status === 'handover') {
-    return officialStorage ? 'ready_for_pickup' : 'awaiting_official_transfer'
+    return storageReady ? 'ready_for_pickup' : 'awaiting_official_transfer'
   }
+  if (status === 'awaiting_official_transfer' && storageReady) return 'ready_for_pickup'
   if (status === 'pending') return 'pending_match'
   return status
 }
@@ -163,15 +164,22 @@ function publicCardProjection(card) {
   }
 }
 
+function hasPickupReadyStorage(card = {}) {
+  const storage = card.storageLocation || {}
+  const official = storage.category === '官方交卡点' && Boolean(storage.place)
+  const photographed = Boolean(storage.place && card.storagePhotoFileId)
+  return official || photographed
+}
+
 function matchedCardProjection(card, options = {}) {
   const result = publicCardProjection(card)
   const storage = card.storageLocation || {}
-  const official = storage.category === '官方交卡点' && Boolean(storage.place)
-  if (options.discloseOfficialStoragePoint === true && official) {
+  const storageReady = hasPickupReadyStorage(card)
+  if (options.discloseOfficialStoragePoint === true && storageReady) {
     result.officialStoragePoint = [storage.place, storage.area, storage.detail].filter(Boolean).join(' · ')
     if (options.storagePhotoUrl) result.storagePhotoUrl = options.storagePhotoUrl
   }
-  if (!official) result.awaitingOfficialTransfer = true
+  if (!storageReady) result.awaitingOfficialTransfer = true
   if (options.needsAdminReview === true) result.needsAdminReview = true
   return result
 }
@@ -215,7 +223,10 @@ async function completeHandoverRecords({
   responseHours = null,
 }) {
   const claim = await transaction.collection('claims').doc(claimId).get()
-  if (!claim.data || !['approved', 'ready_for_pickup', 'returned'].includes(claim.data.status)) {
+  if (
+    !claim.data ||
+    !['approved', 'awaiting_official_transfer', 'ready_for_pickup', 'returned'].includes(claim.data.status)
+  ) {
     throw new Error('该认领申请不在待交接状态')
   }
 
@@ -236,10 +247,13 @@ async function completeHandoverRecords({
     const card = await transaction.collection('foundCards').doc(claim.data.cardId).get()
     if (
       !card.data ||
-      !['handover', 'ready_for_pickup'].includes(card.data.status) ||
+      !['handover', 'awaiting_official_transfer', 'ready_for_pickup'].includes(card.data.status) ||
       card.data.activeClaimId !== claimId
     ) {
       throw new Error('该校园卡状态已变化，请刷新后重试')
+    }
+    if (!isAdmin && !hasPickupReadyStorage(card.data)) {
+      throw new Error('该校园卡尚未登记可辨认的存放地点')
     }
     await transaction
       .collection('foundCards')
@@ -401,6 +415,7 @@ module.exports = {
   privateUploadTokenHash,
   completeHandoverRecords,
   getOptionalDocument,
+  hasPickupReadyStorage,
   withTransactionRetry,
   maskName,
   maskStudentNumber,

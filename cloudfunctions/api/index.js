@@ -7,6 +7,7 @@ const {
   deriveAchievementProgress,
   evaluateHandoverRisk,
   getOptionalDocument,
+  hasPickupReadyStorage,
   withTransactionRetry,
   maskName,
   maskStudentNumber,
@@ -158,7 +159,7 @@ async function temporaryFileUrl(fileId) {
 }
 
 async function authorizedCardProjection(card, disclose) {
-  const canDisclose = disclose === true && isOfficialStorage(card.storageLocation)
+  const canDisclose = disclose === true && hasPickupReadyStorage(card)
   const storagePhotoUrl = canDisclose ? await temporaryFileUrl(card.storagePhotoFileId) : ''
   return matchedCardProjection(card, { discloseOfficialStoragePoint: canDisclose, storagePhotoUrl })
 }
@@ -466,7 +467,8 @@ async function createFoundCard(openid, input) {
       storagePhotoFileId: storagePhotoUpload ? storagePhotoUpload.fileId : '',
       foundAt: requireDate(input.foundAt, '拾取日期'),
       privateFeature: String(input.privateFeature || '').slice(0, 300),
-      custodyStatus: isOfficialStorage(storageLocation) ? 'ready_at_official' : 'finder_custody',
+      custodyStatus:
+        isOfficialStorage(storageLocation) || storagePhotoUpload ? 'ready_at_documented_location' : 'finder_custody',
       status: 'pending_match',
       createdAt: db.serverDate(),
     }
@@ -638,8 +640,8 @@ async function listMyFoundCards(openid) {
     foundAt: card.foundAt,
     pickupSummary: locationSummary(card.pickupLocation),
     storageSummary: locationSummary(card.storageLocation),
-    status: card.status,
-    needsOfficialTransfer: !isOfficialStorage(card.storageLocation) && !['returned', 'closed'].includes(card.status),
+    status: normalizeClaimWorkflowStatus(card.status, hasPickupReadyStorage(card)),
+    needsOfficialTransfer: !hasPickupReadyStorage(card) && !['returned', 'closed'].includes(card.status),
   }))
 }
 
@@ -820,7 +822,7 @@ async function submitClaim(openid, input) {
     claimStatus =
       decision === 'review'
         ? 'admin_review'
-        : isOfficialStorage(card.data.storageLocation)
+        : hasPickupReadyStorage(card.data)
           ? 'ready_for_pickup'
           : 'awaiting_official_transfer'
     publisherOpenid = card.data.publisherOpenid
@@ -862,19 +864,19 @@ async function submitClaim(openid, input) {
       needsReview
         ? '发现多条相似记录，管理员核对后会通知你。'
         : awaitingTransfer
-          ? '卡片暂由拾卡者保管，正在转交官方地点。'
+          ? '尚未上传可辨认的存放环境照片，也未登记官方交卡点。'
           : '已经确认，请在“我的认领”完成交接任务。',
       cardId,
       claimId,
     ),
     createMessage(
       publisherOpenid,
-      needsReview ? '校园卡收到认领申请' : awaitingTransfer ? '请转交到官方地点' : '校园卡已匹配到失主',
+      needsReview ? '校园卡收到认领申请' : awaitingTransfer ? '请补充存放信息' : '校园卡已匹配到失主',
       needsReview
         ? '发现多条相似记录，管理员正在核对。'
         : awaitingTransfer
-          ? '姓名和学号一致，请尽快在“我的发布”中登记官方交卡点。'
-          : '姓名和学号一致，失主将前往官方地点领取。',
+          ? '姓名和学号一致，请补拍存放环境照片或登记官方交卡点。'
+          : '姓名和学号一致，失主将前往登记的存放地点领取。',
       cardId,
       claimId,
     ),
@@ -894,7 +896,7 @@ async function listMyClaims(openid) {
     result.data.map(async (claim) => {
       const card = await db.collection('foundCards').doc(claim.cardId).get()
       if (!card.data) return null
-      const status = normalizeClaimWorkflowStatus(claim.status, isOfficialStorage(card.data.storageLocation))
+      const status = normalizeClaimWorkflowStatus(claim.status, hasPickupReadyStorage(card.data))
       const projection = await authorizedCardProjection(
         { _id: claim.cardId, ...card.data },
         ['ready_for_pickup', 'returned'].includes(status),
@@ -940,7 +942,7 @@ async function listAdminClaims(openid) {
         currentUser(claim.applicantOpenid),
       ])
       if (!card.data || !applicant) return null
-      const status = normalizeClaimWorkflowStatus(claim.status, isOfficialStorage(card.data.storageLocation))
+      const status = normalizeClaimWorkflowStatus(claim.status, hasPickupReadyStorage(card.data))
       return {
         id: claim._id,
         cardId: claim.cardId,
@@ -975,9 +977,7 @@ async function reviewClaim(openid, input) {
       throw new Error('该校园卡状态已变化，请刷新后重试')
     }
     reviewedClaim = claim.data
-    const approvedStatus = isOfficialStorage(card.data.storageLocation)
-      ? 'ready_for_pickup'
-      : 'awaiting_official_transfer'
+    const approvedStatus = hasPickupReadyStorage(card.data) ? 'ready_for_pickup' : 'awaiting_official_transfer'
     await transaction
       .collection('foundCards')
       .doc(claim.data.cardId)
@@ -1003,7 +1003,7 @@ async function reviewClaim(openid, input) {
     reviewedClaim.applicantOpenid,
     decision === 'approved' ? '认领申请已通过' : '认领申请未通过',
     decision === 'approved'
-      ? '请进入“我的认领”查看当前交接状态；个人保管的卡需先转交官方地点。'
+      ? '请进入“我的认领”查看当前交接状态；有存放照片或已在官方地点时可以领取。'
       : '如有疑问，请联系管理员。',
     reviewedClaim.cardId,
     claimId,
@@ -1106,10 +1106,15 @@ async function confirmClaimHandover(openid, input) {
   const claimId = requireText(input.claimId, '认领申请', 64)
   const preliminary = await db.collection('claims').doc(claimId).get()
   if (!preliminary.data || preliminary.data.applicantOpenid !== openid) throw new Error('只能完成自己的认领任务')
-  if (!['ready_for_pickup', 'returned'].includes(preliminary.data.status)) {
-    throw new Error('校园卡尚未到达可领取的官方地点')
+  const preliminaryCard = await db.collection('foundCards').doc(preliminary.data.cardId).get()
+  const effectiveStatus = normalizeClaimWorkflowStatus(
+    preliminary.data.status,
+    Boolean(preliminaryCard.data && hasPickupReadyStorage(preliminaryCard.data)),
+  )
+  if (!['ready_for_pickup', 'returned'].includes(effectiveStatus)) {
+    throw new Error('校园卡尚未登记可领取的存放地点和环境照片')
   }
-  if (preliminary.data.status === 'returned') {
+  if (effectiveStatus === 'returned') {
     if (input.proofUploadToken) {
       await discardPrivateUpload(openid, { uploadToken: input.proofUploadToken }).catch(() => undefined)
     }
