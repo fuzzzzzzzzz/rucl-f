@@ -7,6 +7,7 @@ const {
   completeHandoverRecords,
   deriveAchievementProgress,
   evaluateHandoverRisk,
+  hasPickupReadyStorage,
   decodePrivateImagePayload,
   privateUploadTokenHash,
   matchedCardProjection,
@@ -57,6 +58,9 @@ describe('security hardening domain', () => {
 
   it('treats legacy verified profiles as locked self-reported information', () => {
     expect(normalizeProfileBindingStatus({ identityStatus: 'verified' })).toBe('locked')
+    expect(normalizeProfileBindingStatus({ profileBindingStatus: 'unbound', identityStatus: 'verified' })).toBe(
+      'unbound',
+    )
     expect(normalizeProfileBindingStatus({ profileBindingStatus: 'correction_pending' })).toBe('correction_pending')
     expect(normalizeProfileBindingStatus({ studentHmac: 'student', nameHmac: 'name' })).toBe('locked')
     expect(normalizeProfileBindingStatus({ identityVerified: true })).toBe('unbound')
@@ -67,6 +71,35 @@ describe('security hardening domain', () => {
     expect(normalizeClaimWorkflowStatus('approved', true)).toBe('ready_for_pickup')
     expect(normalizeClaimWorkflowStatus('handover', false)).toBe('awaiting_official_transfer')
     expect(normalizeClaimWorkflowStatus('returned', true)).toBe('returned')
+    expect(normalizeClaimWorkflowStatus('awaiting_official_transfer', true)).toBe('ready_for_pickup')
+  })
+
+  it('reveals a photographed storage place only after the claimant is authorized', () => {
+    const photographedStorage = {
+      _id: 'card-photographed',
+      maskedName: '张**',
+      maskedStudentNumber: '2023****31',
+      category: '本科生',
+      campusId: 'zhongguancun',
+      pickupLocation: { category: '食堂' },
+      storageLocation: { category: '食堂', place: '中区食堂', area: '一层', detail: '收银台工作人员' },
+      storagePhotoFileId: 'cloud://private/storage-scenes/place.jpg',
+      foundAt: new Date('2026-07-16T00:00:00.000Z'),
+      status: 'matched',
+    }
+
+    expect(hasPickupReadyStorage(photographedStorage)).toBe(true)
+    expect(matchedCardProjection(photographedStorage)).not.toHaveProperty('officialStoragePoint')
+    expect(
+      matchedCardProjection(photographedStorage, {
+        discloseOfficialStoragePoint: true,
+        storagePhotoUrl: 'https://signed.example/place',
+      }),
+    ).toMatchObject({
+      officialStoragePoint: '中区食堂 · 一层 · 收银台工作人员',
+      storagePhotoUrl: 'https://signed.example/place',
+    })
+    expect(hasPickupReadyStorage({ ...photographedStorage, storagePhotoFileId: '' })).toBe(false)
   })
 
   it('reveals only an official hand-in point and never returns a private file id', () => {
@@ -91,6 +124,7 @@ describe('security hardening domain', () => {
     const privateCustody = matchedCardProjection(
       {
         ...base,
+        storagePhotoFileId: '',
         storageLocation: { category: '其他', place: '个人保管', area: '不适用', detail: '宿舍内' },
       },
       { discloseOfficialStoragePoint: true, storagePhotoUrl: 'https://signed.example/private' },
@@ -104,6 +138,46 @@ describe('security hardening domain', () => {
     expect(privateCustody).not.toHaveProperty('officialStoragePoint')
     expect(privateCustody).not.toHaveProperty('storagePhotoUrl')
     expect(privateCustody.awaitingOfficialTransfer).toBe(true)
+  })
+
+  it('completes a legacy waiting claim when the storage place has a photo', async () => {
+    const records = {
+      claims: {
+        'claim-photo': {
+          _id: 'claim-photo',
+          cardId: 'card-photo',
+          applicantOpenid: 'owner-photo',
+          publisherOpenid: 'finder-photo',
+          studentHmac: 'student-photo',
+          status: 'awaiting_official_transfer',
+        },
+      },
+      foundCards: {
+        'card-photo': {
+          _id: 'card-photo',
+          status: 'awaiting_official_transfer',
+          activeClaimId: 'claim-photo',
+          storageLocation: { category: '食堂', place: '中区食堂', area: '一层', detail: '收银台工作人员' },
+          storagePhotoFileId: 'cloud://env/storage-scenes/place.jpg',
+        },
+      },
+      lostReports: {},
+      handovers: {},
+      fileCleanupJobs: {},
+    }
+
+    const completed = await completeHandoverRecords({
+      transaction: createTransaction(records),
+      claimId: 'claim-photo',
+      actorOpenid: 'owner-photo',
+      actorRole: 'student',
+      proofFileId: 'cloud://env/handover-proofs/proof.jpg',
+      serverDate: () => 'SERVER_DATE',
+    })
+
+    expect(completed.alreadyCompleted).toBe(false)
+    expect(records.claims['claim-photo'].status).toBe('returned')
+    expect(records.foundCards['card-photo'].status).toBe('returned')
   })
 
   it('lets only the owner or an admin complete a handover and requires owner proof', async () => {
@@ -123,6 +197,7 @@ describe('security hardening domain', () => {
           _id: 'card-1',
           status: 'ready_for_pickup',
           activeClaimId: 'claim-1',
+          storageLocation: { category: '教学楼', place: '理工楼', area: '一层', detail: '门卫' },
           storagePhotoFileId: 'cloud://env/storage-scenes/one.jpg',
         },
       },
@@ -176,6 +251,7 @@ describe('security hardening domain', () => {
       applicantOpenid: 'owner-1',
       publisherOpenid: 'finder-1',
       proofFileId: 'cloud://env/handover-proofs/proof.jpg',
+      storagePhotoProvided: true,
       valid: true,
       riskStatus: 'normal',
     })
@@ -199,7 +275,12 @@ describe('security hardening domain', () => {
   it('keeps return completion independent from unsafe thanks text', () => {
     expect(validatePublicThanks('谢谢你帮我找回校园卡')).toEqual({ accepted: true, text: '谢谢你帮我找回校园卡' })
     expect(validatePublicThanks('加微信 abc123 联系我')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('加 vx abc_123')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('v x：abc123')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('加薇信 abc123')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('扣扣 123456')).toMatchObject({ accepted: false, text: '' })
     expect(validatePublicThanks('谢谢 13800138000')).toMatchObject({ accepted: false, text: '' })
+    expect(validatePublicThanks('你真是个傻逼')).toMatchObject({ accepted: false, text: '' })
     expect(validatePublicThanks('太感谢了'.repeat(10))).toMatchObject({ accepted: false, text: '' })
   })
 
@@ -214,7 +295,9 @@ describe('security hardening domain', () => {
     const handovers = Array.from({ length: 10 }, (_, index) => ({
       valid: index !== 8,
       riskStatus: 'normal',
-      officialPointVerified: index < 3,
+      storagePhotoProvided: index < 3,
+      completedBy: 'owner',
+      officialPointVerified: false,
       campusId: index === 1 ? 'tongzhou' : 'zhongguancun',
       responseHours: index < 2 ? 24 : 72,
       approvedThanks: index < 3,
@@ -229,5 +312,17 @@ describe('security hardening domain', () => {
     expect(progress.find((item) => item.id === 'two_campuses').unlocked).toBe(true)
     expect(progress.find((item) => item.id === 'warm_companion').unlocked).toBe(true)
     expect(progress.find((item) => item.id === 'honest_guardian').unlocked).toBe(false)
+  })
+
+  it('keeps legacy admin-confirmed official handovers in safe handover progress', () => {
+    const progress = deriveAchievementProgress(
+      Array.from({ length: 3 }, () => ({
+        valid: true,
+        riskStatus: 'cleared',
+        officialPointVerified: true,
+      })),
+    )
+
+    expect(progress.find((item) => item.id === 'safe_handover').progress).toBe(3)
   })
 })

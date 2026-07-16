@@ -53,6 +53,21 @@ describe('cloud deployment contract', () => {
     ).toBe('请先填写姓名和学号')
   })
 
+  it('explains oversized private-photo requests instead of reporting a generic cloud outage', () => {
+    expect(friendlyCloudErrorMessage(new Error('EXCEED_MAX_PAYLOAD_SIZE: request data size exceeds limit'))).toBe(
+      '照片数据过大，请重新拍摄并减少画面细节',
+    )
+  })
+
+  it('keeps private photos below a conservative callFunction payload boundary', () => {
+    const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
+
+    expect(client).toContain('const MAX_PRIVATE_IMAGE_BYTES = 384 * 1024')
+    expect(client).toContain('quality: 35')
+    expect(client).toContain('compressedWidth: 960')
+    expect(client).toContain('compressedHeight: 960')
+  })
+
   it('treats an absent deterministic claim record as a first submission', () => {
     const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
 
@@ -96,6 +111,22 @@ describe('cloud deployment contract', () => {
     expect(checklist).toContain('AppSecret')
     expect(checklist).toContain('云存储')
     expect(checklist).toContain('拾卡者、失主、管理员')
+  })
+
+  it('keeps privacy and release copy aligned with photographed storage pickup', () => {
+    const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.wxml'), 'utf8')
+    const foundPage = fs.readFileSync(path.join(root, 'miniprogram/pages/found/index.wxml'), 'utf8')
+    const adminPage = fs.readFileSync(path.join(root, 'miniprogram/pages/admin/index.wxml'), 'utf8')
+    const checklist = fs.readFileSync(path.join(root, 'docs/RELEASE-GATE.md'), 'utf8')
+    const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8')
+
+    expect(privacy).toContain('有存放环境照片或卡片已在官方地点')
+    expect(privacy).not.toContain('多条匹配、个人保管或尚未确认时')
+    expect(foundPage).toContain('有存放照片或卡片已在官方地点')
+    expect(adminPage).not.toContain('等待拾卡者转交官方地点')
+    expect(checklist).toContain('有存放环境照片或卡片已在官方地点')
+    expect(readme).not.toContain('只有姓名、学号唯一一致且卡片已经到达官方地点')
+    expect(readme).not.toContain('多条匹配或个人保管状态不返回地点')
   })
 
   it('uses cross-platform lock fingerprints and current GitHub action runtimes', () => {

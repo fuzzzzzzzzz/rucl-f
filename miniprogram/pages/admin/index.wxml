@@ -19,7 +19,7 @@
       <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>私有特征{{item.featureMatch ? '相符' : '未确认'}}</text></view><view class="storage-detail"><b>当前存放</b><text>{{item.storageSummary}}</text></view>
       <view wx:if="{{item.status === 'admin_review'}}" class="review-actions"><button data-id="{{item.id}}" data-decision="rejected" loading="{{busyId === item.id}}" bindtap="decideClaim">拒绝</button><button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyId === item.id}}" bindtap="decideClaim">批准认领</button></view>
       <button wx:elif="{{item.status === 'ready_for_pickup'}}" class="handover-button" data-id="{{item.id}}" loading="{{busyId === item.id}}" bindtap="finishHandover">管理员代为确认归还</button>
-      <view wx:else class="safety-note">等待拾卡者转交官方地点。</view>
+      <view wx:else class="safety-note">尚未提供可辨认的存放照片，也未登记官方地点。</view>
     </view>
     <view class="section-title queue-title">交接与奖励复核<text class="en">[ HANDOVER REVIEW · {{operations.risks.length}} ]</text></view>
     <view wx:for="{{operations.risks}}" wx:key="id" class="neo-card review-card"><view class="review-title">交接记录 {{item.id}}</view><view class="review-meta"><text>{{item.riskStatus === 'review' ? '出现异常频率，奖励待复核' : '待确认是否在官方地点交接'}}</text></view><button data-id="{{item.id}}" bindtap="viewProof">仅为处理争议查看交接照片</button><view class="review-actions"><button data-id="{{item.id}}" data-decision="invalid" bindtap="reviewRisk">撤销记录</button><button class="approve" data-id="{{item.id}}" data-decision="valid" bindtap="reviewRisk">确认有效和官方交接</button></view></view>

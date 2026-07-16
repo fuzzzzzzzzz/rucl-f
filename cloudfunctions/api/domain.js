@@ -73,6 +73,7 @@ function privateUploadTokenHash(value) {
 function normalizeProfileBindingStatus(user = {}) {
   if (user.profileBindingStatus === 'correction_pending') return 'correction_pending'
   if (user.profileBindingStatus === 'locked') return 'locked'
+  if (user.profileBindingStatus === 'unbound') return 'unbound'
   if (user.identityStatus === 'verified' || (user.studentHmac && user.nameHmac)) return 'locked'
   return 'unbound'
 }
@@ -81,11 +82,12 @@ function normalizeIdentityStatus(user = {}) {
   return normalizeProfileBindingStatus(user)
 }
 
-function normalizeClaimWorkflowStatus(status, officialStorage = false) {
+function normalizeClaimWorkflowStatus(status, storageReady = false) {
   if (status === 'review') return 'admin_review'
   if (status === 'approved' || status === 'handover') {
-    return officialStorage ? 'ready_for_pickup' : 'awaiting_official_transfer'
+    return storageReady ? 'ready_for_pickup' : 'awaiting_official_transfer'
   }
+  if (status === 'awaiting_official_transfer' && storageReady) return 'ready_for_pickup'
   if (status === 'pending') return 'pending_match'
   return status
 }
@@ -125,6 +127,25 @@ async function getOptionalDocument(documentReference) {
   }
 }
 
+async function withTransactionRetry(operation, options = {}) {
+  const maxAttempts = Math.max(1, Number(options.maxAttempts || 3))
+  const wait = options.wait || ((delay) => new Promise((resolve) => setTimeout(resolve, delay)))
+  const baseDelay = Math.max(0, Number(options.baseDelay || 120))
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      const message = String(error?.message || error?.errMsg || error || '')
+      const temporary =
+        message.includes('ResourceUnavailable.TransactionBusy') ||
+        (message.includes('DATABASE_TRANSACTION_FAIL') && message.includes('Transaction is busy'))
+      if (!temporary || attempt === maxAttempts) throw error
+      await wait(baseDelay * 2 ** (attempt - 1))
+    }
+  }
+  throw new Error('transaction retry exhausted')
+}
+
 function resolveBasicClaimDecision({ studentMatch, nameMatch, identityConfirmed, ambiguousMatch }) {
   if (!identityConfirmed || !studentMatch || !nameMatch) return 'rejected'
   return ambiguousMatch ? 'review' : 'approved'
@@ -143,15 +164,22 @@ function publicCardProjection(card) {
   }
 }
 
+function hasPickupReadyStorage(card = {}) {
+  const storage = card.storageLocation || {}
+  const official = storage.category === '官方交卡点' && Boolean(storage.place)
+  const photographed = Boolean(storage.place && card.storagePhotoFileId)
+  return official || photographed
+}
+
 function matchedCardProjection(card, options = {}) {
   const result = publicCardProjection(card)
   const storage = card.storageLocation || {}
-  const official = storage.category === '官方交卡点' && Boolean(storage.place)
-  if (options.discloseOfficialStoragePoint === true && official) {
+  const storageReady = hasPickupReadyStorage(card)
+  if (options.discloseOfficialStoragePoint === true && storageReady) {
     result.officialStoragePoint = [storage.place, storage.area, storage.detail].filter(Boolean).join(' · ')
     if (options.storagePhotoUrl) result.storagePhotoUrl = options.storagePhotoUrl
   }
-  if (!official) result.awaitingOfficialTransfer = true
+  if (!storageReady) result.awaitingOfficialTransfer = true
   if (options.needsAdminReview === true) result.needsAdminReview = true
   return result
 }
@@ -195,7 +223,10 @@ async function completeHandoverRecords({
   responseHours = null,
 }) {
   const claim = await transaction.collection('claims').doc(claimId).get()
-  if (!claim.data || !['approved', 'ready_for_pickup', 'returned'].includes(claim.data.status)) {
+  if (
+    !claim.data ||
+    !['approved', 'awaiting_official_transfer', 'ready_for_pickup', 'returned'].includes(claim.data.status)
+  ) {
     throw new Error('该认领申请不在待交接状态')
   }
 
@@ -216,10 +247,13 @@ async function completeHandoverRecords({
     const card = await transaction.collection('foundCards').doc(claim.data.cardId).get()
     if (
       !card.data ||
-      !['handover', 'ready_for_pickup'].includes(card.data.status) ||
+      !['handover', 'awaiting_official_transfer', 'ready_for_pickup'].includes(card.data.status) ||
       card.data.activeClaimId !== claimId
     ) {
       throw new Error('该校园卡状态已变化，请刷新后重试')
+    }
+    if (!isAdmin && !hasPickupReadyStorage(card.data)) {
+      throw new Error('该校园卡尚未登记可辨认的存放地点')
     }
     await transaction
       .collection('foundCards')
@@ -261,6 +295,7 @@ async function completeHandoverRecords({
           approvedThanks: Boolean(thanksText),
           valid: riskStatus === 'normal',
           riskStatus,
+          storagePhotoProvided: Boolean(card.data.storagePhotoFileId),
           officialPointVerified: false,
           campusId: card.data.campusId || '',
           responseHours,
@@ -298,9 +333,17 @@ async function completeHandoverRecords({
 function validatePublicThanks(value) {
   const text = String(value || '').trim()
   if (!text) return { accepted: true, text: '' }
-  const forbidden =
+  const directContact =
     /(1\d{10})|(微信|微.?信|wechat|wx\s*[:：]?\s*[a-z0-9_-]{4,})|(qq\s*[:：]?\s*\d{5,})|(https?:\/\/|www\.|[a-z0-9-]+\.(com|cn|net))|(@[a-z0-9_-]{3,})/i
-  if (text.length > 30 || forbidden.test(text)) return { accepted: false, text: '' }
+  const compact = text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\s·•._\-—:：,，/\\|]+/g, '')
+  const hiddenContact = /(vx|wx|v信|薇信|威信|扣扣|qq)|((加|联系|私聊|找)v)|1\d{10}/i
+  const abusive = /(傻[逼比]|煞笔|脑残|滚蛋|废物|妈的|草泥马|操你|艹你|去死|狗东西|垃圾人)/i
+  if (text.length > 30 || directContact.test(text) || hiddenContact.test(compact) || abusive.test(compact)) {
+    return { accepted: false, text: '' }
+  }
   return { accepted: true, text }
 }
 
@@ -324,7 +367,10 @@ function deriveAchievementProgress(handovers = []) {
   const values = {
     first_guardian: valid.length,
     helpful_student: valid.length,
-    safe_handover: valid.filter((item) => item.officialPointVerified === true).length,
+    safe_handover: valid.filter(
+      (item) =>
+        (item.storagePhotoProvided === true && item.completedBy === 'owner') || item.officialPointVerified === true,
+    ).length,
     quick_response: valid.filter((item) => Number(item.responseHours) <= 48).length,
     two_campuses: campusCount,
     warm_companion: valid.filter((item) => item.approvedThanks === true).length,
@@ -381,6 +427,8 @@ module.exports = {
   privateUploadTokenHash,
   completeHandoverRecords,
   getOptionalDocument,
+  hasPickupReadyStorage,
+  withTransactionRetry,
   maskName,
   maskStudentNumber,
   matchedCardProjection,

@@ -121,7 +121,7 @@ Page({
           claim.status === 'admin_review'
             ? '有多条记录，等待管理员核对'
             : claim.status === 'awaiting_official_transfer'
-              ? '姓名和学号一致，等待转交官方地点'
+              ? '姓名和学号一致，等待补充存放照片'
               : '姓名和学号一致',
         icon: 'none',
         duration: 2500,

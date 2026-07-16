@@ -4,7 +4,7 @@ import type { ClaimSummary } from '../../shared/models'
 const statusText: Record<ClaimSummary['status'], string> = {
   pending_match: '等待匹配',
   admin_review: '等待管理员核对',
-  awaiting_official_transfer: '等待转交官方地点',
+  awaiting_official_transfer: '等待补充存放信息',
   ready_for_pickup: '可以前往领取',
   returned: '已经归还',
   closed: '已经关闭',
