@@ -295,6 +295,7 @@ async function completeHandoverRecords({
           approvedThanks: Boolean(thanksText),
           valid: riskStatus === 'normal',
           riskStatus,
+          storagePhotoProvided: Boolean(card.data.storagePhotoFileId),
           officialPointVerified: false,
           campusId: card.data.campusId || '',
           responseHours,
@@ -358,7 +359,10 @@ function deriveAchievementProgress(handovers = []) {
   const values = {
     first_guardian: valid.length,
     helpful_student: valid.length,
-    safe_handover: valid.filter((item) => item.officialPointVerified === true).length,
+    safe_handover: valid.filter(
+      (item) =>
+        (item.storagePhotoProvided === true && item.completedBy === 'owner') || item.officialPointVerified === true,
+    ).length,
     quick_response: valid.filter((item) => Number(item.responseHours) <= 48).length,
     two_campuses: campusCount,
     warm_companion: valid.filter((item) => item.approvedThanks === true).length,

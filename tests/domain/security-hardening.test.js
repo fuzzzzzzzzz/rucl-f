@@ -251,6 +251,7 @@ describe('security hardening domain', () => {
       applicantOpenid: 'owner-1',
       publisherOpenid: 'finder-1',
       proofFileId: 'cloud://env/handover-proofs/proof.jpg',
+      storagePhotoProvided: true,
       valid: true,
       riskStatus: 'normal',
     })
@@ -289,7 +290,9 @@ describe('security hardening domain', () => {
     const handovers = Array.from({ length: 10 }, (_, index) => ({
       valid: index !== 8,
       riskStatus: 'normal',
-      officialPointVerified: index < 3,
+      storagePhotoProvided: index < 3,
+      completedBy: 'owner',
+      officialPointVerified: false,
       campusId: index === 1 ? 'tongzhou' : 'zhongguancun',
       responseHours: index < 2 ? 24 : 72,
       approvedThanks: index < 3,
@@ -304,5 +307,17 @@ describe('security hardening domain', () => {
     expect(progress.find((item) => item.id === 'two_campuses').unlocked).toBe(true)
     expect(progress.find((item) => item.id === 'warm_companion').unlocked).toBe(true)
     expect(progress.find((item) => item.id === 'honest_guardian').unlocked).toBe(false)
+  })
+
+  it('keeps legacy admin-confirmed official handovers in safe handover progress', () => {
+    const progress = deriveAchievementProgress(
+      Array.from({ length: 3 }, () => ({
+        valid: true,
+        riskStatus: 'cleared',
+        officialPointVerified: true,
+      })),
+    )
+
+    expect(progress.find((item) => item.id === 'safe_handover').progress).toBe(3)
   })
 })
