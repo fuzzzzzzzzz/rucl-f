@@ -60,6 +60,7 @@ export interface PublicCard {
 
 export interface MessageSummary {
   id: string
+  type?: string
   title: string
   body: string
   relatedCardId?: string

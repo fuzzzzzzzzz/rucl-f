@@ -9,7 +9,7 @@
     <view wx:if="{{item.officialStoragePoint}}" class="handover-point"><b>卡片存放地点</b><text>{{item.officialStoragePoint}}</text><small>请按页面提示前往存放地点，取到卡后拍照确认完成。</small></view>
     <image wx:if="{{item.storagePhotoUrl}}" class="storage-photo" src="{{item.storagePhotoUrl}}" mode="aspectFill" />
     <view wx:elif="{{item.status === 'awaiting_official_transfer'}}" class="claim-note">拾卡者还未上传可辨认的存放环境照片。上传照片或转交官方地点后，系统会显示领取信息。</view>
-    <view wx:elif="{{item.status === 'admin_review'}}" class="claim-note">存在多条相似记录，管理员核对完成前不会展示存放地点和照片。</view>
+    <view wx:elif="{{item.status === 'admin_review'}}" class="claim-note">该记录存在异常或争议，管理员处理完成前不会展示存放地点和照片。</view>
     <view wx:if="{{item.status === 'ready_for_pickup'}}" class="complete-panel">
       <view class="proof-title">领取后，请现场拍摄校园卡</view>
       <view class="proof-help">该照片只是交接记录，不代表学校身份核验；发生争议时由管理员处理。</view>

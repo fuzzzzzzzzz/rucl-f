@@ -1,6 +1,6 @@
 <view class="page admin-page">
   <view class="topbar">管理员控制台<text class="en">ADMIN CONTROL</text></view>
-  <view class="safety-note">只有同一姓名和学号对应多条校园卡记录时，才需要管理员帮助核对。</view>
+  <view class="safety-note">系统默认使用最新发布的校园卡记录；只有发生举报、资料更正或交接争议时才需要管理员处理。</view>
   <view wx:if="{{loading}}" class="neo-card empty-state">正在读取审核队列…</view>
   <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" bindtap="loadDashboard">重新读取</button></view>
   <block wx:else>

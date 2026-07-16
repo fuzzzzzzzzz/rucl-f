@@ -1,5 +1,6 @@
 import {
   getUserProfile,
+  listMyClaims,
   registerLostCard,
   searchPublicCardsByStudentNumber,
   submitCardClaim,
@@ -25,15 +26,41 @@ Page({
     claimedCardId: '',
     informationRevealed: false,
     revealedStoragePhotoUrl: '',
+    revealedStoragePoint: '',
   },
   async onShow() {
     this.getTabBar().setData({ selected: 1 })
-    if (this.data.studentNumber) return
     const profile = await getUserProfile()
-    if (profile) this.setData({ studentNumber: profile.studentNumber })
+    if (!profile) return
+    const studentNumber = this.data.studentNumber || profile.studentNumber
+    if (!this.data.studentNumber) this.setData({ studentNumber })
+    if (studentNumber === profile.studentNumber) await this.restoreReadyClaim()
+  },
+  async restoreReadyClaim() {
+    try {
+      const claims = await listMyClaims()
+      const readyClaim = claims
+        .filter((claim) => claim.status === 'ready_for_pickup')
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]
+      if (!readyClaim) return
+      this.setData({
+        claimedCardId: readyClaim.cardId,
+        informationRevealed: true,
+        revealedStoragePhotoUrl: readyClaim.storagePhotoUrl || '',
+        revealedStoragePoint: readyClaim.officialStoragePoint || '',
+      })
+    } catch {
+      // 页面仍可继续查询；云端错误由用户主动查询时统一提示。
+    }
   },
   onNumber(e: WechatMiniprogram.Input) {
-    this.setData({ studentNumber: e.detail.value.replace(/\D/g, '').slice(0, 10), searched: false })
+    this.setData({
+      studentNumber: e.detail.value.replace(/\D/g, '').slice(0, 10),
+      searched: false,
+      informationRevealed: false,
+      revealedStoragePhotoUrl: '',
+      revealedStoragePoint: '',
+    })
   },
   async search() {
     const result = validateRucStudentNumber(this.data.studentNumber)
@@ -115,11 +142,12 @@ Page({
         results,
         informationRevealed: claim.status === 'ready_for_pickup',
         revealedStoragePhotoUrl: claim.card?.storagePhotoUrl || '',
+        revealedStoragePoint: claim.card?.officialStoragePoint || '',
       })
       wx.showToast({
         title:
           claim.status === 'admin_review'
-            ? '有多条记录，等待管理员核对'
+            ? '记录存在异常，等待管理员核对'
             : claim.status === 'awaiting_official_transfer'
               ? '姓名和学号一致，等待补充存放照片'
               : '姓名和学号一致',

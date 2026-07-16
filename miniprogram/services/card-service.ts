@@ -31,6 +31,7 @@ import {
   listCloudFoundHistory,
   listCloudLostHistory,
   listCloudMessages,
+  markCloudMessagesRead,
   mergeCloudDuplicateFoundCards,
   registerCloudLostCard,
   searchCloudCards,
@@ -57,6 +58,7 @@ import {
 interface StoredFoundCard extends FoundCardInput {
   id: string
   status: PublicCard['status']
+  createdAt?: string
 }
 
 interface StoredLostReport extends LostReportInput {
@@ -167,6 +169,7 @@ export async function submitFoundCard(input: FoundCardInput): Promise<{ id: stri
     storageLocation: { ...input.storageLocation, detail: input.storageLocation.detail.trim() },
     id: `local-${Date.now()}-${memoryFoundCards.length + 1}`,
     status: 'pending_match',
+    createdAt: new Date().toISOString(),
   }
   memoryFoundCards = [...readStorage(FOUND_KEY, memoryFoundCards), card]
   writeStorage(FOUND_KEY, memoryFoundCards)
@@ -203,18 +206,24 @@ export async function listPublicCards(): Promise<PublicCard[]> {
   return readStorage(FOUND_KEY, memoryFoundCards).map(toPublicCard)
 }
 
+function selectLatestLocalCard(cards: StoredFoundCard[]): StoredFoundCard | undefined {
+  return [...cards].sort((left, right) => {
+    const createdDifference = Date.parse(right.createdAt || '') - Date.parse(left.createdAt || '')
+    if (Number.isFinite(createdDifference) && createdDifference) return createdDifference
+    const foundDifference = Date.parse(right.foundDate) - Date.parse(left.foundDate)
+    if (Number.isFinite(foundDifference) && foundDifference) return foundDifference
+    return right.id.localeCompare(left.id)
+  })[0]
+}
+
 export async function searchPublicCardsByStudentNumber(studentNumber: string): Promise<PublicCard[]> {
   if (isCloudMode()) return searchCloudCards(studentNumber)
   const profile = await getUserProfile()
   const matches = readStorage(FOUND_KEY, memoryFoundCards).filter(
     (card) => card.studentNumber === studentNumber && (!profile || card.name.trim() === profile.name.trim()),
   )
-  const needsAdminReview = matches.length > 1
-  return matches.map((card) => {
-    const result = needsAdminReview ? toPublicCard(card) : toMatchedCard(card)
-    if (needsAdminReview) result.needsAdminReview = true
-    return result
-  })
+  const latestCard = selectLatestLocalCard(matches)
+  return latestCard ? [toMatchedCard(latestCard)] : []
 }
 
 export async function registerLostCard(input: LostReportInput): Promise<{ id: string; matchCount: number }> {
@@ -260,6 +269,12 @@ export async function listMessages(): Promise<MessageSummary[]> {
   return messages.length
     ? messages
     : [{ id: 'welcome', title: '信息保护已开启', body: '完整姓名、学号和存放地点不会出现在公开页面。' }]
+}
+
+export async function markMessagesRead(): Promise<void> {
+  if (isCloudMode()) return markCloudMessagesRead()
+  memoryMessages = readStorage(MESSAGE_KEY, memoryMessages).map((message) => ({ ...message, read: true }))
+  writeStorage(MESSAGE_KEY, memoryMessages)
 }
 
 export async function countMyRecords(): Promise<{ found: number; lost: number }> {
@@ -325,12 +340,10 @@ export async function submitCardClaim(
   const matchingCards = readStorage(FOUND_KEY, memoryFoundCards).filter(
     (item) => item.studentNumber === studentNumber && item.name.trim() === profile.name.trim(),
   )
+  const latestCard = selectLatestLocalCard(matchingCards)
+  if (!latestCard || latestCard.id !== cardId) throw new Error('该卡片不是最新记录，请重新查询后确认')
   const status: ClaimSummary['status'] =
-    matchingCards.length > 1
-      ? 'admin_review'
-      : card.storageLocation.category === '官方交卡点'
-        ? 'ready_for_pickup'
-        : 'awaiting_official_transfer'
+    card.storageLocation.category === '官方交卡点' ? 'ready_for_pickup' : 'awaiting_official_transfer'
   const claim: StoredClaim = {
     id: `local-claim-${Date.now()}`,
     cardId,

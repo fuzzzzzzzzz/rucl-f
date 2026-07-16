@@ -266,6 +266,10 @@ export async function listCloudMessages(): Promise<MessageSummary[]> {
   return callCloudApi('listMessages')
 }
 
+export async function markCloudMessagesRead(): Promise<void> {
+  await callCloudApi('markMessagesRead')
+}
+
 export async function listCloudFoundHistory(): Promise<FoundHistoryItem[]> {
   const records = await callCloudApi<CloudFoundHistory[]>('listMyFoundCards')
   return records.map((record) => ({

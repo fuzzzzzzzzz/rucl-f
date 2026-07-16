@@ -3,7 +3,7 @@
   <view wx:if="{{loading}}" class="neo-card empty-message">正在读取消息…</view>
   <view wx:elif="{{messages.length === 0}}" class="neo-card empty-message">目前没有新消息。</view>
   <view wx:for="{{messages}}" wx:key="id" class="neo-card message-card {{item.read ? 'read' : ''}}">
-    <view class="message-head"><image src="/assets/icons/notifications.png" mode="aspectFit" /><view>{{item.title}}</view></view>
+    <view class="message-head"><image src="/assets/icons/notifications.png" mode="aspectFit" /><view>{{item.title}}</view><text wx:if="{{!item.read}}" class="new-label">NEW</text></view>
     <view class="message-body">{{item.body}}</view>
     <view wx:if="{{item.createdAt}}" class="message-time number">{{item.createdAt}}</view>
   </view>

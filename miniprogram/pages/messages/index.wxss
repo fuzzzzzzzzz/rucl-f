@@ -15,6 +15,16 @@
   font-size: 29rpx;
   font-weight: 900;
 }
+.new-label {
+  margin-left: auto;
+  border: 3rpx solid #191919;
+  background: #f04418;
+  color: #fff;
+  padding: 3rpx 8rpx;
+  font-family: Arial, sans-serif;
+  font-size: 18rpx;
+  font-weight: 900;
+}
 .message-head image {
   display: block;
   width: 48rpx;

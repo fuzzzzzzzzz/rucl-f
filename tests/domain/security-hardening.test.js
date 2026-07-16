@@ -11,6 +11,7 @@ const {
   decodePrivateImagePayload,
   privateUploadTokenHash,
   matchedCardProjection,
+  selectLatestCard,
   normalizeProfileBindingStatus,
   normalizeClaimWorkflowStatus,
   validatePublicThanks,
@@ -40,6 +41,17 @@ function createTransaction(records) {
 }
 
 describe('security hardening domain', () => {
+  it('selects only the latest matching card by publication time', () => {
+    const latest = selectLatestCard([
+      { _id: 'older', createdAt: new Date('2026-07-15T10:00:00.000Z') },
+      { _id: 'newest', createdAt: new Date('2026-07-16T10:00:00.000Z') },
+      { _id: 'middle', createdAt: new Date('2026-07-16T08:00:00.000Z') },
+    ])
+
+    expect(latest?._id).toBe('newest')
+    expect(selectLatestCard([])).toBeNull()
+  })
+
   it('accepts only a small genuine JPEG payload for server-owned private uploads', () => {
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9])
     expect(decodePrivateImagePayload(jpeg.toString('base64'), 'image/jpeg', 1024)).toEqual(jpeg)

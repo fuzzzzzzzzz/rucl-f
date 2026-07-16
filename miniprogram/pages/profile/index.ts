@@ -1,5 +1,5 @@
-import { countMyRecords, getUserProfile, listMyAchievements } from '../../services/card-service'
-import type { AchievementProgress } from '../../shared/models'
+import { countMyRecords, getUserProfile, listMessages, listMyAchievements } from '../../services/card-service'
+import type { AchievementProgress, MessageSummary } from '../../shared/models'
 import { maskName, maskStudentNumber } from '../../shared/privacy'
 
 Page({
@@ -15,14 +15,17 @@ Page({
     dataModeLabel: '本机演示数据',
     identityStatusLabel: '个人信息尚未填写',
     achievements: [] as Array<AchievementProgress & { iconPath: string }>,
+    unreadMessageCount: 0,
+    latestUnreadThanks: null as MessageSummary | null,
   },
   async onShow() {
     this.getTabBar().setData({ selected: 3 })
     const profile = await getUserProfile()
     let counts = { found: 0, lost: 0 }
     let allAchievements: AchievementProgress[] = []
+    let messages: MessageSummary[] = []
     try {
-      ;[counts, allAchievements] = await Promise.all([countMyRecords(), listMyAchievements()])
+      ;[counts, allAchievements, messages] = await Promise.all([countMyRecords(), listMyAchievements(), listMessages()])
     } catch {
       // 云端错误时只展示本机已知的个人资料，不构造本地业务记录。
     }
@@ -58,6 +61,10 @@ Page({
               ? '本机演示资料'
               : '个人信息尚未填写',
       achievements,
+      unreadMessageCount: messages.filter((message) => !message.read).length,
+      latestUnreadThanks:
+        messages.find((message) => !message.read && (message.type === 'thanks' || message.title.includes('感谢'))) ||
+        null,
     })
   },
   goProfileEdit() {

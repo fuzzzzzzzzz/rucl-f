@@ -3,7 +3,7 @@
   <view class="notice">
     <view>{{identityStatusText}}</view>
     <view>系统只核对姓名和学号是否一致，不代表学校身份核验。</view>
-    <view>如果出现多条相似记录，管理员会帮助核对。</view>
+    <view>同一姓名和学号出现多条记录时，系统会使用最新发布的一条。</view>
     <view>其他人只能看到隐藏后的信息；存放地点仅按安全规则展示。</view>
   </view>
   <text class="label">姓名 <text class="en">[ NAME ]</text></text>

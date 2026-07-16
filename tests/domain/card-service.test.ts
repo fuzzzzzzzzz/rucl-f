@@ -88,15 +88,16 @@ describe('local card service', () => {
     ])
   })
 
-  it('requires administrator review when the same identity matches more than one card', async () => {
+  it('shows and claims only the latest card when the same identity has more than one record', async () => {
     await saveUserProfile({
       name: '张小明',
       studentNumber: '2023200931',
       category: '本科生',
       campusId: 'zhongguancun',
     })
+    const submitted: string[] = []
     for (const place of ['图书馆总服务台', '学生事务中心']) {
-      await submitFoundCard({
+      const record = await submitFoundCard({
         name: '张小明',
         studentNumber: '2023200931',
         category: '本科生',
@@ -105,19 +106,17 @@ describe('local card service', () => {
         storageLocation: { category: '官方交卡点', place, area: '服务台', detail: '已交工作人员' },
         foundDate: '2026-07-13',
       })
+      submitted.push(record.id)
     }
 
     const results = await searchPublicCardsByStudentNumber('2023200931')
-    expect(results).toHaveLength(2)
-    expect(results).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ needsAdminReview: true }),
-        expect.objectContaining({ needsAdminReview: true }),
-      ]),
-    )
-    expect(results.every((item) => !item.officialStoragePoint)).toBe(true)
+    expect(results).toEqual([
+      expect.objectContaining({ id: submitted[1], officialStoragePoint: expect.stringContaining('学生事务中心') }),
+    ])
+    expect(results[0]).not.toHaveProperty('needsAdminReview')
+    await expect(submitCardClaim(submitted[0], '2023200931', '')).rejects.toThrow('最新')
     await expect(submitCardClaim(results[0].id, '2023200931', '')).resolves.toMatchObject({
-      status: 'admin_review',
+      status: 'ready_for_pickup',
     })
   })
 

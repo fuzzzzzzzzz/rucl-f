@@ -26,6 +26,7 @@ const {
   requireText,
   requireVerifiedIdentity,
   resolveBasicClaimDecision,
+  selectLatestCard,
   validateStudentNumber,
   validatePublicThanks,
 } = require('./domain')
@@ -103,12 +104,12 @@ async function audit(openid, action, targetId, metadata = {}) {
   }
 }
 
-async function createMessage(recipientOpenid, title, body, relatedCardId = '', relatedClaimId = '') {
+async function createMessage(recipientOpenid, title, body, relatedCardId = '', relatedClaimId = '', messageType = '') {
   if (!recipientOpenid) return
   await db.collection('messages').add({
     data: {
       recipientOpenid,
-      type: relatedClaimId ? 'claim_update' : 'system',
+      type: messageType || (relatedClaimId ? 'claim_update' : 'system'),
       title,
       body,
       relatedCardId,
@@ -132,7 +133,7 @@ async function createMessage(recipientOpenid, title, body, relatedCardId = '', r
     if (preferences[preferenceKey] === false) return
     await cloud.openapi.subscribeMessage.send({
       touser: recipientOpenid,
-      page: relatedClaimId ? 'pages/claims/index' : 'pages/messages/index',
+      page: messageType === 'thanks' || !relatedClaimId ? 'pages/messages/index' : 'pages/claims/index',
       templateId,
       miniprogramState: process.env.MINIPROGRAM_STATE || 'developer',
       lang: 'zh_CN',
@@ -521,9 +522,9 @@ async function findMatches(openid, input) {
     .limit(10)
     .get()
   const matches = result.data.filter((card) => card.nameHmac === user.nameHmac)
-  await audit(openid, 'match.searched', '', { count: matches.length })
-  const needsAdminReview = matches.length > 1
-  return matches.map((card) => matchedCardProjection(card, { needsAdminReview }))
+  const latestCard = selectLatestCard(matches)
+  await audit(openid, 'match.searched', '', { count: matches.length, selectedLatest: Boolean(latestCard) })
+  return latestCard ? [matchedCardProjection(latestCard)] : []
 }
 
 async function createLostReport(openid, input) {
@@ -609,14 +610,29 @@ async function listMessages(openid) {
     .orderBy('createdAt', 'desc')
     .limit(50)
     .get()
-  return result.data.map(({ _id, title, body, relatedCardId, createdAt, read }) => ({
+  return result.data.map(({ _id, type, title, body, relatedCardId, createdAt, read }) => ({
     id: _id,
+    type: type || 'system',
     title,
     body,
     relatedCardId: relatedCardId || '',
     createdAt,
     read: Boolean(read),
   }))
+}
+
+async function markMessagesRead(openid) {
+  await requireActiveUser(openid)
+  const result = await db.collection('messages').where({ recipientOpenid: openid, read: false }).limit(50).get()
+  await Promise.all(
+    result.data.map((message) =>
+      db
+        .collection('messages')
+        .doc(message._id)
+        .update({ data: { read: true, readAt: db.serverDate() } }),
+    ),
+  )
+  return { updated: result.data.length }
 }
 
 function locationSummary(location = {}) {
@@ -790,7 +806,11 @@ async function submitClaim(openid, input) {
     .limit(20)
     .get()
   const matchingCards = possibleMatches.data.filter((card) => card.nameHmac === user.nameHmac)
-  const ambiguousMatch = matchingCards.length !== 1
+  const latestMatchingCard = selectLatestCard(matchingCards)
+  if (!latestMatchingCard || latestMatchingCard._id !== cardId) {
+    throw new Error('该卡片不是最新记录，请重新查询后确认')
+  }
+  const ambiguousMatch = false
   let publisherOpenid = ''
   let claimStatus = 'admin_review'
   let selectedCardData = null
@@ -862,7 +882,7 @@ async function submitClaim(openid, input) {
       openid,
       needsReview ? '认领申请已提交' : '姓名和学号一致',
       needsReview
-        ? '发现多条相似记录，管理员核对后会通知你。'
+        ? '该记录需要管理员核对，处理完成后会通知你。'
         : awaitingTransfer
           ? '尚未上传可辨认的存放环境照片，也未登记官方交卡点。'
           : '已经确认，请在“我的认领”完成交接任务。',
@@ -873,7 +893,7 @@ async function submitClaim(openid, input) {
       publisherOpenid,
       needsReview ? '校园卡收到认领申请' : awaitingTransfer ? '请补充存放信息' : '校园卡已匹配到失主',
       needsReview
-        ? '发现多条相似记录，管理员正在核对。'
+        ? '该记录存在异常，管理员正在核对。'
         : awaitingTransfer
           ? '姓名和学号一致，请补拍存放环境照片或登记官方交卡点。'
           : '姓名和学号一致，失主将前往登记的存放地点领取。',
@@ -1181,16 +1201,28 @@ async function confirmClaimHandover(openid, input) {
     await discardPrivateUpload(openid, { uploadToken: input.proofUploadToken }).catch(() => undefined)
   }
   const completedClaim = completion.completedClaim
-  await Promise.allSettled([
-    createMessage(openid, '校园卡已确认归还', '本次认领任务已经完成。', completedClaim.cardId, claimId),
-    createMessage(
-      completedClaim.publisherOpenid,
-      '校园卡已归还失主',
-      riskStatus === 'review' ? '归还已完成，奖励记录正在核对。' : '本次招领已经完成，感谢你的帮助。',
-      completedClaim.cardId,
-      claimId,
-    ),
-  ])
+  if (!completion.alreadyCompleted) {
+    await Promise.allSettled([
+      createMessage(openid, '校园卡已确认归还', '本次认领任务已经完成。', completedClaim.cardId, claimId),
+      createMessage(
+        completedClaim.publisherOpenid,
+        '校园卡已归还失主',
+        riskStatus === 'review' ? '归还已完成，奖励记录正在核对。' : '本次招领已经完成，感谢你的帮助。',
+        completedClaim.cardId,
+        claimId,
+      ),
+      thanks.text
+        ? createMessage(
+            completedClaim.publisherOpenid,
+            '你收到一条感谢',
+            thanks.text,
+            completedClaim.cardId,
+            claimId,
+            'thanks',
+          )
+        : Promise.resolve(),
+    ])
+  }
   await audit(openid, 'handover.owner_completed', claimId, { riskStatus, thanksAccepted: Boolean(thanks.text) })
   return { status: 'returned', alreadyCompleted: completion.alreadyCompleted, thanksAccepted: Boolean(thanks.text) }
 }
@@ -1589,6 +1621,8 @@ exports.main = async (event) => {
       return countMyRecords(OPENID)
     case 'listMessages':
       return listMessages(OPENID)
+    case 'markMessagesRead':
+      return markMessagesRead(OPENID)
     case 'listMyFoundCards':
       return listMyFoundCards(OPENID)
     case 'listMyLostReports':

@@ -164,6 +164,27 @@ function publicCardProjection(card) {
   }
 }
 
+function recordTimestamp(value) {
+  if (!value) return 0
+  if (value instanceof Date) return value.getTime()
+  if (typeof value.toDate === 'function') return value.toDate().getTime()
+  if (Number.isFinite(Number(value.milliseconds))) return Number(value.milliseconds)
+  if (Number.isFinite(Number(value.seconds))) return Number(value.seconds) * 1000
+  const parsed = Date.parse(String(value))
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function selectLatestCard(cards = []) {
+  if (!Array.isArray(cards) || cards.length === 0) return null
+  return [...cards].sort((left, right) => {
+    const createdDifference = recordTimestamp(right.createdAt) - recordTimestamp(left.createdAt)
+    if (createdDifference) return createdDifference
+    const foundDifference = recordTimestamp(right.foundAt) - recordTimestamp(left.foundAt)
+    if (foundDifference) return foundDifference
+    return String(right._id || right.id || '').localeCompare(String(left._id || left.id || ''))
+  })[0]
+}
+
 function hasPickupReadyStorage(card = {}) {
   const storage = card.storageLocation || {}
   const official = storage.category === '官方交卡点' && Boolean(storage.place)
@@ -436,6 +457,7 @@ module.exports = {
   normalizeIdentityStatus,
   normalizeClaimWorkflowStatus,
   publicCardProjection,
+  selectLatestCard,
   requireCloudFilePath,
   requireMatchingIdentity,
   requireMatchingStudentDigest,

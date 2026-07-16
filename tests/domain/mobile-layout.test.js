@@ -7,6 +7,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const wxml = fs.readFileSync(path.join(root, 'miniprogram/pages/lost/index.wxml'), 'utf8')
 const wxss = fs.readFileSync(path.join(root, 'miniprogram/pages/lost/index.wxss'), 'utf8')
 const script = fs.readFileSync(path.join(root, 'miniprogram/pages/lost/index.ts'), 'utf8')
+const profileWxml = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8')
+const profileScript = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.ts'), 'utf8')
 
 describe('lost-card real-device layout', () => {
   it('renders the English identity label without an HTML entity', () => {
@@ -31,5 +33,26 @@ describe('lost-card real-device layout', () => {
     expect(wxml).toContain('确认是你的卡之前，存放照片和领取地点不会显示')
     expect(wxml).toMatch(/wx:if="{{!searched \|\| results\.length === 0}}"/)
     expect(wxml).not.toContain('信息会保持模糊')
+  })
+
+  it('replaces the mosaic with both the storage photo and pickup point', () => {
+    expect(wxml).toContain('领取地点：{{revealedStoragePoint}}')
+    expect(wxml).toContain('上方已显示存放照片和领取地点。取到卡后，请在“我的认领”拍照完成交接。')
+    expect(script).toContain("revealedStoragePoint: claim.card?.officialStoragePoint || ''")
+  })
+
+  it('restores a ready pickup into the search reveal panel on return', () => {
+    expect(script).toContain('listMyClaims')
+    expect(script).toContain('restoreReadyClaim')
+    expect(script).toMatch(/status === 'ready_for_pickup'/)
+    expect(script).toContain('informationRevealed: true')
+  })
+
+  it('shows a prominent unread thanks reminder on the finder account page', () => {
+    expect(profileScript).toContain('unreadMessageCount')
+    expect(profileScript).toContain('latestUnreadThanks')
+    expect(profileWxml).toContain('你收到新的感谢')
+    expect(profileWxml).toContain('{{latestUnreadThanks.body}}')
+    expect(profileWxml).toContain('{{unreadMessageCount}}')
   })
 })
