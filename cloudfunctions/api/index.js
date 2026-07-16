@@ -602,6 +602,40 @@ async function countMyRecords(openid) {
   return { found: found.total, lost: lost.total }
 }
 
+async function backfillThanksMessages(openid, messages) {
+  const handovers = await db.collection('handovers').where({ publisherOpenid: openid }).limit(50).get()
+  const existingClaimIds = new Set(
+    messages.filter((message) => message.type === 'thanks').map((message) => message.relatedClaimId),
+  )
+  const missing = handovers.data.filter(
+    (handover) => handover.thanksText && handover.approvedThanks !== false && !existingClaimIds.has(handover._id),
+  )
+  return Promise.all(
+    missing.map(async (handover) => {
+      const id = `thanks-${handover._id}`
+      const data = {
+        _id: id,
+        recipientOpenid: openid,
+        type: 'thanks',
+        title: '你收到一条感谢',
+        body: handover.thanksText,
+        relatedCardId: handover.cardId || '',
+        relatedClaimId: handover._id,
+        read: false,
+        createdAt: handover.completedAt || db.serverDate(),
+      }
+      try {
+        await db.collection('messages').add({ data })
+        return data
+      } catch (error) {
+        const existing = await db.collection('messages').doc(id).get()
+        if (!existing.data || existing.data.recipientOpenid !== openid) throw error
+        return { _id: id, ...existing.data }
+      }
+    }),
+  )
+}
+
 async function listMessages(openid) {
   await requireActiveUser(openid)
   const result = await db
@@ -610,15 +644,19 @@ async function listMessages(openid) {
     .orderBy('createdAt', 'desc')
     .limit(50)
     .get()
-  return result.data.map(({ _id, type, title, body, relatedCardId, createdAt, read }) => ({
-    id: _id,
-    type: type || 'system',
-    title,
-    body,
-    relatedCardId: relatedCardId || '',
-    createdAt,
-    read: Boolean(read),
-  }))
+  const backfilled = await backfillThanksMessages(openid, result.data)
+  return [...result.data, ...backfilled]
+    .sort((left, right) => dateValue(right.createdAt) - dateValue(left.createdAt))
+    .slice(0, 50)
+    .map(({ _id, type, title, body, relatedCardId, createdAt, read }) => ({
+      id: _id,
+      type: type || 'system',
+      title,
+      body,
+      relatedCardId: relatedCardId || '',
+      createdAt,
+      read: Boolean(read),
+    }))
 }
 
 async function markMessagesRead(openid) {
