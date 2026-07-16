@@ -24,4 +24,12 @@ describe('lost-card real-device layout', () => {
     expect(wxml).toMatch(/class="claim-submit"[^>]*disabled="{{claimSubmitting}}"/)
     expect(script).toMatch(/async submitClaim\(\)\s*{\s*if \(this\.data\.claimSubmitting\) return/)
   })
+
+  it('distinguishes an unrelated search from hidden pickup details', () => {
+    expect(wxml).toContain('这里只查询与“我的信息”中姓名和学号同时一致的卡片')
+    expect(wxml).toContain('无关用户不会看到卡片信息')
+    expect(wxml).toContain('确认是你的卡之前，存放照片和领取地点不会显示')
+    expect(wxml).toMatch(/wx:if="{{!searched \|\| results\.length === 0}}"/)
+    expect(wxml).not.toContain('信息会保持模糊')
+  })
 })
