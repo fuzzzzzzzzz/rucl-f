@@ -113,6 +113,22 @@ describe('cloud deployment contract', () => {
     expect(checklist).toContain('拾卡者、失主、管理员')
   })
 
+  it('keeps privacy and release copy aligned with photographed storage pickup', () => {
+    const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.wxml'), 'utf8')
+    const foundPage = fs.readFileSync(path.join(root, 'miniprogram/pages/found/index.wxml'), 'utf8')
+    const adminPage = fs.readFileSync(path.join(root, 'miniprogram/pages/admin/index.wxml'), 'utf8')
+    const checklist = fs.readFileSync(path.join(root, 'docs/RELEASE-GATE.md'), 'utf8')
+    const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8')
+
+    expect(privacy).toContain('有存放环境照片或卡片已在官方地点')
+    expect(privacy).not.toContain('多条匹配、个人保管或尚未确认时')
+    expect(foundPage).toContain('有存放照片或卡片已在官方地点')
+    expect(adminPage).not.toContain('等待拾卡者转交官方地点')
+    expect(checklist).toContain('有存放环境照片或卡片已在官方地点')
+    expect(readme).not.toContain('只有姓名、学号唯一一致且卡片已经到达官方地点')
+    expect(readme).not.toContain('多条匹配或个人保管状态不返回地点')
+  })
+
   it('uses cross-platform lock fingerprints and current GitHub action runtimes', () => {
     const riskCheck = fs.readFileSync(path.join(root, 'scripts/check-dependency-risk.mjs'), 'utf8')
     const workflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
