@@ -9,6 +9,7 @@ import {
   reviewClaim,
   reviewIdentityProfile,
   resolveAdminOperation,
+  resolveReport,
   reviewRiskHandover,
   setUserRestriction,
 } from '../../services/card-service'
@@ -111,6 +112,24 @@ Page({
       await resolveAdminOperation(collection, id, 'resolved')
       wx.showToast({ title: '已标记处理完成', icon: 'none' })
       await this.loadDashboard()
+    } finally {
+      this.setData({ busyId: '' })
+    }
+  },
+  async decideReport(e: WechatMiniprogram.TouchEvent) {
+    const reportId = String(e.currentTarget.dataset.id || '')
+    const decision = String(e.currentTarget.dataset.decision || '') as 'no_violation' | 'closed' | 'banned'
+    const confirmed = await confirmAction(
+      decision === 'banned' ? '核实并封禁会立即限制责任账号，是否继续？' : '确认提交该举报处理结果？',
+    )
+    if (!confirmed) return
+    try {
+      this.setData({ busyId: reportId })
+      await resolveReport(reportId, decision)
+      wx.showToast({ title: '举报结果已通知举报人', icon: 'none' })
+      await this.loadDashboard()
+    } catch (error) {
+      wx.showToast({ title: error instanceof Error ? error.message : '处理失败', icon: 'none' })
     } finally {
       this.setData({ busyId: '' })
     }

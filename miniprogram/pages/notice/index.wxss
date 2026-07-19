@@ -1,0 +1,45 @@
+@import '../../styles/common.wxss';
+
+.page {
+  padding-bottom: 70rpx;
+}
+.warning-card {
+  margin: 28rpx;
+  padding: 28rpx;
+  border: 5rpx solid #191919;
+  background: #ffe600;
+  box-shadow: 9rpx 9rpx 0 #191919;
+  font-size: 26rpx;
+  line-height: 1.7;
+}
+.warning-title {
+  margin-bottom: 10rpx;
+  font-size: 34rpx;
+  font-weight: 900;
+}
+.item,
+.muted,
+.important {
+  margin-top: 14rpx;
+  font-size: 25rpx;
+  line-height: 1.75;
+}
+.muted {
+  color: #666;
+}
+.important {
+  padding: 18rpx;
+  border: 3rpx solid #191919;
+  background: #fff2a8;
+  font-weight: 700;
+}
+.danger {
+  border-color: #f0441d;
+}
+.link {
+  color: #075fa8;
+  text-decoration: underline;
+}
+.neo-button {
+  margin: 36rpx auto;
+}

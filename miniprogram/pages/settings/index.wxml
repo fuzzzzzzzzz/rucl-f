@@ -6,5 +6,5 @@
 <view class="setting-row"><text>待完成交接</text><switch checked="{{preferences.pickupReminder}}" data-key="pickupReminder" bindchange="togglePreference" color="#20d6b5" /></view>
 <button class="subscribe-button" bindtap="enableWechatNotifications">允许微信通知<text class="en">[ ENABLE ]</text></button>
 <view class="notification-tip">微信要求用户主动允许订阅通知；拒绝或发送失败时，站内消息仍会保留。</view></view>
-<view class="menu" bindtap="goProfileEdit">申请修改姓名和学号</view><view class="menu" bindtap="goPrivacy">信息收集与保存说明</view><view class="menu" bindtap="clearCache">清理本机缓存</view><view class="menu" bindtap="submitFeedback">意见反馈</view><view class="menu warning" bindtap="requestDeletion">申请删除个人数据</view>
+<view class="menu" bindtap="goProfileEdit">申请修改姓名和学号</view><view class="menu" bindtap="goNotice">注意事项与使用规则</view><view class="menu" bindtap="goPrivacy">信息收集与保存说明</view><view class="menu" bindtap="submitComplaint">举报与投诉</view><view class="menu" bindtap="clearCache">清理本机缓存</view><view class="menu" bindtap="submitFeedback">意见反馈</view><view class="menu warning" bindtap="requestDeletion">申请删除个人数据</view>
 <view class="status-box"><view>版本 <text class="number">{{version}}</text></view><view>{{cloudStatus}}</view><view class="tip">微信通知未配置或发送失败时，站内消息仍会保留，不影响业务状态。</view></view></view>

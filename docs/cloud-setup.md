@@ -8,7 +8,7 @@
 
 - 核心：`users`、`identityBindings`、`foundCards`、`lostReports`、`matches`、`claims`、`handovers`、`messages`；
 - 文件：`uploadedFiles`、`fileCleanupJobs`；
-- 运营：`identityCorrectionRequests`、`recordReports`、`riskReviews`、`feedback`、`dataDeletionRequests`、`auditLogs`。
+- 运营：`identityCorrectionRequests`、`recordReports`、`riskReviews`、`feedback`、`dataDeletionRequests`、`deletionReceipts`、`auditLogs`。
 
 所有集合均设置为客户端不可直接读写，并在控制台应用 `security/database.rules.json`。小程序页面只调用云函数。
 
@@ -66,6 +66,12 @@
 - `api`：`STUDENT_HMAC_SECRET`（至少32字节）、可选 `SUBSCRIPTION_TEMPLATE_ID`；
 - `processCardImage`：`TENCENT_SECRET_ID`、`TENCENT_SECRET_KEY`、`TENCENT_OCR_REGION`、`OCR_DAILY_GLOBAL_LIMIT`；
 - `scheduledCleanup`：每天凌晨3点运行，不允许客户端调用。
+  - 分页删除超过60天的 `auditLogs`；安全审计日志最多保存60天。
+  - 继续处理照片删除队列；账号删除产生的照片任务使用 `account_deleted` 原因。
+
+管理员批准数据删除申请时，服务端会先检查进行中的认领、待处理争议和7天取卡照片保留期。满足条件后解除用户与 OpenID、姓名和学号绑定，删除或匿名化业务数据，将照片写入 `fileCleanupJobs`，并仅在 `deletionReceipts` 中保留不含姓名、学号和 OpenID 的幂等处理凭证。
+
+本版本不接入微信手机号验证，不收集手机号，也不以手机号状态阻塞发布或认领。
 
 `MINIPROGRAM_STATE` 在开发环境使用 `developer`，上线时改为 `formal`。订阅模板需要包含两个“事物”字段 `thing1`、`thing2`；模板未配置、用户未授权或发送失败时只保留站内消息，不影响业务状态。
 

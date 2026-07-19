@@ -1,6 +1,7 @@
 import {
   clearLocalData,
   getAccountSettings,
+  reportRecord,
   submitAccountRequest,
   updateNotificationPreferences,
 } from '../../services/card-service'
@@ -64,6 +65,23 @@ Page({
   submitFeedback() {
     this.openTextRequest('feedback', '意见反馈', '请写下问题或建议')
   },
+  submitComplaint() {
+    wx.showModal({
+      title: '举报与投诉',
+      content: '请描述涉及的页面、记录编号和具体问题。虚假举报或违规经核实会被限制或封禁。',
+      editable: true,
+      placeholderText: '请填写具体事实（最多160字）',
+      success: async (result) => {
+        if (!result.confirm || !result.content?.trim()) return
+        try {
+          await reportRecord('general', '', result.content.trim())
+          wx.showToast({ title: '举报已提交', icon: 'none' })
+        } catch (error) {
+          wx.showToast({ title: error instanceof Error ? error.message : '提交失败', icon: 'none' })
+        }
+      },
+    })
+  },
   requestDeletion() {
     this.openTextRequest('data_deletion', '申请删除数据', '请说明希望删除的资料或记录')
   },
@@ -89,5 +107,8 @@ Page({
   },
   goPrivacy() {
     wx.navigateTo({ url: '/pages/privacy/index' })
+  },
+  goNotice() {
+    wx.navigateTo({ url: '/pages/notice/index' })
   },
 })

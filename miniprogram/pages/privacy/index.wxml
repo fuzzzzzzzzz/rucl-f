@@ -1,6 +1,8 @@
 <view class="page"><view class="topbar">信息收集与保存<text class="en">PRIVACY NOTICE</text></view>
-<view class="neo-card"><view class="section-title">为什么收集</view><view class="rule" /><view class="copy">姓名和10位学号只用于把失卡登记与拾卡记录进行一致性核对；卡片类别和校区用于缩小范围；地点与环境照片用于领取；取卡照片只作为交接记录，不代表学校身份核验。</view></view>
-<view class="neo-card"><view class="section-title">保存多久</view><view class="rule" /><view class="copy">校园卡原图完成文字识别后立即安排删除。无人认领的环境照片14天后安排删除；记录归还或关闭后立即安排删除。取卡照片在交接完成7天后安排删除。删除失败会进入自动重试队列。</view></view>
-<view class="neo-card"><view class="section-title">谁能看到</view><view class="rule" /><view class="copy">公开页面只显示隐藏后的姓名和学号。只有姓名学号一致并确认最新发布的对应卡片后，系统才会在有存放环境照片或卡片已在官方地点时显示领取信息。同一姓名学号存在多条记录时只使用最新一条。页面和接口不直接提供照片文件编号，取卡照片只有管理员处理争议时可以查看。</view></view>
-<view class="neo-card"><view class="section-title">如何更正或删除</view><view class="rule" /><view class="copy">姓名学号写错时，在“账号设置”申请解除锁定；其他资料可直接更新。需要删除数据时，在“账号设置”提交删除申请，由管理员核对正在进行的认领后处理。</view></view>
+<view class="neo-card"><view class="section-title">处理者与联系方式</view><view class="rule" /><view class="copy">个人信息处理者为张一凡（个人开发者），联系邮箱 fuz138886@gmail.com。本项目是学生个人公益项目，非中国人民大学官方平台。说明生效日期为2026-07-19，规则版本1.0。</view></view>
+<view class="neo-card"><view class="section-title">收集范围与目的</view><view class="rule" /><view class="copy">收集微信 OpenID 用于区分账号；姓名、10位学号、身份类别和校区用于匹配失卡与拾卡记录；地点、时间、必要的环境照片用于说明保管位置；取卡照片用于处理交接争议；举报内容和操作日志用于安全管理。公开页面仅展示脱敏姓名和学号。本版本不收集微信手机号，也不以手机号验证阻塞发布或认领。</view></view>
+<view class="neo-card"><view class="section-title">保存期限</view><view class="rule" /><view class="copy">校园卡原图完成文字识别后立即安排删除；无人认领的环境照片14天后安排删除，记录归还或关闭后立即安排删除；取卡照片在交接完成7天后安排删除；安全审计日志最多保存60天并分页清理。其他账号和业务记录保存至完成处理、用户删除或实现目的所需期限届满。</view></view>
+<view class="neo-card"><view class="section-title">共享、委托与访问</view><view class="rule" /><view class="copy">数据使用微信小程序与微信云开发提供的基础设施处理，不出售个人信息。只有姓名学号一致并确认最新对应卡片后，系统才会在有存放环境照片或卡片已在官方地点时显示领取信息。管理员仅在处理认领、争议、举报和删除申请所必要的范围内访问。除依法配合监管、司法机关或经你另行同意外，不向其他第三方提供可识别个人的信息。</view></view>
+<view class="neo-card"><view class="section-title">更正与删除</view><view class="rule" /><view class="copy">在“账号设置”可申请修改姓名学号、提交删除申请或通过联系邮箱投诉。管理员批准删除后，会先检查进行中的认领、争议和照片保留期；条件满足时解除身份绑定，删除或匿名化个人数据，并将照片加入删除队列。仅保留不含姓名、学号和 OpenID 的删除凭证。同一申请重复执行不会重复处理。</view></view>
+<view class="neo-card"><view class="section-title">风险、安全与未成年人</view><view class="rule" /><view class="copy">系统采取脱敏、权限校验、限流、审计和延迟删除措施，但网络服务不能保证绝对安全。发生疑似泄露、冒领或错误展示请立即联系运营者。未满14周岁的用户不要自行使用；确需使用应由监护人先联系并同意处理。</view></view>
 <button class="neo-button" bindtap="goSettings">进入账号设置</button></view>

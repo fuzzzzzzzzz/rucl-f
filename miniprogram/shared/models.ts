@@ -98,6 +98,8 @@ export interface ThanksWallItem {
   createdAt: string
 }
 
+export type ReportType = 'found' | 'lost' | 'claim' | 'thanks' | 'general'
+
 export interface AdminIdentityReviewItem {
   id: string
   userId?: string
@@ -124,7 +126,7 @@ export interface AccountSettings {
 }
 
 export interface AdminOperationSummary {
-  reports: Array<{ id: string; type: string; recordId: string; reason: string }>
+  reports: Array<{ id: string; type: ReportType; recordId: string; reason: string; hasTarget: boolean }>
   risks: Array<{ id: string; cardId: string; completedAt?: string; riskStatus?: string }>
   deletionRequests: Array<{ id: string; content: string }>
   feedback: Array<{ id: string; content: string }>

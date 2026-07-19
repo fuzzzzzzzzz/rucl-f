@@ -11,6 +11,7 @@
     "pages/transfer/index",
     "pages/settings/index",
     "pages/help/index",
+    "pages/notice/index",
     "pages/privacy/index",
     "pages/achievements/index",
     "pages/thanks-wall/index",
