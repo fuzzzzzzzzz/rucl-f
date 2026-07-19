@@ -12,6 +12,7 @@ import type {
   LostHistoryItem,
   MessageSummary,
   PublicCard,
+  ReportType,
   ThanksWallItem,
   UserProfileInput,
 } from '../shared/models'
@@ -384,12 +385,15 @@ export async function closeCloudRecord(type: 'found' | 'lost', recordId: string,
   await callCloudApi('closeOwnRecord', { type, recordId, reason })
 }
 
-export async function reportCloudRecord(
-  type: 'found' | 'lost' | 'claim',
-  recordId: string,
-  reason: string,
-): Promise<void> {
+export async function reportCloudRecord(type: ReportType, recordId: string, reason: string): Promise<void> {
   await callCloudApi('reportRecord', { type, recordId, reason })
+}
+
+export async function resolveCloudReport(
+  reportId: string,
+  decision: 'no_violation' | 'closed' | 'banned',
+): Promise<void> {
+  await callCloudApi('resolveReport', { reportId, decision })
 }
 
 export async function getCloudAccountSettings(): Promise<AccountSettings> {

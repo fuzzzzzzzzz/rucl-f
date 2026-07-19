@@ -36,6 +36,9 @@ const db = cloud.database()
 const _ = db.command
 const CARD_CATEGORIES = ['本科生', '硕士生', '博士生', '教职工']
 const CAMPUS_IDS = ['zhongguancun', 'tongzhou']
+const REPORT_TYPES = ['found', 'lost', 'claim', 'thanks', 'general']
+const REPORT_DAILY_LIMIT = 10
+const ACTIVE_CLAIM_STATUSES = ['admin_review', 'awaiting_official_transfer', 'ready_for_pickup']
 
 function requireChoice(value, choices, label) {
   const selected = requireText(value, label, 40)
@@ -1360,9 +1363,30 @@ async function closeOwnRecord(openid, input) {
 
 async function reportRecord(openid, input) {
   await requireActiveUser(openid)
-  const type = requireChoice(input.type, ['found', 'lost', 'claim'], '举报类型')
-  const recordId = requireText(input.recordId, '记录', 64)
+  const type = requireChoice(input.type, REPORT_TYPES, '举报类型')
+  const recordId =
+    type === 'general' ? String(input.recordId || '').slice(0, 64) : requireText(input.recordId, '记录', 64)
   const reason = requireText(input.reason, '举报原因', 160)
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const recent = await db
+    .collection('recordReports')
+    .where({ reporterOpenid: openid, createdAt: _.gte(since) })
+    .count()
+  if (recent.total >= REPORT_DAILY_LIMIT) throw new Error('24小时内举报次数已达上限，请稍后再试或通过联系邮箱投诉')
+  let reportedOpenid = ''
+  if (type !== 'general') {
+    const source = {
+      found: ['foundCards', 'publisherOpenid'],
+      lost: ['lostReports', 'ownerOpenid'],
+      claim: ['claims', 'applicantOpenid'],
+      thanks: ['handovers', 'applicantOpenid'],
+    }[type]
+    const record = await db.collection(source[0]).doc(recordId).get()
+    if (!record.data) throw new Error('被举报内容不存在或已删除')
+    reportedOpenid = String(record.data[source[1]] || '')
+    if (!reportedOpenid) throw new Error('无法确认被举报内容的责任账号')
+    if (reportedOpenid === openid) throw new Error('不能举报自己发布的内容')
+  }
   const existing = await db
     .collection('recordReports')
     .where({ reporterOpenid: openid, type, recordId, status: 'pending' })
@@ -1370,7 +1394,15 @@ async function reportRecord(openid, input) {
     .get()
   if (existing.data.length) return { id: existing.data[0]._id, status: 'pending' }
   const created = await db.collection('recordReports').add({
-    data: { reporterOpenid: openid, type, recordId, reason, status: 'pending', createdAt: db.serverDate() },
+    data: {
+      reporterOpenid: openid,
+      reportedOpenid,
+      type,
+      recordId,
+      reason,
+      status: 'pending',
+      createdAt: db.serverDate(),
+    },
   })
   await audit(openid, 'record.reported', recordId, { type })
   return { id: created._id, status: 'pending' }
@@ -1418,6 +1450,162 @@ async function submitAccountRequest(openid, input) {
   return { id: created._id, status: 'pending' }
 }
 
+async function removeWhere(collection, condition) {
+  let removed = 0
+  for (let page = 0; page < 100; page += 1) {
+    const result = await db.collection(collection).where(condition).limit(100).get()
+    if (!result.data.length) break
+    await Promise.all(result.data.map((item) => db.collection(collection).doc(item._id).remove()))
+    removed += result.data.length
+    if (result.data.length < 100) break
+  }
+  return removed
+}
+
+async function anonymizeWhere(collection, condition, data) {
+  for (let page = 0; page < 100; page += 1) {
+    const result = await db.collection(collection).where(condition).limit(100).get()
+    if (!result.data.length) break
+    await Promise.all(result.data.map((item) => db.collection(collection).doc(item._id).update({ data })))
+    if (result.data.length < 100) break
+  }
+}
+
+async function collectWhere(collection, condition) {
+  const rows = []
+  for (let page = 0; page < 100; page += 1) {
+    const result = await db
+      .collection(collection)
+      .where(condition)
+      .skip(page * 100)
+      .limit(100)
+      .get()
+    rows.push(...result.data)
+    if (result.data.length < 100) break
+  }
+  return rows
+}
+
+async function executeDataDeletion(openid, requestId) {
+  const requestRef = db.collection('dataDeletionRequests').doc(requestId)
+  const requestResult = await requestRef.get()
+  const request = requestResult.data
+  if (!request) throw new Error('删除申请不存在')
+  if (request.status === 'completed') return { status: 'completed', receiptId: request.receiptId || requestId }
+  if (!request.applicantOpenid) throw new Error('删除申请缺少申请账号，无法执行')
+  const applicantOpenid = request.applicantOpenid
+
+  const [applicantClaims, publisherClaims, receivedReports, submittedReports, applicantProofs, publisherProofs] =
+    await Promise.all([
+      db
+        .collection('claims')
+        .where({ applicantOpenid, status: _.in(ACTIVE_CLAIM_STATUSES) })
+        .limit(1)
+        .get(),
+      db
+        .collection('claims')
+        .where({ publisherOpenid: applicantOpenid, status: _.in(ACTIVE_CLAIM_STATUSES) })
+        .limit(1)
+        .get(),
+      db.collection('recordReports').where({ reportedOpenid: applicantOpenid, status: 'pending' }).limit(1).get(),
+      db.collection('recordReports').where({ reporterOpenid: applicantOpenid, status: 'pending' }).limit(1).get(),
+      db
+        .collection('handovers')
+        .where({ applicantOpenid, proofFileId: _.neq('') })
+        .limit(100)
+        .get(),
+      db
+        .collection('handovers')
+        .where({ publisherOpenid: applicantOpenid, proofFileId: _.neq('') })
+        .limit(100)
+        .get(),
+    ])
+  if (applicantClaims.data.length || publisherClaims.data.length) {
+    throw new Error('存在进行中的认领，暂不能删除账号数据')
+  }
+  if (receivedReports.data.length || submittedReports.data.length) throw new Error('存在待处理争议，暂不能删除账号数据')
+  const proofRetentionCutoff = Date.now() - 7 * 86400000
+  if (
+    [...applicantProofs.data, ...publisherProofs.data].some(
+      (item) => new Date(item.completedAt || item.createdAt || 0).getTime() > proofRetentionCutoff,
+    )
+  ) {
+    throw new Error('取卡照片仍在7天争议保留期内，期满后可执行删除')
+  }
+
+  await requestRef.update({ data: { status: 'processing', reviewedBy: openid, reviewedAt: db.serverDate() } })
+  const fileIds = new Set()
+  const fileSources = await Promise.all([
+    collectWhere('foundCards', { publisherOpenid: applicantOpenid }),
+    collectWhere('handovers', { publisherOpenid: applicantOpenid }),
+    collectWhere('handovers', { applicantOpenid }),
+    collectWhere('uploadedFiles', { ownerOpenid: applicantOpenid }),
+  ])
+  for (const item of fileSources.flat()) {
+    for (const key of ['maskedImageFileId', 'storagePhotoFileId', 'proofFileId', 'fileId']) {
+      if (item[key]) fileIds.add(item[key])
+    }
+  }
+  await db.runTransaction(async (transaction) => {
+    for (const fileId of fileIds) {
+      await queueCleanupJob(transaction, fileId, 'account_deleted', new Date(), () => db.serverDate())
+    }
+  })
+
+  await Promise.all([
+    removeWhere('messages', { recipientOpenid: applicantOpenid }),
+    removeWhere('identityCorrectionRequests', { applicantOpenid }),
+    removeWhere('feedback', { applicantOpenid }),
+    removeWhere('lostReports', { ownerOpenid: applicantOpenid }),
+    removeWhere('foundCards', { publisherOpenid: applicantOpenid }),
+    removeWhere('uploadedFiles', { ownerOpenid: applicantOpenid }),
+    removeWhere('recordReports', { reporterOpenid: applicantOpenid }),
+    anonymizeWhere('recordReports', { reportedOpenid: applicantOpenid }, { reportedOpenid: '', targetDeleted: true }),
+    anonymizeWhere(
+      'claims',
+      { applicantOpenid },
+      { applicantOpenid: '', applicantDeleted: true, studentHmac: '', privateFeature: '' },
+    ),
+    anonymizeWhere(
+      'handovers',
+      { applicantOpenid },
+      { applicantOpenid: '', applicantDeleted: true, thanksText: '', approvedThanks: false, proofFileId: '' },
+    ),
+    anonymizeWhere(
+      'handovers',
+      { publisherOpenid: applicantOpenid },
+      { publisherOpenid: '', publisherDeleted: true, proofFileId: '' },
+    ),
+    removeWhere('auditLogs', { openid: applicantOpenid }),
+  ])
+  const users = await db.collection('users').where({ openid: applicantOpenid }).limit(10).get()
+  await Promise.all(users.data.map((user) => db.collection('users').doc(user._id).remove()))
+
+  await db
+    .collection('deletionReceipts')
+    .doc(requestId)
+    .set({
+      data: {
+        requestId,
+        outcome: 'account_deleted',
+        queuedFileCount: fileIds.size,
+        completedAt: db.serverDate(),
+        ruleVersion: '1.0',
+      },
+    })
+  await requestRef.update({
+    data: {
+      applicantOpenid: '',
+      content: '',
+      status: 'completed',
+      receiptId: requestId,
+      completedAt: db.serverDate(),
+    },
+  })
+  await audit(openid, 'account.deletion_completed', requestId, { queuedFileCount: fileIds.size })
+  return { status: 'completed', receiptId: requestId }
+}
+
 async function listMyAchievements(openid) {
   await requireActiveUser(openid)
   const result = await db.collection('handovers').where({ publisherOpenid: openid }).limit(200).get()
@@ -1461,6 +1649,7 @@ async function listAdminOperations(openid) {
       type: item.type,
       recordId: item.recordId,
       reason: item.reason,
+      hasTarget: Boolean(item.reportedOpenid),
     })),
     risks: risks.data
       .filter((item) => ['review', 'normal'].includes(item.riskStatus))
@@ -1470,7 +1659,11 @@ async function listAdminOperations(openid) {
         completedAt: item.completedAt,
         riskStatus: item.riskStatus,
       })),
-    deletionRequests: deletionRequests.data.map((item) => ({ id: item._id, content: item.content })),
+    deletionRequests: deletionRequests.data.map((item) => ({
+      id: item._id,
+      content: item.content,
+      status: item.status,
+    })),
     feedback: feedback.data.map((item) => ({ id: item._id, content: item.content })),
   }
 }
@@ -1525,6 +1718,7 @@ async function resolveAdminOperation(openid, input) {
   const collection = requireChoice(input.collection, ['recordReports', 'dataDeletionRequests', 'feedback'], '处理队列')
   const id = requireText(input.id, '记录', 64)
   const status = requireChoice(input.status, ['resolved', 'rejected'], '处理结果')
+  if (collection === 'dataDeletionRequests' && status === 'resolved') return executeDataDeletion(openid, id)
   await db
     .collection(collection)
     .doc(id)
@@ -1538,6 +1732,54 @@ async function resolveAdminOperation(openid, input) {
     })
   await audit(openid, 'admin.operation_resolved', id, { collection, status })
   return { status }
+}
+
+async function resolveReport(openid, input) {
+  await requireAdmin(openid)
+  const reportId = requireText(input.reportId, '举报记录', 64)
+  const decision = requireChoice(input.decision, ['no_violation', 'closed', 'banned'], '举报处理结果')
+  const resolution = String(input.resolution || '')
+    .trim()
+    .slice(0, 300)
+  const result = await db.collection('recordReports').doc(reportId).get()
+  const report = result.data
+  if (!report) throw new Error('举报记录不存在')
+  if (report.status !== 'pending') return { status: report.status, decision: report.decision }
+  if (decision === 'banned') {
+    if (!report.reportedOpenid) throw new Error('此举报没有可封禁的责任账号')
+    const users = await db.collection('users').where({ openid: report.reportedOpenid }).limit(10).get()
+    await Promise.all(
+      users.data.map((user) =>
+        db
+          .collection('users')
+          .doc(user._id)
+          .update({
+            data: { creditStatus: 'blocked', restrictionReason: 'confirmed_report', updatedAt: db.serverDate() },
+          }),
+      ),
+    )
+  }
+  await db
+    .collection('recordReports')
+    .doc(reportId)
+    .update({
+      data: { status: 'resolved', decision, resolution, reviewedBy: openid, reviewedAt: db.serverDate() },
+    })
+  const decisionText = {
+    no_violation: '未发现违规，不采取限制措施',
+    closed: '已核实并关闭举报事项',
+    banned: '已核实违规并封禁责任账号',
+  }[decision]
+  await createMessage(
+    report.reporterOpenid,
+    '举报处理结果',
+    `${decisionText}${resolution ? `：${resolution}` : ''}`,
+    '',
+    '',
+    'report_result',
+  )
+  await audit(openid, 'report.resolved', reportId, { decision })
+  return { status: 'resolved', decision }
 }
 
 async function setUserRestriction(openid, input) {
@@ -1705,6 +1947,8 @@ exports.main = async (event) => {
       return getHandoverProof(OPENID, input)
     case 'resolveAdminOperation':
       return resolveAdminOperation(OPENID, input)
+    case 'resolveReport':
+      return resolveReport(OPENID, input)
     case 'setUserRestriction':
       return setUserRestriction(OPENID, input)
     case 'forceCloseRecord':

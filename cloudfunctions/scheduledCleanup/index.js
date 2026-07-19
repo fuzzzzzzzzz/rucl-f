@@ -177,10 +177,31 @@ async function processCleanupJobs(now) {
   return { deleted, failed }
 }
 
+async function queueExpiredAuditLogs(now) {
+  let removed = 0
+  const cutoff = new Date(now - 60 * 86400000)
+  for (let page = 0; page < 100; page += 1) {
+    const expired = await db
+      .collection('auditLogs')
+      .where({ createdAt: _.lt(cutoff) })
+      .limit(100)
+      .get()
+    if (!expired.data.length) break
+    await Promise.all(expired.data.map((entry) => db.collection('auditLogs').doc(entry._id).remove()))
+    removed += expired.data.length
+    if (expired.data.length < 100) break
+  }
+  return removed
+}
+
 exports.main = async () => {
   assertScheduledInvocation(cloud.getWXContext().OPENID)
   const now = Date.now()
-  const [closed, orphanQueued] = await Promise.all([queueExpiredCards(now), queueOrphanRegistryFiles(now)])
+  const [closed, orphanQueued, auditLogsRemoved] = await Promise.all([
+    queueExpiredCards(now),
+    queueOrphanRegistryFiles(now),
+    queueExpiredAuditLogs(now),
+  ])
   const cleanup = await processCleanupJobs(now)
-  return { closed, orphanQueued, ...cleanup }
+  return { closed, orphanQueued, auditLogsRemoved, ...cleanup }
 }

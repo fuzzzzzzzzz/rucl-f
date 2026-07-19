@@ -12,6 +12,7 @@ import type {
   LostHistoryItem,
   MessageSummary,
   PublicCard,
+  ReportType,
   ThanksWallItem,
   UserProfile,
   UserProfileInput,
@@ -46,6 +47,7 @@ import {
   reportCloudRecord,
   requestCloudIdentityCorrection,
   resolveCloudAdminOperation,
+  resolveCloudReport,
   reviewCloudClaim,
   reviewCloudIdentity,
   reviewCloudRiskHandover,
@@ -433,9 +435,14 @@ export async function closeRecord(type: 'found' | 'lost', recordId: string, reas
   await closeCloudRecord(type, recordId, reason)
 }
 
-export async function reportRecord(type: 'found' | 'lost' | 'claim', recordId: string, reason: string): Promise<void> {
+export async function reportRecord(type: ReportType, recordId: string, reason: string): Promise<void> {
   if (!isCloudMode()) throw new Error('本机演示模式不提交举报')
   await reportCloudRecord(type, recordId, reason)
+}
+
+export async function resolveReport(reportId: string, decision: 'no_violation' | 'closed' | 'banned'): Promise<void> {
+  if (!isCloudMode()) throw new Error('本机演示模式没有举报审核')
+  await resolveCloudReport(reportId, decision)
 }
 
 export async function getAccountSettings(): Promise<AccountSettings> {

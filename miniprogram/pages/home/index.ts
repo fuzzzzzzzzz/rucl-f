@@ -33,6 +33,9 @@ Page({
   goProfileEdit() {
     wx.navigateTo({ url: '/pages/profile-edit/index' })
   },
+  goNotice() {
+    wx.navigateTo({ url: '/pages/notice/index' })
+  },
   async retryCloud() {
     try {
       this.setData({ retrying: true })

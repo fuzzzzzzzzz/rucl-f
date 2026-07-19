@@ -1,3 +1,23 @@
+.non-official-notice {
+  margin: 24rpx 0 30rpx;
+  padding: 22rpx 24rpx;
+  border: 5rpx solid #191919;
+  background: #fff2a8;
+  box-shadow: 8rpx 8rpx 0 #191919;
+  line-height: 1.55;
+}
+.non-official-notice b,
+.non-official-notice text {
+  display: block;
+}
+.non-official-notice b {
+  font-size: 28rpx;
+}
+.non-official-notice text {
+  margin-top: 6rpx;
+  font-size: 23rpx;
+}
+
 .hero-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

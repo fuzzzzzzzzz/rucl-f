@@ -1,0 +1,55 @@
+<view class="page">
+  <view class="topbar">注意事项与使用规则<text class="en">NOTICE &amp; RULES</text></view>
+
+  <view class="warning-card">
+    <view class="warning-title">请先确认</view>
+    <view>本项目由学生个人发起，用于帮助校内同学找回校园卡，非中国人民大学官方平台，也不代表学校完成身份核验或作出承诺。</view>
+  </view>
+
+  <view class="neo-card">
+    <view class="section-title">运营者信息</view><view class="rule" />
+    <view class="item"><b>个人信息处理者：</b>张一凡（个人开发者）</view>
+    <view class="item"><b>联系与投诉邮箱：</b><text class="link" bindtap="copyEmail">fuz138886@gmail.com</text></view>
+    <view class="item"><b>生效日期：</b>2026年7月19日</view>
+    <view class="item"><b>规则版本：</b>版本：1.0</view>
+    <view class="muted">“生效日期”表示本说明从哪一天开始适用；“版本”用于区分以后修改过的说明。</view>
+  </view>
+
+  <view class="neo-card">
+    <view class="section-title">系统能做什么</view><view class="rule" />
+    <view class="item">1. 帮助拾卡者发布结构化记录，并把姓名和学号隐藏后展示。</view>
+    <view class="item">2. 核对用户填写的姓名和学号，显示最新一条对应记录。</view>
+    <view class="item">3. 有存放照片或卡片已在工作人员处时，向对应认领者显示领取信息。</view>
+    <view class="item">4. 记录领取、感谢、举报和管理员处理结果。</view>
+    <view class="important">系统只核对用户填写的信息是否一致，不是学校统一身份认证。领取时仍应携带有效校园证件，并以现场工作人员的核对结果为准。</view>
+  </view>
+
+  <view class="neo-card">
+    <view class="section-title">用户必须遵守</view><view class="rule" />
+    <view class="item">1. 只能填写本人资料、认领本人校园卡，不得冒用他人姓名或学号。本版本不收集手机号。</view>
+    <view class="item">2. 拾卡记录必须真实，不得伪造卡片、地点、照片或归还记录，不得刷取奖项。</view>
+    <view class="item">3. 不得上传包含无关人员人脸、证件、聊天记录、联系方式或其他不必要信息的照片。</view>
+    <view class="item">4. 不得发布辱骂、骚扰、广告、违法内容，不得借招领添加陌生人或组织私下危险交接。</view>
+    <view class="item">5. 发现错误、重复、冒领或不当内容，应使用举报入口或发送邮件说明。</view>
+  </view>
+
+  <view class="neo-card danger">
+    <view class="section-title">举报和账号处理</view><view class="rule" />
+    <view class="item">举报提交后由管理员结合记录、照片和操作日志核实。举报经核实，恶意发布、冒领、骚扰、伪造归还或严重违规的账号将被限制或封禁账号，相关记录可被关闭，虚假奖励会被撤销。</view>
+    <view class="item">恶意捏造事实、反复提交虚假举报同样可能被限制使用。处理结果会通过站内消息通知举报人；对结果有异议可发送邮件申诉。</view>
+  </view>
+
+  <view class="neo-card">
+    <view class="section-title">风险与责任边界</view><view class="rule" />
+    <view class="item">系统不能保证每条记录、照片和地点始终准确，也不能保证一定找回校园卡。发现校园卡丢失后，仍应及时通过学校渠道挂失。</view>
+    <view class="item">不要前往偏僻地点或向陌生人提供验证码、密码、付款信息。任何人要求付费、转账或提供账号密码时，应立即停止并举报。</view>
+    <view class="item">发生账号盗用、信息泄露、错误展示或交接争议时，请立即通过联系邮箱告知运营者。</view>
+  </view>
+
+  <view class="neo-card">
+    <view class="section-title">未成年人</view><view class="rule" />
+    <view class="item">本服务面向高校校园场景。未满14周岁的用户请不要自行使用；确需使用时，应由监护人先通过联系邮箱与运营者沟通并同意相关信息处理。</view>
+  </view>
+
+  <button class="neo-button" bindtap="goPrivacy">查看完整信息收集与保存说明</button>
+</view>

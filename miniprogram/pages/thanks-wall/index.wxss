@@ -29,3 +29,13 @@
   color: #655f58;
   margin-top: 12rpx;
 }
+.thanks-body {
+  flex: 1;
+  min-width: 0;
+}
+.report-button {
+  margin: 16rpx 0 0;
+  width: 128rpx;
+  min-height: 52rpx;
+  font-size: 22rpx;
+}

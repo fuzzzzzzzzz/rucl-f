@@ -1,5 +1,9 @@
 <view class="page home-page">
   <view class="topbar">失卡招领<text class="en">RUC CAMPUS CARD</text></view>
+  <view class="non-official-notice" bindtap="goNotice">
+    <b>学生个人公益项目 · 非中国人民大学官方平台</b>
+    <text>点击查看运营者信息、使用规则和重要注意事项</text>
+  </view>
   <view wx:if="{{cloudError}}" class="cloud-error"><view><b>云端服务暂不可用</b><text>{{cloudError}}</text><text>为避免把假数据当成真实记录，当前不会改用本机数据。</text></view><button loading="{{retrying}}" bindtap="retryCloud">重试</button></view>
   <view class="hero-grid">
     <view class="hero-action lost" bindtap="goLost"><image class="action-icon" src="/assets/icons/search-off-white.png" mode="aspectFit" /><view>我丢卡了</view><text class="en">[ I LOST MY CARD ]</text></view>
