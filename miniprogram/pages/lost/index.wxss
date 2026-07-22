@@ -314,12 +314,21 @@
   line-height: 1.6;
 }
 
-.revealed-panel image {
+.revealed-photo {
+  box-sizing: border-box;
   display: block;
   width: 100%;
-  height: 320rpx;
+  height: auto;
   margin-bottom: 16rpx;
   border: 3rpx solid #191919;
+}
+
+.photo-preview-hint {
+  margin: -4rpx 0 14rpx;
+  color: #4f4b46;
+  font-size: 21rpx;
+  font-weight: 700;
+  text-align: center;
 }
 
 .revealed-title {

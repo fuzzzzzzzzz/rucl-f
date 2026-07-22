@@ -93,10 +93,46 @@ export function buildCloudFoundCardInput(input: FoundCardInput, assets: CloudAss
 }
 
 export function extractCardIdentity(lines: string[] = []): { name: string; studentNumber: string } {
-  const normalized = lines.map((line) => String(line || '').trim()).filter(Boolean)
-  const studentNumber = normalized.map((line) => line.match(/\b\d{10}\b/)?.[0] || '').find(Boolean) || ''
-  const ignored = /中国人民大学|校园卡|学生卡|本科生|硕士生|博士生|教职工|学号|姓名|无法识别/
-  const name = normalized.find((line) => /^[\u4e00-\u9fa5·]{2,6}$/.test(line) && !ignored.test(line)) || ''
+  const normalized = lines
+    .map((line) =>
+      String(line || '')
+        .replace(/[０-９]/g, (digit) => String(digit.charCodeAt(0) - '０'.charCodeAt(0)))
+        .trim(),
+    )
+    .filter(Boolean)
+  const numberFromText = (value: string) => {
+    const match = value.match(/(?:^|\D)((?:\d[\s·•．._—-]*){9}\d)(?:\D|$)/)
+    return match ? match[1].replace(/\D/g, '') : ''
+  }
+  let studentNumber = ''
+  const numberLabel = /学号|编号|学生号|证号/i
+  for (let index = 0; index < normalized.length && !studentNumber; index += 1) {
+    if (!numberLabel.test(normalized[index])) continue
+    for (let end = index; end <= Math.min(index + 2, normalized.length - 1); end += 1) {
+      studentNumber = numberFromText(normalized.slice(index, end + 1).join(' '))
+      if (studentNumber) break
+    }
+  }
+  studentNumber ||= normalized.map(numberFromText).find(Boolean) || ''
+
+  const ignored =
+    /中国人民大学|校园卡|学生卡|本科生|硕士生|博士生|教职工|学号|学生号|证号|编号|姓名|名字|类别|照片|无法识别/
+  const normalizedName = (line: string) => line.replace(/\s+/g, '').replace(/^(?:姓名|名字)[:：]?/, '')
+  let name = ''
+  for (let index = 0; index < normalized.length && !name; index += 1) {
+    const compact = normalized[index].replace(/\s+/g, '')
+    if (/^(?:姓名|名字)[:：]?$/.test(compact) && normalized[index + 1]) {
+      const candidate = normalizedName(normalized[index + 1])
+      if (/^[\u4e00-\u9fa5·]{2,6}$/.test(candidate) && !ignored.test(candidate)) name = candidate
+      continue
+    }
+    if (/^(?:姓名|名字)[:：]?/.test(compact)) {
+      const candidate = normalizedName(compact)
+      if (/^[\u4e00-\u9fa5·]{2,6}$/.test(candidate) && !ignored.test(candidate)) name = candidate
+    }
+  }
+  name ||=
+    normalized.map(normalizedName).find((line) => /^[\u4e00-\u9fa5·]{2,6}$/.test(line) && !ignored.test(line)) || ''
   return { name, studentNumber }
 }
 
@@ -119,7 +155,7 @@ export function normalizeCloudPublicCard(card: CloudPublicCard): PublicCard {
 }
 
 export function friendlyCloudErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error || '')
+  const message = readErrorMessage(error)
   if (/EXCEED_MAX_PAYLOAD_SIZE|request data size|payload too large|request entity too large/i.test(message)) {
     return '照片数据过大，请重新拍摄并减少画面细节'
   }
@@ -145,18 +181,87 @@ function uniqueCloudPath(directory: string, extension: string): string {
 }
 
 const MAX_PRIVATE_IMAGE_BYTES = 384 * 1024
+const MAX_OCR_IMAGE_EDGE = 2000
 
-function compressPrivateImage(filePath: string): Promise<string> {
+interface CompressionDimensions {
+  compressedWidth?: number
+  compressedHeight?: number
+}
+
+function calculateCompression(width: number, height: number, maxEdge: number): CompressionDimensions {
+  const normalizedWidth = Math.max(0, Number(width) || 0)
+  const normalizedHeight = Math.max(0, Number(height) || 0)
+  if (!normalizedWidth || !normalizedHeight || Math.max(normalizedWidth, normalizedHeight) <= maxEdge) return {}
+  return normalizedWidth >= normalizedHeight ? { compressedWidth: maxEdge } : { compressedHeight: maxEdge }
+}
+
+export function calculateOcrCompression(width: number, height: number): CompressionDimensions {
+  return calculateCompression(width, height, MAX_OCR_IMAGE_EDGE)
+}
+
+function readImageSize(filePath: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    wx.getImageInfo({
+      src: filePath,
+      success: ({ width, height }) => resolve({ width, height }),
+      fail: () => reject(new Error('照片信息读取失败，请重新拍摄')),
+    })
+  })
+}
+
+function compressImage(filePath: string, quality: number, dimensions: CompressionDimensions): Promise<string> {
   return new Promise((resolve, reject) => {
     wx.compressImage({
       src: filePath,
-      quality: 35,
-      compressedWidth: 960,
-      compressedHeight: 960,
+      quality,
+      ...dimensions,
       success: ({ tempFilePath }) => resolve(tempFilePath),
-      fail: reject,
+      fail: () => reject(new Error('照片处理失败，请重新拍摄')),
     })
   })
+}
+
+async function prepareOcrImage(filePath: string): Promise<string> {
+  const { width, height } = await readImageSize(filePath)
+  const dimensions = calculateOcrCompression(width, height)
+  if (!dimensions.compressedWidth && !dimensions.compressedHeight) return filePath
+  return compressImage(filePath, 95, dimensions)
+}
+
+function readErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object') {
+    const candidate =
+      (error as { errMsg?: unknown; message?: unknown }).errMsg ?? (error as { message?: unknown }).message
+    if (typeof candidate === 'string') return candidate
+  }
+  return String(error || '')
+}
+
+export function friendlyOcrErrorMessage(error: unknown): string {
+  const message = readErrorMessage(error)
+  if (/OCR尚未配置|AuthFailure|SecretId|SecretKey/i.test(message)) {
+    return '图片识别服务尚未配置，请联系管理员或手动填写'
+  }
+  if (/ImageBlur/i.test(message)) return '照片较模糊，请让文字清晰并避免反光后重拍'
+  if (/ImageNoText|NoText/i.test(message)) return '没有识别到文字，请让卡片占满取景框后重拍'
+  if (/ImageDecodeFailed|InvalidImage/i.test(message)) return '照片格式无法识别，请重新拍摄'
+  if (/ImageSizeTooLarge|TooLargeFileError|不能超过10MB|payload too large/i.test(message)) {
+    return '照片过大，请重新拍摄'
+  }
+  if (/RequestLimitExceeded|LimitExceeded\.(?:QPS|Request|Frequency)/i.test(message)) {
+    return '图片识别请求较多，请稍后重试'
+  }
+  if (/次数已用完|LimitExceeded\.Daily/i.test(message)) {
+    return '今日图片识别次数已用完，请手动填写'
+  }
+  const cloudMessage = friendlyCloudErrorMessage(error)
+  return cloudMessage === '云端服务暂不可用，请稍后重试' ? '图片识别暂不可用，请手动填写并稍后重试' : cloudMessage
+}
+
+async function compressPrivateImage(filePath: string): Promise<string> {
+  const { width, height } = await readImageSize(filePath)
+  return compressImage(filePath, 35, calculateCompression(width, height, 960))
 }
 
 function readFileAsBase64(filePath: string): Promise<string> {
@@ -196,9 +301,10 @@ export async function uploadStoragePhoto(filePath: string): Promise<string> {
 
 export async function processCardPhoto(filePath: string): Promise<ImageProcessingResult> {
   if (!filePath) return {}
+  const preparedPath = await prepareOcrImage(filePath)
   const uploaded = await wx.cloud.uploadFile({
     cloudPath: uniqueCloudPath('temporary-cards', 'jpg'),
-    filePath,
+    filePath: preparedPath,
   })
   try {
     const response = await wx.cloud.callFunction({
@@ -206,9 +312,10 @@ export async function processCardPhoto(filePath: string): Promise<ImageProcessin
       data: { fileId: uploaded.fileID },
     })
     return (response.result || {}) as ImageProcessingResult
-  } catch {
+  } catch (error) {
+    throw new Error(friendlyOcrErrorMessage(error))
+  } finally {
     await wx.cloud.deleteFile({ fileList: [uploaded.fileID] }).catch(() => undefined)
-    return { requiresPublisherConfirmation: true }
   }
 }
 

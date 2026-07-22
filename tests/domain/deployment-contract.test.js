@@ -76,9 +76,8 @@ describe('cloud deployment contract', () => {
     const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
 
     expect(client).toContain('const MAX_PRIVATE_IMAGE_BYTES = 384 * 1024')
-    expect(client).toContain('quality: 35')
-    expect(client).toContain('compressedWidth: 960')
-    expect(client).toContain('compressedHeight: 960')
+    expect(client).toContain('compressImage(filePath, 35, calculateCompression(width, height, 960))')
+    expect(client).not.toMatch(/compressedWidth:\s*960[\s\S]*compressedHeight:\s*960/)
   })
 
   it('treats an absent deterministic claim record as a first submission', () => {

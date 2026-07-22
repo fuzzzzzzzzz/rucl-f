@@ -1,5 +1,10 @@
 <view class="page home-page">
-  <view class="topbar">失卡招领<text class="en">RUC CAMPUS CARD</text></view>
+  <view class="topbar brand-topbar">
+    <view class="brand-lockup">
+      <text class="brand-name">佧了</text>
+    </view>
+    <text class="brand-tagline">人和卡重新找到彼此，这件事就此了结。</text>
+  </view>
   <view class="non-official-notice" bindtap="goNotice">
     <b>学生个人公益项目 · 非中国人民大学官方平台</b>
     <text>点击查看运营者信息、使用规则和重要注意事项</text>
@@ -22,5 +27,11 @@
       <image class="profile-status-arrow" src="/assets/icons/chevron-right.png" mode="aspectFit" />
     </view>
   </view>
-  <view class="neo-card visual"><image src="/assets/campus-card-visual.jpg" mode="aspectFill" /><view class="visual-label">中国人民大学 · 校园卡找回</view></view>
+  <view class="neo-card brand-poster">
+    <view class="brand-poster-mark">佧</view>
+    <view class="brand-poster-copy">
+      <b>佧了</b>
+      <text>人和卡重新找到彼此</text>
+    </view>
+  </view>
 </view>

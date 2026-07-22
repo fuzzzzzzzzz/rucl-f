@@ -15,6 +15,16 @@
   font-size: 34rpx;
   font-weight: 900;
 }
+.brand-story {
+  background: #191919;
+  color: #fff;
+}
+.brand-story .rule {
+  background: #ffec00;
+}
+.brand-story .muted {
+  color: #c9c5bd;
+}
 .item,
 .muted,
 .important {

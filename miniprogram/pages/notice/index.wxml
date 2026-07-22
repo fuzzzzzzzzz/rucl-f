@@ -6,6 +6,14 @@
     <view>本项目由学生个人发起，用于帮助校内同学找回校园卡，非中国人民大学官方平台，也不代表学校完成身份核验或作出承诺。</view>
   </view>
 
+  <view class="neo-card brand-story">
+    <view class="section-title">为什么叫“佧了”</view>
+    <view class="rule" />
+    <view class="item"><b>“佧”：</b>由“人”和“卡”组成，表示帮助校园卡找到对应的人。</view>
+    <view class="item"><b>“了”：</b>表示找回后事情了结——人和卡重新找到彼此，这件事就此了结。</view>
+    <view class="muted">“佧了”是学生个人项目名称，非中国人民大学官方平台。</view>
+  </view>
+
   <view class="neo-card">
     <view class="section-title">运营者信息</view><view class="rule" />
     <view class="item"><b>个人信息处理者：</b>张一凡（个人开发者）</view>
@@ -44,11 +52,6 @@
     <view class="item">系统不能保证每条记录、照片和地点始终准确，也不能保证一定找回校园卡。发现校园卡丢失后，仍应及时通过学校渠道挂失。</view>
     <view class="item">不要前往偏僻地点或向陌生人提供验证码、密码、付款信息。任何人要求付费、转账或提供账号密码时，应立即停止并举报。</view>
     <view class="item">发生账号盗用、信息泄露、错误展示或交接争议时，请立即通过联系邮箱告知运营者。</view>
-  </view>
-
-  <view class="neo-card">
-    <view class="section-title">未成年人</view><view class="rule" />
-    <view class="item">本服务面向高校校园场景。未满14周岁的用户请不要自行使用；确需使用时，应由监护人先通过联系邮箱与运营者沟通并同意相关信息处理。</view>
   </view>
 
   <button class="neo-button" bindtap="goPrivacy">查看完整信息收集与保存说明</button>
