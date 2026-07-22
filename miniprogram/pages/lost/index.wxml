@@ -18,7 +18,8 @@
     </view>
   </view>
   <view wx:else class="revealed-panel">
-    <image wx:if="{{revealedStoragePhotoUrl}}" src="{{revealedStoragePhotoUrl}}" mode="aspectFill" />
+    <image wx:if="{{revealedStoragePhotoUrl}}" class="revealed-photo" src="{{revealedStoragePhotoUrl}}" mode="widthFix" bindtap="previewStoragePhoto" data-url="{{revealedStoragePhotoUrl}}" />
+    <view wx:if="{{revealedStoragePhotoUrl}}" class="photo-preview-hint">点击图片可放大查看</view>
     <view class="revealed-title">姓名和学号一致，领取信息已显示</view>
     <view wx:if="{{revealedStoragePoint}}" class="revealed-point">领取地点：{{revealedStoragePoint}}</view>
     <view class="revealed-help">请根据照片确认周围环境并前往领取。</view>

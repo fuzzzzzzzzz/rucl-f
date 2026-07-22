@@ -1,3 +1,25 @@
+.brand-topbar {
+  padding-top: 34rpx;
+  padding-bottom: 30rpx;
+}
+.brand-lockup {
+  display: flex;
+  align-items: baseline;
+  gap: 18rpx;
+}
+.brand-name {
+  font-size: 52rpx;
+  letter-spacing: 5rpx;
+}
+.brand-tagline {
+  display: block;
+  margin-top: 10rpx;
+  color: #efede8;
+  font-size: 22rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
 .non-official-notice {
   margin: 24rpx 0 30rpx;
   padding: 22rpx 24rpx;
@@ -119,24 +141,42 @@
   font-size: 28rpx;
   font-weight: 900;
 }
-.visual {
-  padding: 10rpx;
-  position: relative;
+.brand-poster {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+  padding: 30rpx;
+  background: #ffec00;
 }
-.visual image {
-  display: block;
-  width: 100%;
-  height: 250rpx;
-}
-.visual-label {
-  position: absolute;
-  left: 20rpx;
-  bottom: 20rpx;
+.brand-poster-mark {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 116rpx;
+  height: 116rpx;
   background: #191919;
   color: #fff;
-  padding: 9rpx 16rpx;
-  font-size: 22rpx;
+  font-size: 64rpx;
   font-weight: 900;
+}
+.brand-poster-copy {
+  flex: 1;
+  min-width: 0;
+}
+.brand-poster-copy b,
+.brand-poster-copy text {
+  display: block;
+}
+.brand-poster-copy b {
+  font-size: 42rpx;
+  letter-spacing: 5rpx;
+}
+.brand-poster-copy text {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1.5;
 }
 .cloud-error {
   display: flex;

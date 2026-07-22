@@ -1,11 +1,12 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const https = require('https')
-const { parseDailyLimit, requireTemporaryFileId, startOfChinaDay } = require('./domain')
+const { base64EncodedLength, parseDailyLimit, requireOwnedTemporaryFileId, startOfChinaDay } = require('./domain')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
+const MAX_OCR_BASE64_BYTES = 10 * 1024 * 1024
 
 function assertConfigured() {
   if (!process.env.TENCENT_SECRET_ID || !process.env.TENCENT_SECRET_KEY) throw new Error('OCR尚未配置，请改为人工填写')
@@ -24,7 +25,11 @@ function signedOcrRequest(buffer) {
   const service = 'ocr'
   const timestamp = Math.floor(Date.now() / 1000)
   const date = new Date(timestamp * 1000).toISOString().slice(0, 10)
-  const payload = JSON.stringify({ ImageBase64: buffer.toString('base64') })
+  const payload = JSON.stringify({
+    ImageBase64: buffer.toString('base64'),
+    EnableDetectSplit: true,
+    ConfigID: 'OCR',
+  })
   const canonicalHeaders = `content-type:application/json; charset=utf-8\nhost:${host}\nx-tc-action:generalaccurateocr\n`
   const signedHeaders = 'content-type;host;x-tc-action'
   const canonicalRequest = `POST\n/\n\n${canonicalHeaders}\n${signedHeaders}\n${sha256(payload)}`
@@ -92,37 +97,58 @@ async function reserveOcrRequest(openid) {
   })
 }
 
-exports.main = async (event) => {
-  const rawFileId = requireTemporaryFileId(event.fileId)
-  const { OPENID } = cloud.getWXContext()
+async function cleanupOwnedTemporaryFile(ownedFileId) {
   try {
-    if (!OPENID) throw new Error('请先登录后再识别图片')
-    if (!rawFileId.includes(`/temporary-cards/${OPENID}/`)) throw new Error('只能识别自己刚拍摄的图片')
-    await reserveOcrRequest(OPENID)
-    const downloaded = await cloud.downloadFile({ fileID: rawFileId })
-    if (downloaded.fileContent.length > 8 * 1024 * 1024) throw new Error('图片不能超过8MB')
-    const ocrLines = await recognize(downloaded.fileContent)
-    return { ocrLines, requiresPublisherConfirmation: true }
-  } finally {
+    await cloud.deleteFile({ fileList: [ownedFileId] })
+  } catch (_) {
     try {
-      await cloud.deleteFile({ fileList: [rawFileId] })
-    } catch (error) {
-      const id = crypto.createHash('sha256').update(`ocr_raw:${rawFileId}`).digest('hex')
+      const id = crypto.createHash('sha256').update(`ocr_raw:${ownedFileId}`).digest('hex')
       await db
         .collection('fileCleanupJobs')
         .doc(id)
         .set({
           data: {
-            fileId: rawFileId,
+            fileId: ownedFileId,
             reason: 'ocr_raw_delete_failed',
             status: 'pending',
             attempts: 0,
             notBefore: new Date(),
-            lastError: String(error && (error.message || error.errMsg || error)).slice(0, 300),
+            lastError: 'delete_failed',
             createdAt: db.serverDate(),
             updatedAt: db.serverDate(),
           },
         })
+    } catch (_) {
+      console.error('OCR temporary file cleanup job enqueue failed')
+      throw new Error('OCR原图清理失败，请稍后重试')
+    }
+  }
+}
+
+exports.main = async (event) => {
+  const { OPENID } = cloud.getWXContext()
+  let ownedFileId = ''
+  let primaryFailure = false
+  try {
+    ownedFileId = requireOwnedTemporaryFileId(event && event.fileId, OPENID)
+    assertConfigured()
+    const downloaded = await cloud.downloadFile({ fileID: ownedFileId })
+    if (base64EncodedLength(downloaded.fileContent.length) > MAX_OCR_BASE64_BYTES) {
+      throw new Error('图片编码后不能超过10MB，请重新拍摄')
+    }
+    await reserveOcrRequest(OPENID)
+    const ocrLines = await recognize(downloaded.fileContent)
+    return { ocrLines, requiresPublisherConfirmation: true }
+  } catch (error) {
+    primaryFailure = true
+    throw error
+  } finally {
+    if (ownedFileId) {
+      try {
+        await cleanupOwnedTemporaryFile(ownedFileId)
+      } catch (cleanupError) {
+        if (!primaryFailure) throw cleanupError
+      }
     }
   }
 }

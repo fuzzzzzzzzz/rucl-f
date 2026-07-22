@@ -1,2 +1,1 @@
-{ "desc": "校园卡守护者页面索引", "rules": [{ "action": "allow", "page": "*" }] }
-
+{ "desc": "佧了页面索引", "rules": [{ "action": "allow", "page": "*" }] }

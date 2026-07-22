@@ -27,6 +27,17 @@ describe('personal operator compliance', () => {
     expect(privacy).toContain('安全审计日志最多保存60天')
   })
 
+  it('uses the current brand and omits an inapplicable under-14 notice', () => {
+    const app = source('miniprogram/app.json')
+    const home = source('miniprogram/pages/home/index.wxml')
+    const notice = source('miniprogram/pages/notice/index.wxml')
+    const privacy = source('miniprogram/pages/privacy/index.wxml')
+
+    expect(app).toContain('佧了')
+    expect(home).toContain('佧了')
+    expect(`${app}${home}${notice}${privacy}`).not.toMatch(/人卡了|cardio|未满14|未成年人|监护人/)
+  })
+
   it('does not collect phone numbers or block publishing and claiming on phone verification', () => {
     const server = source('cloudfunctions/api/index.js')
     const settings = source('miniprogram/pages/settings/index.wxml')

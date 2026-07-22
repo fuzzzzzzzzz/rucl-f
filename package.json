@@ -1,10 +1,10 @@
 {
-  "name": "campus-card-guardian",
+  "name": "kale-miniprogram",
   "version": "0.4.0",
   "private": true,
   "scripts": {
     "icons:generate": "node scripts/generate-material-icons.mjs",
-    "test": "vitest run",
+    "test": "vitest run --exclude .worktrees/**",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "format:check": "prettier --check .",

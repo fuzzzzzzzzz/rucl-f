@@ -1,4 +1,5 @@
 node_modules
+.worktrees
 design-reference
 package-lock.json
 miniprogram/**/*.json

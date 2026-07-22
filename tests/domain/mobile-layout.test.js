@@ -9,6 +9,9 @@ const wxss = fs.readFileSync(path.join(root, 'miniprogram/pages/lost/index.wxss'
 const script = fs.readFileSync(path.join(root, 'miniprogram/pages/lost/index.ts'), 'utf8')
 const profileWxml = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8')
 const profileScript = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.ts'), 'utf8')
+const claimsWxml = fs.readFileSync(path.join(root, 'miniprogram/pages/claims/index.wxml'), 'utf8')
+const claimsWxss = fs.readFileSync(path.join(root, 'miniprogram/pages/claims/index.wxss'), 'utf8')
+const claimsScript = fs.readFileSync(path.join(root, 'miniprogram/pages/claims/index.ts'), 'utf8')
 
 describe('lost-card real-device layout', () => {
   it('renders the English identity label without an HTML entity', () => {
@@ -39,6 +42,16 @@ describe('lost-card real-device layout', () => {
     expect(wxml).toContain('领取地点：{{revealedStoragePoint}}')
     expect(wxml).toContain('上方已显示存放照片和领取地点。取到卡后，请在“我的认领”拍照完成交接。')
     expect(script).toContain("revealedStoragePoint: claim.card?.officialStoragePoint || ''")
+  })
+
+  it('shows complete storage photos and opens them in the native zoomable preview', () => {
+    expect(wxml).toMatch(/class="revealed-photo"[^>]*mode="widthFix"[^>]*bindtap="previewStoragePhoto"/)
+    expect(script).toContain('wx.previewImage')
+    expect(wxss).toMatch(/\.revealed-photo\s*{[^}]*height:\s*auto;/s)
+
+    expect(claimsWxml).toMatch(/class="storage-photo"[^>]*mode="widthFix"[^>]*bindtap="previewStoragePhoto"/)
+    expect(claimsScript).toContain('wx.previewImage')
+    expect(claimsWxss).toMatch(/\.storage-photo\s*{[^}]*height:\s*auto;/s)
   })
 
   it('restores a ready pickup into the search reveal panel on return', () => {

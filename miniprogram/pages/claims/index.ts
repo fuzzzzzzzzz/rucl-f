@@ -37,6 +37,15 @@ Page({
       this.setData({ loading: false })
     }
   },
+  previewStoragePhoto(e: WechatMiniprogram.TouchEvent) {
+    const url = String(e.currentTarget.dataset.url || '')
+    if (!url) return
+    wx.previewImage({
+      current: url,
+      urls: [url],
+      fail: () => wx.showToast({ title: '图片预览失败，请稍后重试', icon: 'none' }),
+    })
+  },
   chooseProof(e: WechatMiniprogram.TouchEvent) {
     const claimId = String(e.currentTarget.dataset.id || '')
     wx.chooseMedia({

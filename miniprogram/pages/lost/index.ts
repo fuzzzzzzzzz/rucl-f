@@ -62,6 +62,15 @@ Page({
       revealedStoragePoint: '',
     })
   },
+  previewStoragePhoto(e: WechatMiniprogram.TouchEvent) {
+    const url = String(e.currentTarget.dataset.url || '')
+    if (!url) return
+    wx.previewImage({
+      current: url,
+      urls: [url],
+      fail: () => wx.showToast({ title: '图片预览失败，请稍后重试', icon: 'none' }),
+    })
+  },
   async search() {
     const result = validateRucStudentNumber(this.data.studentNumber)
     if (!result.valid) return wx.showToast({ title: result.message || '请检查学号', icon: 'none' })

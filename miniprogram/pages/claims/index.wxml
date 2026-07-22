@@ -7,7 +7,10 @@
     <view class="claim-head"><view><view class="claim-name">{{item.maskedName}} · {{item.category}}</view><view class="number">{{item.maskedStudentNumber}}</view></view><view class="claim-status status-{{item.status}}">{{item.statusText}}</view></view>
     <view class="claim-meta"><text>{{item.campusName}}</text><text>{{item.createdAt}}</text></view>
     <view wx:if="{{item.officialStoragePoint}}" class="handover-point"><b>卡片存放地点</b><text>{{item.officialStoragePoint}}</text><small>请按页面提示前往存放地点，取到卡后拍照确认完成。</small></view>
-    <image wx:if="{{item.storagePhotoUrl}}" class="storage-photo" src="{{item.storagePhotoUrl}}" mode="aspectFill" />
+    <block wx:if="{{item.storagePhotoUrl}}">
+      <image class="storage-photo" src="{{item.storagePhotoUrl}}" mode="widthFix" bindtap="previewStoragePhoto" data-url="{{item.storagePhotoUrl}}" />
+      <view class="photo-preview-hint">点击图片可放大查看</view>
+    </block>
     <view wx:elif="{{item.status === 'awaiting_official_transfer'}}" class="claim-note">拾卡者还未上传可辨认的存放环境照片。上传照片或转交官方地点后，系统会显示领取信息。</view>
     <view wx:elif="{{item.status === 'admin_review'}}" class="claim-note">该记录存在异常或争议，管理员处理完成前不会展示存放地点和照片。</view>
     <view wx:if="{{item.status === 'ready_for_pickup'}}" class="complete-panel">
