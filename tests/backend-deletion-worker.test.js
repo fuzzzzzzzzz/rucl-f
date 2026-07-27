@@ -201,6 +201,39 @@ describe('deletion worker', () => {
     }
   })
 
+  it('uses the SCF namespace for migration evidence when the invocation context omits ENV', async () => {
+    const { createDeletionWorker } = require('../cloudfunctions/deletionWorker/handler')
+    const originalTcbEnv = process.env.TCB_ENV
+    const originalScfNamespace = process.env.SCF_NAMESPACE
+    const originalMigrationToken = process.env.OPERATIONAL_MIGRATION_TOKEN
+    delete process.env.TCB_ENV
+    process.env.SCF_NAMESPACE = 'cloud-environment-from-scf'
+    process.env.OPERATIONAL_MIGRATION_TOKEN = 'migration-secret'
+    try {
+      const database = new Database()
+      const worker = createDeletionWorker({
+        cloud: {
+          getWXContext: () => null,
+          database: () => database,
+        },
+      })
+
+      const inventory = await worker({
+        mode: 'inventory',
+        migrationToken: 'migration-secret',
+      })
+
+      expect(inventory.environmentId).toBe('cloud-environment-from-scf')
+    } finally {
+      if (originalTcbEnv === undefined) delete process.env.TCB_ENV
+      else process.env.TCB_ENV = originalTcbEnv
+      if (originalScfNamespace === undefined) delete process.env.SCF_NAMESPACE
+      else process.env.SCF_NAMESPACE = originalScfNamespace
+      if (originalMigrationToken === undefined) delete process.env.OPERATIONAL_MIGRATION_TOKEN
+      else process.env.OPERATIONAL_MIGRATION_TOKEN = originalMigrationToken
+    }
+  })
+
   it('fails closed for absent or incorrect migration credentials and rejects unknown modes', async () => {
     const test = harness({})
     delete process.env.OPERATIONAL_MIGRATION_TOKEN

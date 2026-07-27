@@ -30,7 +30,7 @@ function createDeletionWorker(dependencies) {
   function evidenceMetadata() {
     const context = cloud.getWXContext() || {}
     return {
-      environmentId: String(context.ENV || process.env.TCB_ENV || ''),
+      environmentId: String(context.ENV || process.env.TCB_ENV || process.env.SCF_NAMESPACE || ''),
       version: VERSION,
       generatedAt: new Date(now()).toISOString(),
     }
