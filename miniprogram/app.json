@@ -17,6 +17,7 @@
     "pages/thanks-wall/index",
     "pages/admin/index"
   ],
+  "lazyCodeLoading": "requiredComponents",
   "window": {
     "navigationBarTitleText": "佧了",
     "navigationBarBackgroundColor": "#191919",

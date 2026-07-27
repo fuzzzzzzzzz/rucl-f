@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "upstreamRepository": "https://github.com/google/material-design-icons",
+  "upstreamCommit": "528cb964c01fb2b09bc3b9208f82b6d8f8c1c1e2",
+  "license": "Apache-2.0",
+  "canvas": { "width": 96, "height": 96 },
+  "icons": [
+    {
+      "output": "home",
+      "source": "symbols/web/home/materialsymbolsoutlined/home_24px.svg",
+      "color": "#191919",
+      "sha256": "41735f056fa43ed570585a294210f4c32dad1481bdf0a617b86b1007b2a8a913"
+    },
+    {
+      "output": "home-filled",
+      "source": "symbols/web/home/materialsymbolsoutlined/home_fill1_24px.svg",
+      "color": "#191919",
+      "sha256": "620b857521b7a93500221680ae88009f848312f00d28104a657319de4212d8c1"
+    },
+    {
+      "output": "search",
+      "source": "symbols/web/search/materialsymbolsoutlined/search_24px.svg",
+      "color": "#191919",
+      "sha256": "46d4ab85eba6eb4fe7c9a9a4c4db2fdf8fa9cc74c1f398ac72e7d872d490dd4c"
+    },
+    {
+      "output": "search-filled",
+      "source": "symbols/web/search/materialsymbolsoutlined/search_fill1_24px.svg",
+      "color": "#191919",
+      "sha256": "46d4ab85eba6eb4fe7c9a9a4c4db2fdf8fa9cc74c1f398ac72e7d872d490dd4c"
+    },
+    {
+      "output": "add-box",
+      "source": "symbols/web/add_box/materialsymbolsoutlined/add_box_24px.svg",
+      "color": "#191919",
+      "sha256": "317e64dc4b19ce658f22f60ecf7fcd6ec59b703c859b8d0319774db0dac7330a"
+    },
+    {
+      "output": "add-box-filled",
+      "source": "symbols/web/add_box/materialsymbolsoutlined/add_box_fill1_24px.svg",
+      "color": "#191919",
+      "sha256": "6df63b437ff03cee1484c701e7b0c953829d9b30d9a10133d13ae9a0bf070e6c"
+    },
+    {
+      "output": "person",
+      "source": "symbols/web/person/materialsymbolsoutlined/person_24px.svg",
+      "color": "#191919",
+      "sha256": "42f1c6f70aaea6be1bce078d1bd3bdc027a343943827443fe3ea46320b9dac96"
+    },
+    {
+      "output": "person-filled",
+      "source": "symbols/web/person/materialsymbolsoutlined/person_fill1_24px.svg",
+      "color": "#191919",
+      "sha256": "b65d8fd7c253e35a6bddfe2c3d4d3a69f93b9d80c885e33457c8a675b3144724"
+    },
+    {
+      "output": "search-off",
+      "source": "symbols/web/search_off/materialsymbolsoutlined/search_off_24px.svg",
+      "color": "#191919",
+      "sha256": "097c2201dbf408b014ab3d26227d580115b07336b012fd528e14c78c4d170b69"
+    },
+    {
+      "output": "search-off-white",
+      "source": "symbols/web/search_off/materialsymbolsoutlined/search_off_24px.svg",
+      "color": "#ffffff",
+      "sha256": "097c2201dbf408b014ab3d26227d580115b07336b012fd528e14c78c4d170b69"
+    },
+    {
+      "output": "front-hand",
+      "source": "symbols/web/front_hand/materialsymbolsoutlined/front_hand_24px.svg",
+      "color": "#191919",
+      "sha256": "b273a92eef038e59a12b0c774d5836c0f80d207efb7a99e710b879c1dfcd4f5d"
+    },
+    {
+      "output": "verified-user",
+      "source": "symbols/web/verified_user/materialsymbolsoutlined/verified_user_24px.svg",
+      "color": "#191919",
+      "sha256": "abd70cab16bbd9d08b455421d32d7fbb6aa5b24c87403ce0dd333109db313752"
+    },
+    {
+      "output": "verified-user-white",
+      "source": "symbols/web/verified_user/materialsymbolsoutlined/verified_user_24px.svg",
+      "color": "#ffffff",
+      "sha256": "abd70cab16bbd9d08b455421d32d7fbb6aa5b24c87403ce0dd333109db313752"
+    },
+    {
+      "output": "lock",
+      "source": "symbols/web/lock/materialsymbolsoutlined/lock_24px.svg",
+      "color": "#191919",
+      "sha256": "148a3da500ee74920d4f80984e8f73830b1f4e613bac095502d854b9c700315c"
+    },
+    {
+      "output": "info",
+      "source": "symbols/web/info/materialsymbolsoutlined/info_24px.svg",
+      "color": "#191919",
+      "sha256": "33c77c7a4f193445d0136b970ad4b5a80ba8cc340603465d4cb46a1f8abec4ec"
+    },
+    {
+      "output": "notifications",
+      "source": "symbols/web/notifications/materialsymbolsoutlined/notifications_24px.svg",
+      "color": "#191919",
+      "sha256": "f6e1380c76f85851dbeafde7f8eb106c799d72232cd046bf30fabae4f0a0c821"
+    },
+    {
+      "output": "photo-camera",
+      "source": "symbols/web/photo_camera/materialsymbolsoutlined/photo_camera_24px.svg",
+      "color": "#191919",
+      "sha256": "2f0c1c7f53a7110db7efb824db4b9413253a242f1d87846f0069fc281bdedf27"
+    },
+    {
+      "output": "add-a-photo",
+      "source": "symbols/web/add_a_photo/materialsymbolsoutlined/add_a_photo_24px.svg",
+      "color": "#191919",
+      "sha256": "2375340fcdd42a8321eed102c1f9d4e762c1b5b677213bcb30704be1fcf9e258"
+    },
+    {
+      "output": "badge",
+      "source": "symbols/web/badge/materialsymbolsoutlined/badge_24px.svg",
+      "color": "#191919",
+      "sha256": "3a96667aca77f0dda0bcd0179cfcf3cb2ea461a11069382660bb70976bf2a5c2"
+    },
+    {
+      "output": "volunteer-activism",
+      "source": "symbols/web/volunteer_activism/materialsymbolsoutlined/volunteer_activism_24px.svg",
+      "color": "#191919",
+      "sha256": "6e642d662e6ab09391a3bee9aa4c9cdeabf1103a5ba8a3a6c8cd97aefff1fec9"
+    },
+    {
+      "output": "workspace-premium",
+      "source": "symbols/web/workspace_premium/materialsymbolsoutlined/workspace_premium_24px.svg",
+      "color": "#191919",
+      "sha256": "9ecc0a5f20ca60773638a89bd3106f70329fe97e101c63bae9b20720a77152a9"
+    },
+    {
+      "output": "shield",
+      "source": "symbols/web/shield/materialsymbolsoutlined/shield_24px.svg",
+      "color": "#191919",
+      "sha256": "06e04825326fb2bfa5ca911f8d9379da8b09bc36b3f04b371ddaebee71bd3f8f"
+    },
+    {
+      "output": "handshake",
+      "source": "symbols/web/handshake/materialsymbolsoutlined/handshake_24px.svg",
+      "color": "#191919",
+      "sha256": "f4f3c5bac9924d12db45bde5f1c58a3ccb51c14986088ec0e5994a1d56effd3f"
+    },
+    {
+      "output": "bolt",
+      "source": "symbols/web/bolt/materialsymbolsoutlined/bolt_24px.svg",
+      "color": "#191919",
+      "sha256": "efc632df3302b78537d07d8fd674a66cb911b132515cd4f84c6a6a995ecff8e7"
+    },
+    {
+      "output": "map",
+      "source": "symbols/web/map/materialsymbolsoutlined/map_24px.svg",
+      "color": "#191919",
+      "sha256": "a49ef8ee004dc4832a4bbe64fce0a054c0b90cb4246422c09cc234278788049b"
+    },
+    {
+      "output": "favorite",
+      "source": "symbols/web/favorite/materialsymbolsoutlined/favorite_24px.svg",
+      "color": "#191919",
+      "sha256": "9aa246b56617782817301f5d940f501ea4b14fffb1faf29012c76fce8f07ed70"
+    },
+    {
+      "output": "add",
+      "source": "symbols/web/add/materialsymbolsoutlined/add_24px.svg",
+      "color": "#191919",
+      "sha256": "e9532de2b9be01ce951e899e98ee673bb97acd574f0db118feb72fe074a1c376"
+    },
+    {
+      "output": "settings",
+      "source": "symbols/web/settings/materialsymbolsoutlined/settings_24px.svg",
+      "color": "#191919",
+      "sha256": "6aebb4a88b40a5bf1ce378ca532e4a885aedc402a0574562c6ed4ded03360fd2"
+    },
+    {
+      "output": "help",
+      "source": "symbols/web/help/materialsymbolsoutlined/help_24px.svg",
+      "color": "#191919",
+      "sha256": "9f2bdd969cefc5843f95ccbd560c4281b1eec87c78b68bd4daf694d19fc9c5f9"
+    },
+    {
+      "output": "chevron-right",
+      "source": "symbols/web/chevron_right/materialsymbolsoutlined/chevron_right_24px.svg",
+      "color": "#191919",
+      "sha256": "f6b777ee0ce9059b5f8eea987d813ab12c4f309ba431063153841c742e668ac0"
+    },
+    {
+      "output": "expand-more",
+      "source": "symbols/web/expand_more/materialsymbolsoutlined/expand_more_24px.svg",
+      "color": "#191919",
+      "sha256": "6760bd2307f7ec3c1a5f2905af907aa7a12ad5ad7448289c8624f5d5ec6057e4"
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+const crypto = require('crypto')
+
 function parseDailyLimit(value) {
   const parsed = Number.parseInt(String(value || ''), 10)
   if (!Number.isFinite(parsed)) return 100
@@ -23,24 +25,56 @@ function requireTemporaryFileId(value) {
   return fileId
 }
 
-function requireOwnedTemporaryFileId(value, openidValue) {
+function requireOcrUploadToken(value) {
+  const token = String(value || '').trim()
+  if (!/^[a-f0-9]{48}$/.test(token)) throw new Error('无效的图片上传凭证')
+  return token
+}
+
+function ocrUploadRegistryId(uploadToken) {
+  return crypto
+    .createHash('sha256')
+    .update(`ocr_upload:${requireOcrUploadToken(uploadToken)}`)
+    .digest('hex')
+}
+
+function temporaryCloudPath(fileId) {
+  const normalized = requireTemporaryFileId(fileId)
+  const marker = '/temporary-cards/'
+  return `temporary-cards/${normalized.slice(normalized.indexOf(marker) + marker.length)}`
+}
+
+function requireAuthorizedOcrUpload(record, { fileId, openid: openidValue, uploadToken, now = Date.now() }) {
   const openid = String(openidValue || '').trim()
   if (!openid) throw new Error('请先登录后再识别图片')
-
-  const fileId = requireTemporaryFileId(value)
-  const marker = '/temporary-cards/'
-  const relativePath = fileId.slice(fileId.indexOf(marker) + marker.length)
-  const [ownerSegment, ...fileSegments] = relativePath.split('/')
-  if (ownerSegment !== openid || !fileSegments.join('/')) {
-    throw new Error('只能识别自己刚拍摄的图片')
+  const token = requireOcrUploadToken(uploadToken)
+  const normalizedFileId = requireTemporaryFileId(fileId)
+  const expiresAt =
+    record?.expiresAt instanceof Date ? record.expiresAt.getTime() : Date.parse(String(record?.expiresAt))
+  if (
+    !record ||
+    record.ownerOpenid !== openid ||
+    record.kind !== 'ocr_raw' ||
+    record.consumed === true ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= Number(now) ||
+    record.expectedCloudPath !== temporaryCloudPath(normalizedFileId)
+  ) {
+    throw new Error('图片上传凭证无效、已过期或已使用')
   }
-  return fileId
+  return {
+    fileId: normalizedFileId,
+    registryId: ocrUploadRegistryId(token),
+  }
 }
 
 module.exports = {
   base64EncodedLength,
+  ocrUploadRegistryId,
   parseDailyLimit,
-  requireOwnedTemporaryFileId,
+  requireAuthorizedOcrUpload,
+  requireOcrUploadToken,
   requireTemporaryFileId,
   startOfChinaDay,
+  temporaryCloudPath,
 }

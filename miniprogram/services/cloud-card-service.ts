@@ -1,10 +1,12 @@
 import type {
+  AccountProfileSummary,
   AdminClaimReviewItem,
   AdminIdentityReviewItem,
   AdminOperationSummary,
   AccountSettings,
   AchievementProgress,
   CardCategory,
+  ClaimReviewReasonCode,
   ClaimSummary,
   FoundCardInput,
   FoundHistoryItem,
@@ -16,7 +18,7 @@ import type {
   ThanksWallItem,
   UserProfileInput,
 } from '../shared/models'
-import type { ProfileBindingStatus } from '../shared/models'
+import { updateCurrentAccountSummary, waitForCloudReady } from '../shared/startup-session'
 import type { CardStatus } from '../shared/workflow'
 
 interface CloudAssetTokens {
@@ -25,6 +27,11 @@ interface CloudAssetTokens {
 
 interface PrivateUploadResult {
   uploadToken: string
+}
+
+interface OcrUploadAuthorization {
+  uploadToken: string
+  cloudPath: string
 }
 
 interface CloudPublicCard {
@@ -166,18 +173,13 @@ export function friendlyCloudErrorMessage(error: unknown): string {
 }
 
 export async function callCloudApi<T>(action: string, input: Record<string, unknown> = {}): Promise<T> {
+  await waitForCloudReady()
   try {
     const response = await wx.cloud.callFunction({ name: 'api', data: { action, input } })
     return response.result as T
   } catch (error) {
     throw new Error(friendlyCloudErrorMessage(error))
   }
-}
-
-function uniqueCloudPath(directory: string, extension: string): string {
-  const uploadNamespace = getApp<IAppOption>().globalData.uploadNamespace
-  if (!uploadNamespace) throw new Error('云端登录尚未完成，请稍后重试')
-  return `${directory}/${uploadNamespace}/${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
 }
 
 const MAX_PRIVATE_IMAGE_BYTES = 384 * 1024
@@ -277,6 +279,7 @@ function readFileAsBase64(filePath: string): Promise<string> {
 
 async function uploadPrivateImage(filePath: string, kind: 'storage_scene' | 'handover_proof'): Promise<string> {
   if (!filePath) return ''
+  await waitForCloudReady()
   const compressedPath = await compressPrivateImage(filePath)
   const contentBase64 = await readFileAsBase64(compressedPath)
   const estimatedBytes = Math.floor((contentBase64.replace(/=+$/, '').length * 3) / 4)
@@ -301,15 +304,17 @@ export async function uploadStoragePhoto(filePath: string): Promise<string> {
 
 export async function processCardPhoto(filePath: string): Promise<ImageProcessingResult> {
   if (!filePath) return {}
+  await waitForCloudReady()
   const preparedPath = await prepareOcrImage(filePath)
+  const authorization = await callCloudApi<OcrUploadAuthorization>('prepareOcrUpload')
   const uploaded = await wx.cloud.uploadFile({
-    cloudPath: uniqueCloudPath('temporary-cards', 'jpg'),
+    cloudPath: authorization.cloudPath,
     filePath: preparedPath,
   })
   try {
     const response = await wx.cloud.callFunction({
       name: 'processCardImage',
-      data: { fileId: uploaded.fileID },
+      data: { fileId: uploaded.fileID, uploadToken: authorization.uploadToken },
     })
     return (response.result || {}) as ImageProcessingResult
   } catch (error) {
@@ -319,15 +324,22 @@ export async function processCardPhoto(filePath: string): Promise<ImageProcessin
   }
 }
 
-export async function removeCloudFiles(fileIds: string[]): Promise<void> {
-  const fileList = fileIds.filter(Boolean)
-  if (fileList.length) await wx.cloud.deleteFile({ fileList })
+export async function syncUserProfile(input: UserProfileInput): Promise<AccountProfileSummary> {
+  const summary = await callCloudApi<AccountProfileSummary>(
+    'saveUserProfile',
+    input as unknown as Record<string, unknown>,
+  )
+  updateCurrentAccountSummary(summary)
+  return summary
 }
 
-export async function syncUserProfile(
-  input: UserProfileInput,
-): Promise<{ profileBindingStatus: ProfileBindingStatus }> {
-  return callCloudApi('saveUserProfile', input as unknown as Record<string, unknown>)
+export async function updateCloudProfileDetails(
+  category: CardCategory,
+  campusId: string,
+): Promise<AccountProfileSummary> {
+  const summary = await callCloudApi<AccountProfileSummary>('updateProfileDetails', { category, campusId })
+  updateCurrentAccountSummary(summary)
+  return summary
 }
 
 export async function createCloudFoundCard(input: FoundCardInput): Promise<{ id: string }> {
@@ -344,8 +356,8 @@ export async function createCloudFoundCard(input: FoundCardInput): Promise<{ id:
   }
 }
 
-export async function searchCloudCards(studentNumber: string): Promise<PublicCard[]> {
-  const cards = await callCloudApi<CloudPublicCard[]>('findMatches', { studentNumber })
+export async function searchCloudCards(): Promise<PublicCard[]> {
+  const cards = await callCloudApi<CloudPublicCard[]>('findMatches')
   return cards.map(normalizeCloudPublicCard)
 }
 
@@ -360,22 +372,28 @@ export async function countCloudRecords(): Promise<{ found: number; lost: number
 
 export async function registerCloudLostCard(input: LostReportInput): Promise<{ id: string; matchCount: number }> {
   return callCloudApi('createLostReport', {
-    name: input.name,
-    studentNumber: input.studentNumber,
-    category: input.category,
-    campusId: input.campusId,
     lostAt: input.lostDate,
     locationDescription: input.locationDescription || '',
     privateFeature: input.feature || '',
   })
 }
 
-export async function listCloudMessages(): Promise<MessageSummary[]> {
-  return callCloudApi('listMessages')
+export async function renewCloudLostReport(reportId: string): Promise<void> {
+  await callCloudApi('renewLostReport', { reportId })
 }
 
-export async function markCloudMessagesRead(): Promise<void> {
-  await callCloudApi('markMessagesRead')
+export async function listCloudMessages(): Promise<MessageSummary[]> {
+  const records =
+    await callCloudApi<Array<Omit<MessageSummary, 'createdAt'> & { createdAt?: string | Date }>>('listMessages')
+  return records.map(({ createdAt, ...record }) => {
+    if (!createdAt) return record
+    const timestamp = createdAt instanceof Date ? createdAt.toISOString() : String(createdAt)
+    return { ...record, createdAt: timestamp.slice(0, 16).replace('T', ' ') }
+  })
+}
+
+export async function markCloudMessagesRead(messageIds: string[]): Promise<void> {
+  await callCloudApi('markMessagesRead', { messageIds: messageIds.slice(0, 50) })
 }
 
 export async function listCloudFoundHistory(): Promise<FoundHistoryItem[]> {
@@ -402,12 +420,11 @@ function dateOnly(value: string | Date): string {
 
 export async function submitCloudClaim(
   cardId: string,
-  studentNumber: string,
-  privateFeature: string,
+  privateFeature = '',
 ): Promise<{ id: string; status: ClaimSummary['status']; card?: PublicCard }> {
   const result = await callCloudApi<{ id: string; status: ClaimSummary['status']; card?: CloudPublicCard }>(
     'submitClaim',
-    { cardId, studentNumber, privateFeature },
+    { cardId, privateFeature },
   )
   return {
     id: result.id,
@@ -440,6 +457,14 @@ export async function reviewCloudIdentity(requestId: string, decision: 'approved
 
 export async function requestCloudIdentityCorrection(reason: string): Promise<void> {
   await callCloudApi('requestIdentityCorrection', { reason })
+  const app = getApp<IAppOption>()
+  app.globalData.profileBindingStatus = 'correction_pending'
+  if (app.globalData.accountSummary) {
+    app.globalData.accountSummary = {
+      ...app.globalData.accountSummary,
+      profileBindingStatus: 'correction_pending',
+    }
+  }
 }
 
 export async function listCloudAdminClaims(): Promise<AdminClaimReviewItem[]> {
@@ -451,8 +476,12 @@ export async function listCloudAdminClaims(): Promise<AdminClaimReviewItem[]> {
   }))
 }
 
-export async function reviewCloudClaim(claimId: string, decision: 'approved' | 'rejected'): Promise<void> {
-  await callCloudApi('reviewClaim', { claimId, decision })
+export async function reviewCloudClaim(
+  claimId: string,
+  decision: 'approved' | 'rejected',
+  reasonCode: ClaimReviewReasonCode,
+): Promise<void> {
+  await callCloudApi('reviewClaim', { claimId, decision, reasonCode })
 }
 
 export async function completeCloudHandover(claimId: string): Promise<void> {
@@ -492,8 +521,14 @@ export async function closeCloudRecord(type: 'found' | 'lost', recordId: string,
   await callCloudApi('closeOwnRecord', { type, recordId, reason })
 }
 
+export function normalizeReportReason(reason: string): string {
+  return String(reason || '')
+    .trim()
+    .slice(0, 160)
+}
+
 export async function reportCloudRecord(type: ReportType, recordId: string, reason: string): Promise<void> {
-  await callCloudApi('reportRecord', { type, recordId, reason })
+  await callCloudApi('reportRecord', { type, recordId, reason: normalizeReportReason(reason) })
 }
 
 export async function resolveCloudReport(
@@ -540,11 +575,18 @@ export async function reviewCloudRiskHandover(
 }
 
 export async function resolveCloudAdminOperation(
-  collection: 'recordReports' | 'dataDeletionRequests' | 'feedback',
+  collection: 'feedback',
   id: string,
   status: 'resolved' | 'rejected',
 ): Promise<void> {
   await callCloudApi('resolveAdminOperation', { collection, id, status })
+}
+
+export async function reviewCloudDataDeletion(
+  requestId: string,
+  decision: 'approved' | 'rejected',
+): Promise<{ status: 'approved' | 'rejected' | 'processing' | 'completed' }> {
+  return callCloudApi('reviewDataDeletion', { requestId, decision })
 }
 
 export async function forceCloseCloudRecord(type: 'found' | 'lost', recordId: string): Promise<void> {

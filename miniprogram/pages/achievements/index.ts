@@ -1,4 +1,5 @@
-import { listMyAchievements } from '../../services/card-service'
+import { listCloudAchievements as listMyAchievements } from '../../services/cloud-card-service'
+import { createLatestRequestGate } from '../../shared/async-control'
 import type { AchievementProgress } from '../../shared/models'
 
 const descriptions: Record<string, string> = {
@@ -11,11 +12,26 @@ const descriptions: Record<string, string> = {
   honest_guardian: '完成10次有效归还',
 }
 
+const achievementRequests = createLatestRequestGate()
+
 Page({
-  data: { loading: true, achievements: [] as Array<AchievementProgress & { description: string; iconPath: string }> },
-  async onLoad() {
+  data: {
+    loading: true,
+    error: '',
+    achievements: [] as Array<AchievementProgress & { description: string; iconPath: string }>,
+  },
+  onLoad() {
+    void this.loadAchievements()
+  },
+  onUnload() {
+    achievementRequests.invalidate()
+  },
+  async loadAchievements() {
+    const generation = achievementRequests.begin()
     try {
+      this.setData({ loading: true, error: '' })
       const achievements = await listMyAchievements()
+      if (!achievementRequests.isCurrent(generation)) return
       this.setData({
         achievements: achievements.map((item) => ({
           ...item,
@@ -24,9 +40,11 @@ Page({
         })),
       })
     } catch (error) {
-      wx.showToast({ title: error instanceof Error ? error.message : '读取失败', icon: 'none' })
+      if (achievementRequests.isCurrent(generation)) {
+        this.setData({ error: error instanceof Error ? error.message : '读取失败' })
+      }
     } finally {
-      this.setData({ loading: false })
+      if (achievementRequests.isCurrent(generation)) this.setData({ loading: false })
     }
   },
 })

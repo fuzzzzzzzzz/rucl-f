@@ -1,7 +1,7 @@
 node_modules
 .worktrees
 design-reference
+third_party
 package-lock.json
-miniprogram/**/*.json
 miniprogram/**/*.wxml
 project.config.json

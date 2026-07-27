@@ -1,0 +1,14 @@
+<view wx:if="{{visible}}" class="privacy-mask" catchtouchmove="stopTouchMove">
+  <view class="privacy-dialog" role="dialog" aria-label="个人信息保护提示">
+    <view class="privacy-title">个人信息保护提示</view>
+    <view class="privacy-copy">继续操作需要使用相机或相册选择照片。照片仅用于卡片识别、存放环境或交接证明，并按页面说明处理。</view>
+    <view class="privacy-link" bindtap="openPrivacyDetails">查看完整信息收集与保存说明</view>
+    <button
+      id="privacy-agree-button"
+      class="privacy-agree"
+      open-type="agreePrivacyAuthorization"
+      bindagreeprivacyauthorization="handleAgree"
+    >同意并继续</button>
+    <button class="privacy-disagree" bindtap="handleDisagree">暂不同意</button>
+  </view>
+</view>

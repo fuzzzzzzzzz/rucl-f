@@ -9,10 +9,19 @@
 }
 .menu {
   box-sizing: border-box;
+  width: 100%;
   border: 4rpx solid #191919;
+  border-radius: 0;
   background: #fff;
   margin: 16rpx 0;
   padding: 25rpx;
+  color: #191919;
+  font-size: 28rpx;
+  line-height: 1.4;
+  text-align: left;
+}
+.menu::after {
+  border: 0;
 }
 .warning {
   background: #ffec00;

@@ -1,34 +1,108 @@
 <view class="page admin-page">
   <view class="topbar">管理员控制台<text class="en">ADMIN CONTROL</text></view>
-  <view class="safety-note">系统默认使用最新发布的校园卡记录；只有发生举报、资料更正或交接争议时才需要管理员处理。</view>
+  <view class="safety-note">所有审核必须选择明确原因；数据删除的批准与实际执行是两个独立阶段。</view>
   <view wx:if="{{loading}}" class="neo-card empty-state">正在读取审核队列…</view>
-  <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" bindtap="loadDashboard">重新读取</button></view>
+  <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" disabled="{{!!busyKey}}" bindtap="loadDashboard">重新读取</button></view>
+
   <block wx:else>
     <view wx:if="{{identities.length}}" class="section-title">资料修改申请<text class="en">[ PROFILE CORRECTION · {{identities.length}} ]</text></view>
     <view wx:for="{{identities}}" wx:key="id" class="neo-card review-card">
       <view class="review-title">{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
       <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>{{item.submittedAt}}</text></view>
       <view class="storage-detail"><b>修改原因</b><text>{{item.reason}}</text></view>
-      <view class="review-actions"><button data-id="{{item.id}}" data-decision="rejected" loading="{{busyId === item.id}}" bindtap="decideIdentity">保留原资料</button><button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyId === item.id}}" bindtap="decideIdentity">解除锁定</button></view>
+      <view class="review-actions">
+        <button data-id="{{item.id}}" data-decision="rejected" loading="{{busyKey === 'identity:' + item.id}}" disabled="{{!!busyKey}}" bindtap="decideIdentity">保留原资料</button>
+        <button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyKey === 'identity:' + item.id}}" disabled="{{!!busyKey}}" bindtap="decideIdentity">解除锁定</button>
+      </view>
     </view>
+
     <view class="section-title queue-title">认领与交接<text class="en">[ CLAIMS · {{claims.length}} ]</text></view>
     <view wx:if="{{claims.length === 0}}" class="neo-card empty-state">没有待处理认领。</view>
     <view wx:for="{{claims}}" wx:key="id" class="neo-card review-card">
       <view class="review-title">卡片：{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
       <view class="applicant">申请人：{{item.applicantMaskedName}} · {{item.applicantMaskedStudentNumber}}</view>
-      <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>私有特征{{item.featureMatch ? '相符' : '未确认'}}</text></view><view class="storage-detail"><b>当前存放</b><text>{{item.storageSummary}}</text></view>
-      <view wx:if="{{item.status === 'admin_review'}}" class="review-actions"><button data-id="{{item.id}}" data-decision="rejected" loading="{{busyId === item.id}}" bindtap="decideClaim">拒绝</button><button class="approve" data-id="{{item.id}}" data-decision="approved" loading="{{busyId === item.id}}" bindtap="decideClaim">批准认领</button></view>
-      <button wx:elif="{{item.status === 'ready_for_pickup'}}" class="handover-button" data-id="{{item.id}}" loading="{{busyId === item.id}}" bindtap="finishHandover">管理员代为确认归还</button>
-      <view wx:else class="safety-note">尚未提供可辨认的存放照片，也未登记官方地点。</view>
+      <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>私有特征{{item.featureMatch ? '相符' : '未确认'}}</text></view>
+      <view class="storage-detail"><b>当前存放</b><text>{{item.storageSummary}}</text></view>
+      <block wx:if="{{item.status === 'admin_review'}}">
+        <view class="storage-detail"><b>批准原因</b></view>
+        <view class="review-actions reason-actions">
+          <button class="approve" data-id="{{item.id}}" data-decision="approved" data-reason-code="identity_verified" disabled="{{!!busyKey}}" bindtap="decideClaim">身份已核验</button>
+          <button class="approve" data-id="{{item.id}}" data-decision="approved" data-reason-code="manual_verification" disabled="{{!!busyKey}}" bindtap="decideClaim">人工核对通过</button>
+          <button class="approve" data-id="{{item.id}}" data-decision="approved" data-reason-code="official_record_match" disabled="{{!!busyKey}}" bindtap="decideClaim">官方记录匹配</button>
+        </view>
+        <view class="storage-detail"><b>拒绝原因</b></view>
+        <view class="review-actions reason-actions">
+          <button data-id="{{item.id}}" data-decision="rejected" data-reason-code="insufficient_evidence" disabled="{{!!busyKey}}" bindtap="decideClaim">证据不足</button>
+          <button data-id="{{item.id}}" data-decision="rejected" data-reason-code="identity_conflict" disabled="{{!!busyKey}}" bindtap="decideClaim">身份冲突</button>
+          <button data-id="{{item.id}}" data-decision="rejected" data-reason-code="duplicate_request" disabled="{{!!busyKey}}" bindtap="decideClaim">重复申请</button>
+          <button data-id="{{item.id}}" data-decision="rejected" data-reason-code="suspected_fraud" disabled="{{!!busyKey}}" bindtap="decideClaim">疑似欺诈</button>
+          <button data-id="{{item.id}}" data-decision="rejected" data-reason-code="blocked" disabled="{{!!busyKey}}" bindtap="decideClaim">账号受限</button>
+          <button data-id="{{item.id}}" data-decision="rejected" data-reason-code="other" disabled="{{!!busyKey}}" bindtap="decideClaim">其他原因</button>
+        </view>
+      </block>
+      <button wx:elif="{{item.status === 'ready_for_pickup'}}" class="handover-button" data-id="{{item.id}}" loading="{{busyKey === 'handover:' + item.id}}" disabled="{{!!busyKey}}" bindtap="finishHandover">管理员代为确认归还</button>
+      <view wx:else class="safety-note">尚未满足现场交接条件。</view>
     </view>
+
     <view class="section-title queue-title">交接与奖励复核<text class="en">[ HANDOVER REVIEW · {{operations.risks.length}} ]</text></view>
-    <view wx:for="{{operations.risks}}" wx:key="id" class="neo-card review-card"><view class="review-title">交接记录 {{item.id}}</view><view class="review-meta"><text>{{item.riskStatus === 'review' ? '出现异常频率，奖励待复核' : '待确认是否在官方地点交接'}}</text></view><button data-id="{{item.id}}" bindtap="viewProof">仅为处理争议查看交接照片</button><view class="review-actions"><button data-id="{{item.id}}" data-decision="invalid" bindtap="reviewRisk">撤销记录</button><button class="approve" data-id="{{item.id}}" data-decision="valid" bindtap="reviewRisk">确认有效和官方交接</button></view></view>
+    <view wx:for="{{operations.risks}}" wx:key="id" class="neo-card review-card">
+      <view class="review-title">交接记录 {{item.id}}</view>
+      <view class="review-meta"><text>{{item.riskStatus === 'review' ? '出现异常频率，奖励待复核' : '待确认是否在官方地点交接'}}</text></view>
+      <button data-id="{{item.id}}" loading="{{busyKey === 'proof:' + item.id}}" disabled="{{!!busyKey}}" bindtap="viewProof">仅为处理争议查看交接照片</button>
+      <view class="review-actions">
+        <button data-id="{{item.id}}" data-decision="invalid" disabled="{{!!busyKey}}" bindtap="reviewRisk">撤销记录</button>
+        <button class="approve" data-id="{{item.id}}" data-decision="valid" disabled="{{!!busyKey}}" bindtap="reviewRisk">确认有效和官方交接</button>
+      </view>
+    </view>
+
     <view class="section-title queue-title">举报与申请<text class="en">[ OPERATIONS ]</text></view>
-    <view wx:for="{{operations.reports}}" wx:key="id" class="neo-card review-card"><view class="review-title">{{item.type}} 举报</view><view>{{item.reason}}</view><view class="review-actions"><button data-id="{{item.id}}" data-decision="no_violation" bindtap="decideReport">未发现违规</button><button data-id="{{item.id}}" data-decision="closed" bindtap="decideReport">核实并关闭</button><button class="approve" wx:if="{{item.hasTarget}}" data-id="{{item.id}}" data-decision="banned" bindtap="decideReport">核实并封禁</button></view></view>
-    <view wx:for="{{operations.deletionRequests}}" wx:key="id" class="neo-card review-card"><view>数据删除申请：{{item.content}}</view><view class="safety-note">批准时会检查进行中认领、争议和照片保留期；满足条件后执行真实删除并生成匿名凭证。</view><button data-collection="dataDeletionRequests" data-id="{{item.id}}" bindtap="resolveOperation">批准并执行删除</button></view>
-    <view wx:for="{{operations.feedback}}" wx:key="id" class="neo-card review-card"><view>意见反馈：{{item.content}}</view><button data-collection="feedback" data-id="{{item.id}}" bindtap="resolveOperation">处理完成</button></view>
+    <view wx:for="{{operations.reports}}" wx:key="id" class="neo-card review-card">
+      <view class="review-title">{{item.type}} 举报</view>
+      <view class="safety-note">举报编号：{{item.id}} · 目标记录：{{item.recordId || '一般投诉（无结构化目标）'}}</view>
+      <view>举报事实：{{item.reason}}</view>
+      <view wx:if="{{item.targetAvailable}}" class="report-evidence">
+        <view>目标类型：{{item.targetEvidence.kind}} · 状态：{{item.targetEvidence.status || '不适用'}}</view>
+        <view wx:if="{{item.targetEvidence.maskedName || item.targetEvidence.maskedStudentNumber}}">脱敏身份：{{item.targetEvidence.maskedName}} {{item.targetEvidence.maskedStudentNumber}}</view>
+        <view wx:if="{{item.targetEvidence.category || item.targetEvidence.campusId}}">类别/校区：{{item.targetEvidence.category}} {{item.targetEvidence.campusId}}</view>
+        <view wx:if="{{item.targetEvidence.date || item.targetEvidence.locationCategory}}">日期/地点类别：{{item.targetEvidence.date}} {{item.targetEvidence.locationCategory}}</view>
+        <view wx:if="{{item.targetEvidence.cardId}}">关联记录：{{item.targetEvidence.cardId}}</view>
+        <view wx:if="{{item.targetEvidence.thanksText}}">被举报感谢内容：{{item.targetEvidence.thanksText}}</view>
+      </view>
+      <view wx:elif="{{item.type === 'general'}}" class="safety-note">一般投诉仅依据上方事实结案，不会自动关闭或封禁某条目标记录。</view>
+      <view wx:else class="error-state">目标记录缺失或数据异常；在证据恢复前只能选择“未发现违规”。</view>
+      <view class="review-actions reason-actions">
+        <button data-id="{{item.id}}" data-decision="no_violation" disabled="{{!!busyKey}}" bindtap="decideReport">未发现违规</button>
+        <button data-id="{{item.id}}" data-decision="closed" disabled="{{!!busyKey || !item.evidenceLoaded || (item.type !== 'general' && !item.targetAvailable)}}" bindtap="decideReport">{{item.type === 'general' ? '核实投诉并结案' : '核实并关闭'}}</button>
+        <button class="approve" wx:if="{{item.hasTarget && item.targetAvailable}}" data-id="{{item.id}}" data-decision="banned" disabled="{{!!busyKey || !item.evidenceLoaded}}" bindtap="decideReport">核实并封禁</button>
+      </view>
+    </view>
+    <view wx:for="{{operations.deletionRequests}}" wx:key="id" class="neo-card review-card">
+      <view>数据删除申请：{{item.content}}</view>
+      <view class="safety-note">当前阶段：{{item.status}}。批准只进入独立执行队列，processing/completed 才表示执行进度。</view>
+      <view wx:if="{{item.status === 'pending'}}" class="review-actions">
+        <button data-id="{{item.id}}" data-decision="rejected" disabled="{{!!busyKey}}" bindtap="reviewDeletion">拒绝申请</button>
+        <button class="approve" data-id="{{item.id}}" data-decision="approved" disabled="{{!!busyKey}}" bindtap="reviewDeletion">批准并进入删除队列</button>
+      </view>
+    </view>
+    <view wx:for="{{operations.feedback}}" wx:key="id" class="neo-card review-card">
+      <view>意见反馈：{{item.content}}</view>
+      <button data-id="{{item.id}}" disabled="{{!!busyKey}}" bindtap="resolveFeedback">处理完成</button>
+    </view>
+
     <view class="section-title queue-title">重复与违规处理<text class="en">[ RECORD TOOLS ]</text></view>
-    <view class="neo-card review-card"><view class="review-title">合并重复招领</view><input class="field" value="{{canonicalId}}" placeholder="要保留的记录ID" bindinput="onCanonicalId" /><input class="field" value="{{duplicateId}}" placeholder="要关闭的重复记录ID" bindinput="onDuplicateId" /><button class="approve" bindtap="mergeDuplicates">核对一致后合并</button></view>
-    <view class="neo-card review-card"><view class="review-title">违规账号限制</view><input class="field" value="{{restrictionUserId}}" placeholder="用户记录ID" bindinput="onRestrictionUserId" /><view class="review-actions"><button data-blocked="{{false}}" bindtap="changeRestriction">解除限制</button><button class="approve" data-blocked="{{true}}" bindtap="changeRestriction">限制操作</button></view></view>
+    <view class="neo-card review-card">
+      <view class="review-title">合并重复招领</view>
+      <input class="field" value="{{canonicalId}}" disabled="{{!!busyKey}}" placeholder="要保留的记录ID" bindinput="onCanonicalId" />
+      <input class="field" value="{{duplicateId}}" disabled="{{!!busyKey}}" placeholder="要关闭的重复记录ID" bindinput="onDuplicateId" />
+      <button class="approve" loading="{{busyKey === 'merge'}}" disabled="{{!!busyKey}}" bindtap="mergeDuplicates">核对一致后合并</button>
+    </view>
+    <view class="neo-card review-card">
+      <view class="review-title">违规账号限制</view>
+      <input class="field" value="{{restrictionUserId}}" disabled="{{!!busyKey}}" placeholder="用户记录ID" bindinput="onRestrictionUserId" />
+      <view class="review-actions">
+        <button data-blocked="false" disabled="{{!!busyKey}}" bindtap="changeRestriction">解除限制</button>
+        <button class="approve" data-blocked="true" disabled="{{!!busyKey}}" bindtap="changeRestriction">限制操作</button>
+      </view>
+    </view>
   </block>
 </view>

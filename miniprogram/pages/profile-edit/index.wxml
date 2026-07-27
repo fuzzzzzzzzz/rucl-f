@@ -2,24 +2,38 @@
   <view class="topbar">我的信息<text class="en">PERSONAL INFORMATION</text></view>
   <view class="notice">
     <view>{{identityStatusText}}</view>
-    <view>系统只核对姓名和学号是否一致，不代表学校身份核验。</view>
-    <view>同一姓名和学号出现多条记录时，系统会使用最新发布的一条。</view>
-    <view>其他人只能看到隐藏后的信息；存放地点仅按安全规则展示。</view>
+    <view>完整身份信息只在首次填写时短暂保留于本页内存，并发送到云端完成绑定。</view>
+    <view>其他人只能看到云端返回的脱敏信息；领取地点仅按安全规则展示。</view>
   </view>
-  <text class="label">姓名 <text class="en">[ NAME ]</text></text>
-  <input class="field" disabled="{{identityLocked}}" value="{{name}}" placeholder="请输入校园卡上的姓名" bindinput="onName" />
-  <text class="label">学号 <text class="en">[ STUDENT ID ]</text></text>
-  <input class="field" disabled="{{identityLocked}}" type="number" maxlength="10" value="{{studentNumber}}" placeholder="请输入10位学号" bindinput="onNumber" />
-  <text class="label">卡片类别 <text class="en">[ TYPE ]</text></text>
-  <picker range="{{cardCategories}}" value="{{categoryIndex}}" bindchange="onCategoryChange"><view class="field picker-field">{{cardCategories[categoryIndex]}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
-  <text class="label">常用校区 <text class="en">[ CAMPUS ]</text></text>
-  <picker range="{{campuses}}" range-key="name" value="{{campusIndex}}" bindchange="onCampusChange"><view class="field picker-field">{{campuses[campusIndex].name}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
-  <button class="neo-button save-button" loading="{{busy}}" bindtap="save">{{identityLocked ? '更新其他信息' : '保存我的信息'}}<text class="en">[ SAVE ]</text></button>
-  <view wx:if="{{identityLocked}}" class="correction-box">
-    <view class="label">申请修改姓名或学号</view>
-    <view class="correction-help">管理员通过后会解除原资料锁定，再由你重新填写。申请期间不能更换姓名和学号。</view>
-    <textarea wx:if="{{!correctionPending}}" class="field correction-input" maxlength="160" placeholder="请说明写错了什么（4—160字）" bindinput="onCorrectionReason" />
-    <button wx:if="{{!correctionPending}}" class="secondary-button" loading="{{busy}}" bindtap="requestCorrection">提交修改申请</button>
-    <view wx:else class="pending-note">申请正在由管理员处理</view>
-  </view>
+
+  <view wx:if="{{loading}}" class="notice">正在加载云端账号信息…</view>
+  <block wx:else>
+    <block wx:if="{{identityLocked}}">
+      <text class="label">已绑定姓名 <text class="en">[ MASKED NAME ]</text></text>
+      <view class="field">{{maskedName}}</view>
+      <text class="label">已绑定学号 <text class="en">[ MASKED STUDENT ID ]</text></text>
+      <view class="field">{{maskedStudentNumber}}</view>
+    </block>
+    <block wx:else>
+      <text class="label">姓名 <text class="en">[ NAME ]</text></text>
+      <input class="field" disabled="{{!!busyKey}}" value="{{name}}" placeholder="请输入校园卡上的姓名" bindinput="onName" />
+      <text class="label">学号 <text class="en">[ STUDENT ID ]</text></text>
+      <input class="field" disabled="{{!!busyKey}}" type="number" maxlength="10" value="{{studentNumber}}" placeholder="请输入10位学号" bindinput="onNumber" />
+    </block>
+
+    <text class="label">卡片类别 <text class="en">[ TYPE ]</text></text>
+    <picker disabled="{{!!busyKey || correctionPending}}" range="{{cardCategories}}" value="{{categoryIndex}}" bindchange="onCategoryChange"><view class="field picker-field">{{cardCategories[categoryIndex]}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
+    <text class="label">常用校区 <text class="en">[ CAMPUS ]</text></text>
+    <picker disabled="{{!!busyKey || correctionPending}}" range="{{campuses}}" range-key="name" value="{{campusIndex}}" bindchange="onCampusChange"><view class="field picker-field">{{campuses[campusIndex].name}}<image class="picker-icon" src="/assets/icons/expand-more.png" mode="aspectFit" /></view></picker>
+
+    <button class="neo-button save-button" loading="{{busyKey === 'save'}}" disabled="{{!!busyKey || correctionPending}}" bindtap="save">{{identityLocked ? '更新其他信息' : '保存我的信息'}}<text class="en">[ SAVE ]</text></button>
+
+    <view wx:if="{{identityLocked}}" class="correction-box">
+      <view class="label">申请修改姓名或学号</view>
+      <view class="correction-help">管理员处理后会解除原资料锁定，再由你重新填写。申请期间不能更换姓名和学号。</view>
+      <textarea wx:if="{{!correctionPending}}" class="field correction-input" maxlength="160" value="{{correctionReason}}" disabled="{{!!busyKey}}" placeholder="请说明写错了什么（4—160字）" bindinput="onCorrectionReason" />
+      <button wx:if="{{!correctionPending}}" class="secondary-button" loading="{{busyKey === 'correction'}}" disabled="{{!!busyKey}}" bindtap="requestCorrection">提交修改申请</button>
+      <view wx:else class="pending-note">申请正在由管理员处理</view>
+    </view>
+  </block>
 </view>

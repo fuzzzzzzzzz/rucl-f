@@ -11,7 +11,8 @@
     <view class="rule" />
     <view class="item"><b>“佧”：</b>由“人”和“卡”组成，表示帮助校园卡找到对应的人。</view>
     <view class="item"><b>“了”：</b>表示找回后事情了结——人和卡重新找到彼此，这件事就此了结。</view>
-    <view class="muted">“佧了”是学生个人项目名称，非中国人民大学官方平台。</view>
+    <view class="item"><b>英文名“CARDIO”：</b>是“佧了”的英文品牌写法，仅用于项目识别，不表示医疗服务或学校官方身份。</view>
+    <view class="muted">“佧了 / CARDIO”是学生个人项目名称，非中国人民大学官方平台。</view>
   </view>
 
   <view class="neo-card">

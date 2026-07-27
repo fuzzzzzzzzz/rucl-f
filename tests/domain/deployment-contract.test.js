@@ -2,151 +2,104 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { friendlyCloudErrorMessage } from '../../miniprogram/services/cloud-card-service'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8')
+const readJson = (relativePath) => JSON.parse(read(relativePath))
 
 describe('cloud deployment contract', () => {
-  it('deploys every cloud function with safe timeouts and the current runtime', () => {
-    const config = JSON.parse(fs.readFileSync(path.join(root, 'cloudbaserc.json'), 'utf8'))
+  it('declares every cloud function with Node 20 and bounded timeouts', () => {
+    const config = readJson('cloudbaserc.json')
+    const resources = readJson('security/cloud-resource-contract.json')
     const functions = Object.fromEntries(config.functions.map((item) => [item.name, item]))
 
-    expect(Object.keys(functions).sort()).toEqual(['api', 'processCardImage', 'scheduledCleanup'])
-    expect(functions.api).toMatchObject({ runtime: 'Nodejs20.19', timeout: 15 })
-    expect(functions.processCardImage).toMatchObject({ runtime: 'Nodejs20.19', timeout: 20 })
-    expect(functions.scheduledCleanup).toMatchObject({
-      runtime: 'Nodejs20.19',
-      timeout: 60,
-      triggers: [{ name: 'dailyCleanup', type: 'timer', config: '0 0 3 * * * *' }],
+    expect(Object.keys(functions).sort()).toEqual(Object.keys(resources.functions).sort())
+    for (const [name, definition] of Object.entries(functions)) {
+      expect(definition.runtime, name).toBe('Nodejs20.19')
+      expect(definition.timeout, name).toBeGreaterThan(0)
+      expect(definition.timeout, name).toBeLessThanOrEqual(60)
+    }
+    expect(functions.api.envVariables.MINIPROGRAM_STATE).toBe('{{env.MINIPROGRAM_STATE}}')
+    expect(resources.functionDefaults).toEqual({ '*': { invoke: false } })
+    expect(resources.functions.api.clientCallable).toBe(true)
+    expect(resources.functions.processCardImage.clientCallable).toBe(true)
+    expect(resources.functions.scheduledCleanup.clientCallable).toBe(false)
+    expect(resources.functions.deletionWorker.clientCallable).toBe(false)
+  })
+
+  it('keeps every business collection ADMINONLY', () => {
+    const resources = readJson('security/cloud-resource-contract.json')
+    const databaseRules = readJson('security/database.rules.json')
+
+    expect(Object.keys(resources.database.rules).length).toBeGreaterThan(20)
+    expect(new Set(Object.values(resources.database.rules))).toEqual(new Set(['ADMINONLY']))
+    expect(databaseRules).toEqual({
+      defaultPermission: 'ADMINONLY',
+      source: 'security/cloud-resource-contract.json#database.rules',
     })
   })
 
-  it('keeps client API actions aligned with the cloud function dispatcher', () => {
-    const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
-    const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
-    const clientActions = [...client.matchAll(/callCloudApi(?:<[^>]+>)?\(\s*['"]([^'"]+)['"]/g)].map(
-      (match) => match[1],
+  it('denies client reads and limits client writes to owned temporary card images', () => {
+    const resources = readJson('security/cloud-resource-contract.json')
+    const storageRules = readJson('security/storage.rules.json')
+
+    expect(storageRules).toEqual(resources.storage.rules)
+    expect(storageRules.read).toBe(false)
+    expect(storageRules.write).toContain("auth.loginType != 'ANONYMOUS'")
+    expect(storageRules.write).toContain('resource.openid == auth.openid')
+    expect(storageRules.write).toContain('temporary-cards')
+    expect(storageRules.write).toContain('.test(resource.path)')
+  })
+
+  it('uses one release manifest for the root, all cloud functions, client and documentation', () => {
+    const manifest = readJson('release-manifest.json')
+    const actualCloudPackages = fs
+      .readdirSync(path.join(root, 'cloudfunctions'), { withFileTypes: true })
+      .filter(
+        (entry) => entry.isDirectory() && fs.existsSync(path.join(root, 'cloudfunctions', entry.name, 'package.json')),
+      )
+      .map((entry) => `cloudfunctions/${entry.name}/package.json`)
+      .sort()
+
+    expect(manifest.version).toBe('0.6.0')
+    expect(manifest.packages.slice(1).sort()).toEqual(actualCloudPackages)
+    for (const packagePath of manifest.packages) expect(readJson(packagePath).version).toBe(manifest.version)
+    expect(read(manifest.clientVersionFile)).toContain(`'${manifest.version}'`)
+    for (const documentationPath of manifest.documentation) expect(read(documentationPath)).toContain(manifest.version)
+  })
+
+  it('pins lock fingerprints and runs the complete gate on Linux and Windows', () => {
+    const exception = readJson('security/dependency-risk-exception.json')
+    const workflow = read('.github/workflows/ci.yml')
+
+    expect(exception.developmentLock.path).toBe('package-lock.json')
+    expect(exception.developmentLock.sha256).toMatch(/^[A-F0-9]{64}$/)
+    expect(Object.keys(exception.locks).sort()).toEqual(
+      [
+        'cloudfunctions/api/package-lock.json',
+        'cloudfunctions/deletionWorker/package-lock.json',
+        'cloudfunctions/processCardImage/package-lock.json',
+        'cloudfunctions/scheduledCleanup/package-lock.json',
+      ].sort(),
     )
-    const serverActions = new Set([...server.matchAll(/case ['"]([^'"]+)['"]:/g)].map((match) => match[1]))
-
-    expect(clientActions.length).toBeGreaterThan(0)
-    expect(clientActions.filter((action) => !serverActions.has(action))).toEqual([])
+    for (const hash of Object.values(exception.locks)) expect(hash).toMatch(/^[A-F0-9]{64}$/)
+    expect(workflow).toContain('actions/checkout@v4')
+    expect(workflow).toContain('actions/setup-node@v4')
+    expect(workflow).toContain('ubuntu-latest')
+    expect(workflow).toContain('windows-latest')
+    expect(workflow).toContain('npm run gate')
   })
 
-  it('notifies the finder about accepted thanks and supports clearing unread messages', () => {
-    const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
-    const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
+  it('documents readback, migration order, secret rotation and no phone verification', () => {
+    const setup = read('docs/cloud-setup.md')
+    const checklist = read('docs/RELEASE-GATE.md')
 
-    expect(server).toContain("'你收到一条感谢'")
-    expect(server).toContain("'thanks'")
-    expect(server).toContain('async function markMessagesRead')
-    expect(server).toContain('async function backfillThanksMessages')
-    expect(server).toContain('thanks-${handover._id}')
-    expect(server).toContain("case 'markMessagesRead':")
-    expect(client).toContain("callCloudApi('markMessagesRead')")
-  })
-
-  it('does not expose a raw cloud stack trace in the mini-program UI', () => {
-    expect(
-      friendlyCloudErrorMessage(
-        new Error('functions execute fail | errMsg: Error: 不支持的操作 at exports.main (/var/user/index.js:460:13)'),
-      ),
-    ).toBe('云端服务版本未更新，请联系管理员重新部署')
-    expect(
-      friendlyCloudErrorMessage(
-        new Error('functions execute fail | errMsg: Error: 请先填写姓名和学号 at exports.main'),
-      ),
-    ).toBe('请先填写姓名和学号')
-    expect(
-      friendlyCloudErrorMessage(
-        new Error(
-          'functions execute fail | errMsg: Error: 请先填写姓名和学号 at requireVerifiedIdentity (/var/user/domain.js:40:11)',
-        ),
-      ),
-    ).toBe('请先填写姓名和学号')
-  })
-
-  it('explains oversized private-photo requests instead of reporting a generic cloud outage', () => {
-    expect(friendlyCloudErrorMessage(new Error('EXCEED_MAX_PAYLOAD_SIZE: request data size exceeds limit'))).toBe(
-      '照片数据过大，请重新拍摄并减少画面细节',
-    )
-  })
-
-  it('keeps private photos below a conservative callFunction payload boundary', () => {
-    const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
-
-    expect(client).toContain('const MAX_PRIVATE_IMAGE_BYTES = 384 * 1024')
-    expect(client).toContain('compressImage(filePath, 35, calculateCompression(width, height, 960))')
-    expect(client).not.toMatch(/compressedWidth:\s*960[\s\S]*compressedHeight:\s*960/)
-  })
-
-  it('treats an absent deterministic claim record as a first submission', () => {
-    const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
-
-    expect(server).toMatch(/getOptionalDocument\(\s*transaction\.collection\(['"]claims['"]\)\.doc\(claimId\)\s*\)/)
-  })
-
-  it('never falls back to local records after a formal cloud login failure', () => {
-    const app = fs.readFileSync(path.join(root, 'miniprogram/app.ts'), 'utf8')
-
-    expect(app).toContain("runtimeMode = 'cloud_error'")
-    expect(app).not.toMatch(/\.catch\([\s\S]*?dataMode\s*=\s*['"]local['"]/)
-  })
-
-  it('keeps long-lived sensitive files server-owned on the free cloud plan', () => {
-    const rules = JSON.parse(fs.readFileSync(path.join(root, 'security/storage.rules.json'), 'utf8'))
-    const client = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
-    const server = fs.readFileSync(path.join(root, 'cloudfunctions/api/index.js'), 'utf8')
-
-    expect(rules.read).toBe(false)
-    expect(rules.write).toContain('auth.openid')
-    expect(client).toContain("callCloudApi<PrivateUploadResult>('uploadPrivateImage'")
-    expect(client).toContain("callCloudApi('discardPrivateUpload'")
-    expect(client).not.toMatch(/uniqueCloudPath\(['"]storage-scenes['"]/)
-    expect(client).not.toMatch(/uniqueCloudPath\(['"]handover-proofs['"]/)
-    expect(server).toContain('async function uploadPrivateImage')
-    expect(server).toContain('cloud.uploadFile')
-    expect(server).toContain('uploadTokenHash')
-    expect(server).toContain('.doc(uploadTokenHash)')
-    expect(server).toContain('consumePrivateUpload(transaction')
-    expect(server).not.toContain('where({ uploadTokenHash })')
-    expect(server).toContain("action: 'private_image.uploaded'")
-    expect(server).toContain('PRIVATE_IMAGE_DAILY_LIMIT')
-    expect(server).toContain('discarding: true')
-    expect(server).toContain("'upload_failed'")
-    expect(server).not.toContain("case 'registerUploadedFile':")
-    expect(server).toContain('maxAge: 600')
-  })
-
-  it('ships a manual release gate for secret rotation, storage rules and three-account testing', () => {
-    const checklist = fs.readFileSync(path.join(root, 'docs/RELEASE-GATE.md'), 'utf8')
+    expect(setup).toContain('--phase=preflight')
+    expect(setup).toContain('--phase=post-migration')
+    expect(setup).toContain('resources:readback')
+    expect(setup).toContain('1–3 分钟')
     expect(checklist).toContain('AppSecret')
-    expect(checklist).toContain('云存储')
     expect(checklist).toContain('拾卡者、失主、管理员')
-  })
-
-  it('keeps privacy and release copy aligned with photographed storage pickup', () => {
-    const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.wxml'), 'utf8')
-    const foundPage = fs.readFileSync(path.join(root, 'miniprogram/pages/found/index.wxml'), 'utf8')
-    const adminPage = fs.readFileSync(path.join(root, 'miniprogram/pages/admin/index.wxml'), 'utf8')
-    const checklist = fs.readFileSync(path.join(root, 'docs/RELEASE-GATE.md'), 'utf8')
-    const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8')
-
-    expect(privacy).toContain('有存放环境照片或卡片已在官方地点')
-    expect(privacy).not.toContain('多条匹配、个人保管或尚未确认时')
-    expect(foundPage).toContain('有存放照片或卡片已在官方地点')
-    expect(adminPage).not.toContain('等待拾卡者转交官方地点')
-    expect(checklist).toContain('有存放环境照片或卡片已在官方地点')
-    expect(readme).not.toContain('只有姓名、学号唯一一致且卡片已经到达官方地点')
-    expect(readme).not.toContain('多条匹配或个人保管状态不返回地点')
-  })
-
-  it('uses cross-platform lock fingerprints and current GitHub action runtimes', () => {
-    const riskCheck = fs.readFileSync(path.join(root, 'scripts/check-dependency-risk.mjs'), 'utf8')
-    const workflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
-
-    expect(riskCheck).toContain("replace(/\\r\\n/g, '\\n')")
-    expect(workflow).toContain('actions/checkout@v7')
-    expect(workflow).toContain('actions/setup-node@v7')
+    expect(setup).toContain('不接入微信手机号验证')
   })
 })

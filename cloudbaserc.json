@@ -15,8 +15,27 @@
       "envVariables": {
         "STUDENT_HMAC_SECRET": "{{env.STUDENT_HMAC_SECRET}}",
         "SUBSCRIPTION_TEMPLATE_ID": "{{env.SUBSCRIPTION_TEMPLATE_ID}}",
-        "MINIPROGRAM_STATE": "developer"
+        "MINIPROGRAM_STATE": "{{env.MINIPROGRAM_STATE}}"
       }
+    },
+    {
+      "name": "deletionWorker",
+      "type": "Event",
+      "handler": "index.main",
+      "timeout": 60,
+      "runtime": "Nodejs20.19",
+      "memorySize": 256,
+      "installDependency": true,
+      "envVariables": {
+        "OPERATIONAL_MIGRATION_TOKEN": "{{env.OPERATIONAL_MIGRATION_TOKEN}}"
+      },
+      "triggers": [
+        {
+          "name": "hourlyDeletionWorker",
+          "type": "timer",
+          "config": "0 0 * * * * *"
+        }
+      ]
     },
     {
       "name": "processCardImage",

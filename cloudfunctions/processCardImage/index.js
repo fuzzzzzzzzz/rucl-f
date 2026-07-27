@@ -1,7 +1,14 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const https = require('https')
-const { base64EncodedLength, parseDailyLimit, requireOwnedTemporaryFileId, startOfChinaDay } = require('./domain')
+const {
+  base64EncodedLength,
+  ocrUploadRegistryId,
+  parseDailyLimit,
+  requireAuthorizedOcrUpload,
+  requireTemporaryFileId,
+  startOfChinaDay,
+} = require('./domain')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -97,7 +104,38 @@ async function reserveOcrRequest(openid) {
   })
 }
 
-async function cleanupOwnedTemporaryFile(ownedFileId) {
+async function consumeOcrUploadAuthorization(event, openid) {
+  if (!String(openid || '').trim()) throw new Error('请先登录后再识别图片')
+  const fileId = requireTemporaryFileId(event && event.fileId)
+  const uploadToken = String((event && event.uploadToken) || '')
+  const registryId = ocrUploadRegistryId(uploadToken)
+  /** @type {{fileId: string, registryId: string} | null} */
+  let authorization = null
+  await db.runTransaction(async (transaction) => {
+    const result = await transaction.collection('uploadedFiles').doc(registryId).get()
+    authorization = requireAuthorizedOcrUpload(result.data, {
+      fileId,
+      openid,
+      uploadToken,
+      now: Date.now(),
+    })
+    await transaction
+      .collection('uploadedFiles')
+      .doc(registryId)
+      .update({
+        data: {
+          consumed: true,
+          consumedAt: db.serverDate(),
+          fileId,
+          updatedAt: db.serverDate(),
+        },
+      })
+  })
+  if (!authorization) throw new Error('图片上传凭证校验失败')
+  return authorization
+}
+
+async function cleanupOwnedTemporaryFile(ownedFileId, registryId) {
   try {
     await cloud.deleteFile({ fileList: [ownedFileId] })
   } catch (_) {
@@ -118,19 +156,40 @@ async function cleanupOwnedTemporaryFile(ownedFileId) {
             updatedAt: db.serverDate(),
           },
         })
+      await db
+        .collection('uploadedFiles')
+        .doc(registryId)
+        .update({
+          data: {
+            referenced: true,
+            cleanupQueuedAt: db.serverDate(),
+            updatedAt: db.serverDate(),
+          },
+        })
+        .catch(() => undefined)
     } catch (_) {
       console.error('OCR temporary file cleanup job enqueue failed')
       throw new Error('OCR原图清理失败，请稍后重试')
     }
+    return
   }
+  await db
+    .collection('uploadedFiles')
+    .doc(registryId)
+    .remove()
+    .catch(() => console.error('OCR upload registry cleanup failed'))
 }
 
 exports.main = async (event) => {
   const { OPENID } = cloud.getWXContext()
   let ownedFileId = ''
-  let primaryFailure = false
+  let registryId = ''
+  let result
+  let primaryError
   try {
-    ownedFileId = requireOwnedTemporaryFileId(event && event.fileId, OPENID)
+    const authorization = await consumeOcrUploadAuthorization(event, OPENID)
+    ownedFileId = authorization.fileId
+    registryId = authorization.registryId
     assertConfigured()
     const downloaded = await cloud.downloadFile({ fileID: ownedFileId })
     if (base64EncodedLength(downloaded.fileContent.length) > MAX_OCR_BASE64_BYTES) {
@@ -138,17 +197,20 @@ exports.main = async (event) => {
     }
     await reserveOcrRequest(OPENID)
     const ocrLines = await recognize(downloaded.fileContent)
-    return { ocrLines, requiresPublisherConfirmation: true }
+    result = { ocrLines, requiresPublisherConfirmation: true }
   } catch (error) {
-    primaryFailure = true
-    throw error
-  } finally {
-    if (ownedFileId) {
-      try {
-        await cleanupOwnedTemporaryFile(ownedFileId)
-      } catch (cleanupError) {
-        if (!primaryFailure) throw cleanupError
-      }
+    primaryError = error
+  }
+
+  let cleanupError
+  if (ownedFileId) {
+    try {
+      await cleanupOwnedTemporaryFile(ownedFileId, registryId)
+    } catch (error) {
+      cleanupError = error
     }
   }
+  if (primaryError) throw primaryError
+  if (cleanupError) throw cleanupError
+  return result
 }

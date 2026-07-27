@@ -1,4 +1,11 @@
+import type { CampusOption } from './models'
+
 export const cardCategories = ['本科生', '硕士生', '博士生', '教职工'] as const
+
+export const campuses: CampusOption[] = [
+  { id: 'zhongguancun', name: '中关村校区' },
+  { id: 'tongzhou', name: '通州校区' },
+]
 
 export function validateRucStudentNumber(
   value: string,

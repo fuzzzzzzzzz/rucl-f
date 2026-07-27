@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "version": "0.6.0",
+  "tooling": {
+    "nodeRuntime": "Nodejs20.19",
+    "cloudbaseCli": "3.6.2"
+  },
+  "packages": [
+    "package.json",
+    "cloudfunctions/api/package.json",
+    "cloudfunctions/deletionWorker/package.json",
+    "cloudfunctions/processCardImage/package.json",
+    "cloudfunctions/scheduledCleanup/package.json"
+  ],
+  "clientVersionFile": "miniprogram/config/version.ts",
+  "documentation": ["README.md", "docs/RELEASE-GATE.md"]
+}

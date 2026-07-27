@@ -2,6 +2,7 @@
   <view class="topbar brand-topbar">
     <view class="brand-lockup">
       <text class="brand-name">佧了</text>
+      <text class="en">CARDIO</text>
     </view>
     <text class="brand-tagline">人和卡重新找到彼此，这件事就此了结。</text>
   </view>
@@ -9,7 +10,7 @@
     <b>学生个人公益项目 · 非中国人民大学官方平台</b>
     <text>点击查看运营者信息、使用规则和重要注意事项</text>
   </view>
-  <view wx:if="{{cloudError}}" class="cloud-error"><view><b>云端服务暂不可用</b><text>{{cloudError}}</text><text>为避免把假数据当成真实记录，当前不会改用本机数据。</text></view><button loading="{{retrying}}" bindtap="retryCloud">重试</button></view>
+  <view wx:if="{{cloudError}}" class="cloud-error"><view><b>云端服务暂不可用</b><text>{{cloudError}}</text><text>当前不会展示或写入任何替代业务数据。</text></view><button loading="{{busyKey === 'retry'}}" disabled="{{!!busyKey}}" bindtap="retryCloud">重试</button></view>
   <view class="hero-grid">
     <view class="hero-action lost" bindtap="goLost"><image class="action-icon" src="/assets/icons/search-off-white.png" mode="aspectFit" /><view>我丢卡了</view><text class="en">[ I LOST MY CARD ]</text></view>
     <view class="hero-action found" bindtap="goFound"><image class="action-icon" src="/assets/icons/front-hand.png" mode="aspectFit" /><view>我捡到卡了</view><text class="en">[ I FOUND A CARD ]</text></view>
@@ -22,7 +23,7 @@
     <view class="profile-status" bindtap="goProfileEdit">
       <view class="profile-status-copy">
         <block wx:if="{{hasProfile}}"><view>■ 姓名：{{maskedName}}</view><view>■ 学号：{{maskedStudentNumber}}</view><view>■ 状态：{{profileStatus}}</view></block>
-        <block wx:else><view class="empty-profile">尚未填写个人信息</view><text>点击填写，查询时自动带入</text></block>
+        <block wx:else><view class="empty-profile">尚未绑定个人信息</view><text>点击填写，后续由云端安全匹配</text></block>
       </view>
       <image class="profile-status-arrow" src="/assets/icons/chevron-right.png" mode="aspectFit" />
     </view>
@@ -31,6 +32,7 @@
     <view class="brand-poster-mark">佧</view>
     <view class="brand-poster-copy">
       <b>佧了</b>
+      <text class="en">CARDIO</text>
       <text>人和卡重新找到彼此</text>
     </view>
   </view>

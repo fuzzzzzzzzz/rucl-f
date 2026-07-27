@@ -225,6 +225,7 @@ describe('security hardening domain', () => {
       claimId: 'claim-1',
       lostReportIds: ['lost-1'],
       serverDate: () => 'SERVER_DATE',
+      nowMs: 1_000,
     }
 
     await expect(
@@ -263,6 +264,7 @@ describe('security hardening domain', () => {
       applicantOpenid: 'owner-1',
       publisherOpenid: 'finder-1',
       proofFileId: 'cloud://env/handover-proofs/proof.jpg',
+      proofRetentionUntil: new Date(1_000 + 7 * 86400000),
       storagePhotoProvided: true,
       valid: true,
       riskStatus: 'normal',
