@@ -1,20 +1,231 @@
 {
-  "createdAt": "2026-07-14",
-  "reviewBy": "2026-08-13",
-  "reason": "微信官方最新版 wx-server-sdk 4.0.2 的间接依赖告警；npm 建议的自动修复会降级到旧主版本 2.5.3。业务代码不接受用户提供的外部请求 URL，云函数对输入长度、路径、身份和状态分别检查。",
+  "schemaVersion": 2,
+  "createdAt": "2026-07-27",
+  "reviewBy": "2026-08-26",
+  "reason": "The latest stable wx-server-sdk 4.0.2 still resolves vulnerable transitive CloudBase dependencies. The advertised automatic fix downgrades the SDK to an old major version, so this exception is narrowly pinned pending an upstream stable release.",
   "upstream": "https://www.npmjs.com/package/wx-server-sdk",
-  "allowedVulnerabilities": [
-    "@cloudbase/database",
-    "@cloudbase/node-sdk",
-    "axios",
-    "lodash.set",
-    "lodash.unset",
-    "wx-server-sdk"
+  "directDependency": {
+    "package": "wx-server-sdk",
+    "installedVersion": "4.0.2",
+    "allowPrerelease": false
+  },
+  "allowedPackages": [
+    { "package": "@cloudbase/database", "installedVersion": "1.4.3" },
+    { "package": "@cloudbase/node-sdk", "installedVersion": "3.17.2" },
+    { "package": "axios", "installedVersion": "0.27.2" },
+    { "package": "lodash.set", "installedVersion": "4.3.2" },
+    { "package": "lodash.unset", "installedVersion": "4.5.2" },
+    { "package": "wx-server-sdk", "installedVersion": "4.0.2" }
   ],
-  "allowedDirectHigh": ["wx-server-sdk"],
+  "allowedAdvisories": [
+    {
+      "id": "GHSA-wf5p-g6vw-rhxx",
+      "url": "https://github.com/advisories/GHSA-wf5p-g6vw-rhxx",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-jr5f-v2jv-69x6",
+      "url": "https://github.com/advisories/GHSA-jr5f-v2jv-69x6",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-3p68-rc4w-qgx5",
+      "url": "https://github.com/advisories/GHSA-3p68-rc4w-qgx5",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-w9j2-pvgh-6h63",
+      "url": "https://github.com/advisories/GHSA-w9j2-pvgh-6h63",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-pmwg-cvhr-8vh7",
+      "url": "https://github.com/advisories/GHSA-pmwg-cvhr-8vh7",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-xhjh-pmcv-23jw",
+      "url": "https://github.com/advisories/GHSA-xhjh-pmcv-23jw",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-m7pr-hjqh-92cm",
+      "url": "https://github.com/advisories/GHSA-m7pr-hjqh-92cm",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-5c9x-8gcm-mpgx",
+      "url": "https://github.com/advisories/GHSA-5c9x-8gcm-mpgx",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-vf2m-468p-8v99",
+      "url": "https://github.com/advisories/GHSA-vf2m-468p-8v99",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-pf86-5x62-jrwf",
+      "url": "https://github.com/advisories/GHSA-pf86-5x62-jrwf",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-6chq-wfr3-2hj9",
+      "url": "https://github.com/advisories/GHSA-6chq-wfr3-2hj9",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-xx6v-rp6x-q39c",
+      "url": "https://github.com/advisories/GHSA-xx6v-rp6x-q39c",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-43fc-jf86-j433",
+      "url": "https://github.com/advisories/GHSA-43fc-jf86-j433",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-fvcv-3m26-pcqx",
+      "url": "https://github.com/advisories/GHSA-fvcv-3m26-pcqx",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-62hf-57xw-28j9",
+      "url": "https://github.com/advisories/GHSA-62hf-57xw-28j9",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-hfxv-24rg-xrqf",
+      "url": "https://github.com/advisories/GHSA-hfxv-24rg-xrqf",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-p92q-9vqr-4j8v",
+      "url": "https://github.com/advisories/GHSA-p92q-9vqr-4j8v",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-j5f8-grm9-p9fc",
+      "url": "https://github.com/advisories/GHSA-j5f8-grm9-p9fc",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-3g43-6gmg-66jw",
+      "url": "https://github.com/advisories/GHSA-3g43-6gmg-66jw",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-898c-q2cr-xwhg",
+      "url": "https://github.com/advisories/GHSA-898c-q2cr-xwhg",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-pjwm-pj3p-43mv",
+      "url": "https://github.com/advisories/GHSA-pjwm-pj3p-43mv",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-mmx7-hfxf-jppx",
+      "url": "https://github.com/advisories/GHSA-mmx7-hfxf-jppx",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-7q8q-rj6j-mhjq",
+      "url": "https://github.com/advisories/GHSA-7q8q-rj6j-mhjq",
+      "package": "axios",
+      "installedVersion": "0.27.2"
+    },
+    {
+      "id": "GHSA-p6mc-m468-83gw",
+      "url": "https://github.com/advisories/GHSA-p6mc-m468-83gw",
+      "package": "lodash.set",
+      "installedVersion": "4.3.2"
+    },
+    {
+      "id": "GHSA-f23m-r3pf-42rh",
+      "url": "https://github.com/advisories/GHSA-f23m-r3pf-42rh",
+      "package": "lodash.unset",
+      "installedVersion": "4.5.2"
+    },
+    {
+      "id": "GHSA-xxjr-mmjv-4gpg",
+      "url": "https://github.com/advisories/GHSA-xxjr-mmjv-4gpg",
+      "package": "lodash.unset",
+      "installedVersion": "4.5.2"
+    }
+  ],
+  "maxVulnerabilities": {
+    "info": 0,
+    "low": 0,
+    "moderate": 1,
+    "high": 5,
+    "critical": 0,
+    "total": 6
+  },
+  "developmentLock": {
+    "path": "package-lock.json",
+    "sha256": "4CCC29614989D64413A4EA380AC4914BADBB8B0C289AD861EAB1D86E3EBC9364"
+  },
+  "developmentAudit": {
+    "allowedPackages": [
+      { "package": "@eslint/config-array", "installedVersion": "0.21.2" },
+      { "package": "@eslint/eslintrc", "installedVersion": "3.3.6" },
+      { "package": "@vitest/coverage-v8", "installedVersion": "3.2.7" },
+      { "package": "brace-expansion", "installedVersion": "5.0.7" },
+      { "package": "eslint", "installedVersion": "9.39.5" },
+      { "package": "glob", "installedVersion": "10.5.0" },
+      { "package": "minimatch", "installedVersion": "10.2.5" },
+      { "package": "sharp", "installedVersion": "0.34.5" },
+      { "package": "test-exclude", "installedVersion": "7.0.2" }
+    ],
+    "allowedAdvisories": [
+      {
+        "id": "GHSA-mh99-v99m-4gvg",
+        "url": "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+        "package": "brace-expansion",
+        "installedVersion": "5.0.7"
+      },
+      {
+        "id": "GHSA-f88m-g3jw-g9cj",
+        "url": "https://github.com/advisories/GHSA-f88m-g3jw-g9cj",
+        "package": "sharp",
+        "installedVersion": "0.34.5"
+      }
+    ],
+    "maxVulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 9,
+      "critical": 0,
+      "total": 9
+    }
+  },
   "locks": {
-    "cloudfunctions/api/package-lock.json": "46314267CEFF6D1AB9D51C8C59CC59011325C73334333377904CD863AC93F644",
-    "cloudfunctions/processCardImage/package-lock.json": "735A663DE7A15D316BA36961DEC8969C93DEC942371CD1237E9A63CD02BC3FF8",
-    "cloudfunctions/scheduledCleanup/package-lock.json": "60A8118D0B8928581E7954F9318CDBE0FBB90C1414BCF38C91308391E0C87765"
+    "cloudfunctions/api/package-lock.json": "439C5A97F3DCE767FA9482CBB7C3AFCDCDE294EBB88CFFB225A92416C6DA1E59",
+    "cloudfunctions/deletionWorker/package-lock.json": "FB626A00706D19996DC1D45FC5F635F6C427CF79C35506254F74CC5D4F238508",
+    "cloudfunctions/processCardImage/package-lock.json": "EF661B393ACBCD5410E3C18D431C2A3EC5D32F6FBD616BF60638BFE527AF1F15",
+    "cloudfunctions/scheduledCleanup/package-lock.json": "F03F21EC9AB743577231A865C3F2C194876507ED0F4D515DEC6C11B2D0457C9F"
   }
 }

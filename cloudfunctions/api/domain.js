@@ -151,7 +151,48 @@ function resolveBasicClaimDecision({ studentMatch, nameMatch, identityConfirmed,
   return ambiguousMatch ? 'review' : 'approved'
 }
 
-function publicCardProjection(card) {
+/**
+ * @param {any} card
+ * @returns {any}
+ */
+function normalizeLegacyCard(card = {}) {
+  const legacyStatus = {
+    pending: 'pending_match',
+    approved: 'awaiting_official_transfer',
+    handover: 'awaiting_official_transfer',
+  }[card.status]
+  return {
+    ...card,
+    _id: card._id || card.id,
+    maskedName: card.maskedName || card.nameMasked,
+    maskedStudentNumber: card.maskedStudentNumber || card.studentNumberMasked,
+    category: card.category || card.cardType,
+    campusId: card.campusId || card.campus,
+    pickupLocation: card.pickupLocation || {
+      category: card.locationCategory || card.pickupLocationCategory,
+    },
+    foundAt: card.foundAt || card.foundDate || card.createdAt,
+    status: legacyStatus || card.status,
+  }
+}
+
+/** @param {any} input */
+function publicCardProjection(input) {
+  const card = normalizeLegacyCard(input)
+  if (
+    !card ||
+    !card._id ||
+    !card.maskedName ||
+    !card.maskedStudentNumber ||
+    !card.category ||
+    !card.campusId ||
+    !card.pickupLocation ||
+    !card.pickupLocation.category ||
+    !card.foundAt ||
+    !card.status
+  ) {
+    throw new Error('卡片公开字段不完整')
+  }
   return {
     id: card._id,
     maskedName: card.maskedName,
@@ -161,6 +202,14 @@ function publicCardProjection(card) {
     locationCategory: card.pickupLocation.category,
     foundAt: card.foundAt,
     status: card.status,
+  }
+}
+
+function tryPublicCardProjection(card) {
+  try {
+    return publicCardProjection(card)
+  } catch {
+    return null
   }
 }
 
@@ -192,10 +241,15 @@ function hasPickupReadyStorage(card = {}) {
   return official || photographed
 }
 
+/**
+ * @param {any} card
+ * @param {any} options
+ */
 function matchedCardProjection(card, options = {}) {
-  const result = publicCardProjection(card)
-  const storage = card.storageLocation || {}
-  const storageReady = hasPickupReadyStorage(card)
+  const normalized = normalizeLegacyCard(card)
+  const result = publicCardProjection(normalized)
+  const storage = normalized.storageLocation || {}
+  const storageReady = hasPickupReadyStorage(normalized)
   if (options.discloseOfficialStoragePoint === true && storageReady) {
     result.officialStoragePoint = [storage.place, storage.area, storage.detail].filter(Boolean).join(' · ')
     if (options.storagePhotoUrl) result.storagePhotoUrl = options.storagePhotoUrl
@@ -233,7 +287,7 @@ async function completeHandoverRecords({
   claimId,
   actorOpenid,
   actorRole = 'student',
-  adminOpenid,
+  adminOpenid = '',
   proofFileId = '',
   lostReportIds = [],
   serverDate,
@@ -312,6 +366,7 @@ async function completeHandoverRecords({
           completedBy: isAdmin ? 'admin' : 'owner',
           proofFileId,
           proofHash,
+          proofRetentionUntil: proofFileId ? new Date(nowMs + 7 * 86400000) : null,
           thanksText,
           approvedThanks: Boolean(thanksText),
           valid: riskStatus === 'normal',
@@ -456,7 +511,9 @@ module.exports = {
   normalizeProfileBindingStatus,
   normalizeIdentityStatus,
   normalizeClaimWorkflowStatus,
+  normalizeLegacyCard,
   publicCardProjection,
+  tryPublicCardProjection,
   selectLatestCard,
   requireCloudFilePath,
   requireMatchingIdentity,

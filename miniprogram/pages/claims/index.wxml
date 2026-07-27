@@ -1,7 +1,7 @@
 <view class="page claims-page">
   <view class="topbar">我的认领<text class="en">MY CLAIMS</text></view>
   <view wx:if="{{loading}}" class="neo-card empty-state">正在读取认领记录…</view>
-  <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" bindtap="loadClaims">重新读取</button></view>
+  <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" disabled="{{!!busyKey || !!photoBusyId}}" bindtap="loadClaims">重新读取</button></view>
   <view wx:elif="{{claims.length === 0}}" class="neo-card empty-state">目前还没有认领申请。</view>
   <view wx:for="{{claims}}" wx:key="id" class="neo-card claim-card">
     <view class="claim-head"><view><view class="claim-name">{{item.maskedName}} · {{item.category}}</view><view class="number">{{item.maskedStudentNumber}}</view></view><view class="claim-status status-{{item.status}}">{{item.statusText}}</view></view>
@@ -18,10 +18,12 @@
       <view class="proof-help">该照片只是交接记录，不代表学校身份核验；发生争议时由管理员处理。</view>
       <view class="proof-camera" data-id="{{item.id}}" bindtap="chooseProof">
         <image wx:if="{{proofPaths[item.id]}}" src="{{proofPaths[item.id]}}" mode="aspectFill" />
-        <block wx:else><image src="/assets/icons/photo-camera.png" mode="aspectFit" /><text>现场拍摄已取到的卡</text></block>
+        <block wx:else><image src="/assets/icons/photo-camera.png" mode="aspectFit" /><text>{{photoBusyId === item.id ? '正在打开相机…' : '现场拍摄已取到的卡'}}</text></block>
       </view>
-      <textarea class="thanks-input" data-id="{{item.id}}" maxlength="30" placeholder="给拾卡同学一句感谢（选填，最多30字）" bindinput="onThanks" />
-      <button class="complete-button" data-id="{{item.id}}" loading="{{busyId === item.id}}" disabled="{{busyId}}" bindtap="confirmReceived">我已取到卡，完成任务</button>
+      <textarea class="thanks-input" data-id="{{item.id}}" maxlength="30" value="{{thanksTexts[item.id]}}" disabled="{{!!busyKey || !!photoBusyId}}" placeholder="给拾卡同学一句感谢（选填，最多30字）" bindinput="onThanks" />
+      <button class="complete-button" data-id="{{item.id}}" loading="{{busyKey === 'confirm:' + item.id}}" disabled="{{!!busyKey || !!photoBusyId}}" bindtap="confirmReceived">我已取到卡，完成任务</button>
     </view>
+    <button wx:if="{{item.status !== 'closed'}}" class="report-button" data-id="{{item.id}}" loading="{{busyKey === 'report:' + item.id}}" disabled="{{!!busyKey || !!photoBusyId}}" bindtap="reportClaim">举报认领流程问题</button>
   </view>
+  <privacy-consent />
 </view>

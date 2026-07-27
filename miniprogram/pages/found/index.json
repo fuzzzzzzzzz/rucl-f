@@ -1,1 +1,6 @@
-{ "navigationBarTitleText": "佧了" }
+{
+  "navigationBarTitleText": "佧了",
+  "usingComponents": {
+    "privacy-consent": "/components/privacy-consent/index"
+  }
+}

@@ -1,4 +1,4 @@
 {
   "read": false,
-  "write": "auth != null && resource.openid == auth.openid"
+  "write": "auth != null && auth.loginType != 'ANONYMOUS' && resource.openid == auth.openid && /^temporary-cards\\//.test(resource.path) == true"
 }

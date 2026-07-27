@@ -1,12 +1,15 @@
 import {
-  campuses,
-  getAccountSettings,
-  getUserProfile,
-  requestIdentityCorrection,
-  saveUserProfile,
-} from '../../services/card-service'
+  requestCloudIdentityCorrection,
+  syncUserProfile,
+  updateCloudProfileDetails,
+} from '../../services/cloud-card-service'
+import { createLatestRequestGate, runExclusiveAction } from '../../shared/async-control'
+import { clearedProfileIdentityFields } from '../../shared/client-forms'
 import type { CardCategory } from '../../shared/models'
-import { cardCategories, validateRucStudentNumber } from '../../shared/ruc'
+import { cardCategories, campuses, validateRucStudentNumber } from '../../shared/ruc'
+import { getReadyAccountSummary } from '../../shared/startup-session'
+
+const profileRequests = createLatestRequestGate()
 
 Page({
   data: {
@@ -14,89 +17,134 @@ Page({
     campusIndex: 0,
     cardCategories,
     categoryIndex: 0,
-    name: '',
-    studentNumber: '',
-    busy: false,
+    ...clearedProfileIdentityFields(),
+    maskedName: '',
+    maskedStudentNumber: '',
+    busyKey: '',
+    loading: true,
     identityLocked: false,
     correctionPending: false,
-    correctionReason: '',
-    identityStatusText: '首次保存后，姓名和学号将锁定并用于找卡。',
+    identityStatusText: '首次保存后，姓名和学号将锁定并用于安全匹配。',
   },
   async onLoad() {
+    const generation = profileRequests.begin()
     try {
-      const settings = await getAccountSettings()
-      getApp<IAppOption>().globalData.profileBindingStatus = settings.profileBindingStatus
-    } catch {
-      // 正式环境故障时保存动作仍会由云函数拒绝，页面保留可重试提示。
+      const summary = await getReadyAccountSummary()
+      if (!profileRequests.isCurrent(generation)) return
+      if (!summary) {
+        this.setData({ loading: false })
+        return
+      }
+      const identityLocked = summary.profileBindingStatus !== 'unbound'
+      this.setData({
+        loading: false,
+        maskedName: summary.maskedName,
+        maskedStudentNumber: summary.maskedStudentNumber,
+        categoryIndex: Math.max(0, cardCategories.indexOf(summary.category as CardCategory)),
+        campusIndex: Math.max(
+          0,
+          campuses.findIndex((item) => item.id === summary.campusId),
+        ),
+        identityLocked,
+        correctionPending: summary.profileBindingStatus === 'correction_pending',
+        identityStatusText:
+          summary.profileBindingStatus === 'correction_pending'
+            ? '身份信息修改申请正在处理，姓名和学号暂时保持锁定。'
+            : identityLocked
+              ? '姓名和学号已锁定；卡片类别和常用校区仍可更新。'
+              : '首次保存后，姓名和学号将锁定并用于安全匹配。',
+      })
+    } catch (error) {
+      if (profileRequests.isCurrent(generation)) {
+        this.setData({ loading: false })
+        wx.showToast({ title: error instanceof Error ? error.message : '账号信息加载失败', icon: 'none' })
+      }
     }
-    const profile = await getUserProfile()
-    if (!profile) return
-    this.setData({
-      name: profile.name,
-      studentNumber: profile.studentNumber,
-      categoryIndex: Math.max(0, cardCategories.indexOf(profile.category)),
-      campusIndex: Math.max(
-        0,
-        campuses.findIndex((item) => item.id === profile.campusId),
-      ),
-      identityLocked:
-        profile.profileBindingStatus === 'locked' || profile.profileBindingStatus === 'correction_pending',
-      correctionPending: profile.profileBindingStatus === 'correction_pending',
-      identityStatusText:
-        profile.profileBindingStatus === 'locked'
-          ? '姓名和学号已锁定；这只表示资料已登记，不代表学校身份核验。'
-          : profile.profileBindingStatus === 'correction_pending'
-            ? '资料修改申请正在处理；姓名和学号暂时保持锁定。'
-            : '本机演示模式只核对姓名和学号。',
-    })
+  },
+  onUnload() {
+    profileRequests.invalidate()
   },
   onName(e: WechatMiniprogram.Input) {
-    this.setData({ name: e.detail.value })
+    if (this.data.busyKey || this.data.loading) return
+    if (!this.data.identityLocked) this.setData({ name: e.detail.value })
   },
   onNumber(e: WechatMiniprogram.Input) {
-    this.setData({ studentNumber: e.detail.value.replace(/\D/g, '').slice(0, 10) })
+    if (this.data.busyKey || this.data.loading) return
+    if (!this.data.identityLocked) {
+      this.setData({ studentNumber: e.detail.value.replace(/\D/g, '').slice(0, 10) })
+    }
   },
   onCategoryChange(e: WechatMiniprogram.PickerChange) {
+    if (this.data.busyKey || this.data.loading || this.data.correctionPending) return
     this.setData({ categoryIndex: Number(e.detail.value) })
   },
   onCampusChange(e: WechatMiniprogram.PickerChange) {
+    if (this.data.busyKey || this.data.loading || this.data.correctionPending) return
     this.setData({ campusIndex: Number(e.detail.value) })
   },
   onCorrectionReason(e: WechatMiniprogram.Input) {
+    if (this.data.busyKey || this.data.loading) return
     this.setData({ correctionReason: e.detail.value.slice(0, 160) })
   },
   async requestCorrection() {
-    if (this.data.correctionReason.trim().length < 4) {
-      return wx.showToast({ title: '请简单说明修改原因', icon: 'none' })
+    if (this.data.busyKey || this.data.loading || this.data.correctionPending) return
+    const reason = this.data.correctionReason.trim()
+    if (reason.length < 4) {
+      wx.showToast({ title: '请简单说明修改原因', icon: 'none' })
+      return
     }
     try {
-      this.setData({ busy: true })
-      await requestIdentityCorrection(this.data.correctionReason.trim())
-      this.setData({ correctionPending: true, identityStatusText: '资料修改申请正在处理，姓名和学号暂时保持锁定。' })
-      wx.showToast({ title: '修改申请已提交', icon: 'none' })
+      await runExclusiveAction(this, 'correction', async () => {
+        await requestCloudIdentityCorrection(reason)
+        this.setData({
+          correctionPending: true,
+          correctionReason: '',
+          identityStatusText: '身份信息修改申请正在处理，姓名和学号暂时保持锁定。',
+        })
+        wx.showToast({ title: '修改申请已提交', icon: 'none' })
+      })
     } catch (error) {
       wx.showToast({ title: error instanceof Error ? error.message : '提交失败', icon: 'none' })
-    } finally {
-      this.setData({ busy: false })
     }
   },
   async save() {
-    const result = validateRucStudentNumber(this.data.studentNumber)
-    if (!result.valid) return wx.showToast({ title: result.message || '请检查学号', icon: 'none' })
+    if (this.data.busyKey) return
+    if (this.data.correctionPending) {
+      wx.showToast({ title: '身份信息修改申请处理中，请等待审核结果', icon: 'none' })
+      return
+    }
+    if (!this.data.identityLocked) {
+      const validation = validateRucStudentNumber(this.data.studentNumber)
+      if (!validation.valid) {
+        wx.showToast({ title: validation.message || '请检查学号', icon: 'none' })
+        return
+      }
+      if (!this.data.name.trim()) {
+        wx.showToast({ title: '请输入校园卡上的姓名', icon: 'none' })
+        return
+      }
+    }
+
     try {
-      this.setData({ busy: true })
-      await saveUserProfile({
-        name: this.data.name,
-        studentNumber: this.data.studentNumber,
-        category: cardCategories[this.data.categoryIndex] as CardCategory,
-        campusId: campuses[this.data.campusIndex].id,
+      await runExclusiveAction(this, 'save', async () => {
+        const category = cardCategories[this.data.categoryIndex] as CardCategory
+        const campusId = campuses[this.data.campusIndex].id
+        if (this.data.identityLocked) {
+          await updateCloudProfileDetails(category, campusId)
+        } else {
+          await syncUserProfile({
+            name: this.data.name.trim(),
+            studentNumber: this.data.studentNumber,
+            category,
+            campusId,
+          })
+        }
+        this.setData(clearedProfileIdentityFields())
+        wx.showToast({ title: '保存成功', icon: 'none' })
+        wx.navigateBack()
       })
-      wx.showToast({ title: '保存成功', icon: 'none' })
-      setTimeout(() => wx.navigateBack(), 500)
     } catch (error) {
       wx.showToast({ title: error instanceof Error ? error.message : '保存失败', icon: 'none' })
-    } finally {
-      this.setData({ busy: false })
     }
   },
 })

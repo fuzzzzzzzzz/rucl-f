@@ -1,9 +1,13 @@
 import type { CardStatus } from './workflow'
 
 export type CardCategory = '本科生' | '硕士生' | '博士生' | '教职工'
-export type ProfileBindingStatus = 'unbound' | 'locked' | 'correction_pending' | 'local_demo'
+export type ProfileBindingStatus = 'unbound' | 'locked' | 'correction_pending'
 export type ClaimStatus =
   'pending_match' | 'admin_review' | 'awaiting_official_transfer' | 'ready_for_pickup' | 'returned' | 'closed'
+export type ClaimApprovalReasonCode = 'identity_verified' | 'manual_verification' | 'official_record_match'
+export type ClaimRejectionReasonCode =
+  'insufficient_evidence' | 'identity_conflict' | 'duplicate_request' | 'suspected_fraud' | 'blocked' | 'other'
+export type ClaimReviewReasonCode = ClaimApprovalReasonCode | ClaimRejectionReasonCode
 
 export interface UserProfileInput {
   name: string
@@ -12,8 +16,11 @@ export interface UserProfileInput {
   campusId: string
 }
 
-export interface UserProfile extends UserProfileInput {
-  updatedAt: string
+export interface AccountProfileSummary {
+  maskedName: string
+  maskedStudentNumber: string
+  category: CardCategory | ''
+  campusId: string
   profileBindingStatus: ProfileBindingStatus
 }
 
@@ -37,7 +44,7 @@ export interface FoundCardInput {
   photoPath?: string
 }
 
-export interface LostReportInput extends UserProfileInput {
+export interface LostReportInput {
   lostDate: string
   locationDescription?: string
   feature?: string
@@ -123,12 +130,44 @@ export interface AccountSettings {
   profileBindingStatus: ProfileBindingStatus
   version: string
   cloudStatus: 'connected' | 'unavailable'
+  deletionRequest?: {
+    id: string
+    status: 'pending' | 'approved' | 'processing' | 'completed' | 'rejected'
+    requestedAt?: string
+    receiptId?: string
+  }
 }
 
 export interface AdminOperationSummary {
-  reports: Array<{ id: string; type: ReportType; recordId: string; reason: string; hasTarget: boolean }>
+  reports: Array<{
+    id: string
+    type: ReportType
+    recordId: string
+    reason: string
+    hasTarget: boolean
+    evidenceLoaded: boolean
+    targetAvailable: boolean
+    targetEvidence: {
+      kind: ReportType
+      structured?: boolean
+      maskedName?: string
+      maskedStudentNumber?: string
+      category?: string
+      campusId?: string
+      status?: string
+      date?: string
+      locationCategory?: string
+      cardId?: string
+      thanksText?: string
+      approved?: boolean
+    } | null
+  }>
   risks: Array<{ id: string; cardId: string; completedAt?: string; riskStatus?: string }>
-  deletionRequests: Array<{ id: string; content: string }>
+  deletionRequests: Array<{
+    id: string
+    content: string
+    status: 'pending' | 'approved' | 'processing' | 'completed' | 'rejected'
+  }>
   feedback: Array<{ id: string; content: string }>
 }
 

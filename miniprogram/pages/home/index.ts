@@ -1,28 +1,54 @@
-import { getUserProfile } from '../../services/card-service'
-import { maskName, maskStudentNumber } from '../../shared/privacy'
+import { createLatestRequestGate, runExclusiveAction } from '../../shared/async-control'
+import { getReadyAccountSummary, startCloudSession } from '../../shared/startup-session'
+
+const homeRequests = createLatestRequestGate()
 
 Page({
   data: {
+    busyKey: '',
     hasProfile: false,
     maskedName: '',
     maskedStudentNumber: '',
-    profileStatus: '尚未填写个人信息',
+    profileStatus: '尚未绑定个人信息',
     cloudError: '',
-    retrying: false,
   },
   async onShow() {
-    this.getTabBar().setData({ selected: 0 })
-    const profile = await getUserProfile()
-    this.setData({
-      hasProfile: Boolean(profile),
-      maskedName: profile ? maskName(profile.name) : '',
-      maskedStudentNumber: profile ? maskStudentNumber(profile.studentNumber) : '',
-      profileStatus: profile ? '个人信息已填写' : '尚未填写个人信息',
-      cloudError:
-        getApp<IAppOption>().globalData.runtimeMode === 'cloud_error'
-          ? getApp<IAppOption>().globalData.cloudError || '云端服务暂不可用'
-          : '',
-    })
+    this.getTabBar()?.setData({ selected: 0 })
+    await this.refreshAccountSummary()
+  },
+  onHide() {
+    homeRequests.invalidate()
+  },
+  onUnload() {
+    homeRequests.invalidate()
+  },
+  async refreshAccountSummary() {
+    const generation = homeRequests.begin()
+    try {
+      const summary = await getReadyAccountSummary()
+      if (!homeRequests.isCurrent(generation)) return
+      this.setData({
+        hasProfile: Boolean(summary),
+        maskedName: summary?.maskedName || '',
+        maskedStudentNumber: summary?.maskedStudentNumber || '',
+        profileStatus:
+          summary?.profileBindingStatus === 'correction_pending'
+            ? '身份信息修改申请处理中'
+            : summary
+              ? '个人信息已安全绑定'
+              : '尚未绑定个人信息',
+        cloudError: '',
+      })
+    } catch (error) {
+      if (!homeRequests.isCurrent(generation)) return
+      this.setData({
+        hasProfile: false,
+        maskedName: '',
+        maskedStudentNumber: '',
+        profileStatus: '账号状态暂不可用',
+        cloudError: error instanceof Error ? error.message : '云端服务暂不可用',
+      })
+    }
   },
   goFound() {
     wx.switchTab({ url: '/pages/found/index' })
@@ -38,28 +64,17 @@ Page({
   },
   async retryCloud() {
     try {
-      this.setData({ retrying: true })
-      const app = getApp<IAppOption>()
-      wx.cloud.init({ env: app.globalData.cloudEnvId, traceUser: true })
-      const { result } = await wx.cloud.callFunction({ name: 'api', data: { action: 'login', input: {} } })
-      const account = result as {
-        role?: string
-        profileBindingStatus?: IAppOption['globalData']['profileBindingStatus']
-        uploadNamespace?: string
-      }
-      app.globalData.cloudEnabled = true
-      app.globalData.runtimeMode = 'cloud'
-      app.globalData.dataMode = 'cloud'
-      app.globalData.cloudError = ''
-      app.globalData.isAdmin = account?.role === 'admin'
-      app.globalData.profileBindingStatus = account?.profileBindingStatus || 'unbound'
-      app.globalData.uploadNamespace = account?.uploadNamespace || ''
-      this.setData({ cloudError: '' })
-      wx.showToast({ title: '云服务已恢复', icon: 'none' })
-    } catch {
-      this.setData({ cloudError: '云端服务仍不可用，请检查网络后重试' })
-    } finally {
-      this.setData({ retrying: false })
+      await runExclusiveAction(this, 'retry', async () => {
+        const app = getApp<IAppOption>()
+        await startCloudSession(app)
+        if (app.globalData.startupState !== 'ready') {
+          throw new Error(app.globalData.cloudError || '云端服务仍不可用，请检查网络后重试')
+        }
+        await this.refreshAccountSummary()
+        wx.showToast({ title: '云服务已恢复', icon: 'none' })
+      })
+    } catch (error) {
+      this.setData({ cloudError: error instanceof Error ? error.message : '云端服务仍不可用，请检查网络后重试' })
     }
   },
 })

@@ -1,0 +1,532 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": "2018-06-08",
+  "database": {
+    "rules": {
+      "auditLogs": "ADMINONLY",
+      "campuses": "ADMINONLY",
+      "claimAttempts": "ADMINONLY",
+      "claimDecisions": "ADMINONLY",
+      "claims": "ADMINONLY",
+      "cleanupCheckpoints": "ADMINONLY",
+      "dataDeletionRequests": "ADMINONLY",
+      "dataIntegrityEvents": "ADMINONLY",
+      "deletionReceipts": "ADMINONLY",
+      "feedback": "ADMINONLY",
+      "fileCleanupJobs": "ADMINONLY",
+      "foundCards": "ADMINONLY",
+      "handovers": "ADMINONLY",
+      "identityBindings": "ADMINONLY",
+      "identityCorrectionRequests": "ADMINONLY",
+      "lostReports": "ADMINONLY",
+      "locations": "ADMINONLY",
+      "maintenanceState": "ADMINONLY",
+      "matches": "ADMINONLY",
+      "messages": "ADMINONLY",
+      "notificationOutbox": "ADMINONLY",
+      "operationalMigrations": "ADMINONLY",
+      "recordReports": "ADMINONLY",
+      "reports": "ADMINONLY",
+      "reportRateLimits": "ADMINONLY",
+      "riskReviews": "ADMINONLY",
+      "systemConfig": "ADMINONLY",
+      "uploadedFiles": "ADMINONLY",
+      "userKeys": "ADMINONLY",
+      "users": "ADMINONLY"
+    },
+    "indexes": [
+      {
+        "name": "users_openid_unique",
+        "collection": "users",
+        "keys": [{ "field": "openid", "direction": 1 }],
+        "unique": true,
+        "phase": "post-migration",
+        "purpose": "Canonical WeChat user uniqueness after conflict-free userKeys backfill"
+      },
+      {
+        "name": "found_publisher_created",
+        "collection": "foundCards",
+        "keys": [
+          { "field": "publisherOpenid", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Publisher history and daily publication throttling"
+      },
+      {
+        "name": "found_hmac_status",
+        "collection": "foundCards",
+        "keys": [
+          { "field": "studentHmac", "direction": 1 },
+          { "field": "status", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Server-side identity-bound match candidates"
+      },
+      {
+        "name": "found_storage_photo",
+        "collection": "foundCards",
+        "keys": [{ "field": "storagePhotoFileId", "direction": 1 }],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Removal of deleted storage-photo references"
+      },
+      {
+        "name": "lost_owner_created",
+        "collection": "lostReports",
+        "keys": [
+          { "field": "ownerOpenid", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Owner history and daily lost-report throttling"
+      },
+      {
+        "name": "lost_owner_hmac_status",
+        "collection": "lostReports",
+        "keys": [
+          { "field": "ownerOpenid", "direction": 1 },
+          { "field": "studentHmac", "direction": 1 },
+          { "field": "status", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Idempotent active lost-report registration"
+      },
+      {
+        "name": "lost_hmac_status",
+        "collection": "lostReports",
+        "keys": [
+          { "field": "studentHmac", "direction": 1 },
+          { "field": "status", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Finder-to-owner match candidates"
+      },
+      {
+        "name": "lost_reports_status_active_until",
+        "collection": "lostReports",
+        "keys": [
+          { "field": "status", "direction": 1 },
+          { "field": "activeUntil", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Machine-readable thirty-day active deadline; scheduled cleanup uses its primary-key checkpoint scan"
+      },
+      {
+        "name": "lost_reports_status_purge_at",
+        "collection": "lostReports",
+        "keys": [
+          { "field": "status", "direction": 1 },
+          { "field": "purgeAt", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Machine-readable expired-report purge deadline; scheduled cleanup uses its primary-key checkpoint scan"
+      },
+      {
+        "name": "messages_expires_at",
+        "collection": "messages",
+        "keys": [{ "field": "expiresAt", "direction": 1 }],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Machine-readable sixty-day message deadline; scheduled cleanup uses its primary-key checkpoint scan"
+      },
+      {
+        "name": "messages_recipient_created",
+        "collection": "messages",
+        "keys": [
+          { "field": "recipientOpenid", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Recipient message feed"
+      },
+      {
+        "name": "messages_recipient_read",
+        "collection": "messages",
+        "keys": [
+          { "field": "recipientOpenid", "direction": 1 },
+          { "field": "read", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Unread message updates and counters"
+      },
+      {
+        "name": "audit_logs_created_at",
+        "collection": "auditLogs",
+        "keys": [{ "field": "createdAt", "direction": 1 }],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Machine-readable sixty-day audit deadline; scheduled cleanup uses its primary-key checkpoint scan"
+      },
+      {
+        "name": "audit_openid_action_created",
+        "collection": "auditLogs",
+        "keys": [
+          { "field": "openid", "direction": 1 },
+          { "field": "action", "direction": 1 },
+          { "field": "createdAt", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Private-image upload throttling"
+      },
+      {
+        "name": "outbox_status_not_before",
+        "collection": "notificationOutbox",
+        "keys": [
+          { "field": "status", "direction": 1 },
+          { "field": "notBefore", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Notification delivery retries"
+      },
+      {
+        "name": "file_cleanup_status_not_before",
+        "collection": "fileCleanupJobs",
+        "keys": [
+          { "field": "status", "direction": 1 },
+          { "field": "notBefore", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Machine-readable reliable photo cleanup deadline; scheduled cleanup uses its primary-key checkpoint scan"
+      },
+      {
+        "name": "deletion_status_next_attempt",
+        "collection": "dataDeletionRequests",
+        "keys": [
+          { "field": "status", "direction": 1 },
+          { "field": "nextAttemptAt", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Due approved deletion work"
+      },
+      {
+        "name": "deletion_status_lease_expiry",
+        "collection": "dataDeletionRequests",
+        "keys": [
+          { "field": "status", "direction": 1 },
+          { "field": "leaseExpiresAt", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Resumption of expired deletion worker leases"
+      },
+      {
+        "name": "deletion_applicant_created",
+        "collection": "dataDeletionRequests",
+        "keys": [
+          { "field": "applicantOpenid", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Latest deletion request shown in account settings"
+      },
+      {
+        "name": "claims_applicant_status_created",
+        "collection": "claims",
+        "keys": [
+          { "field": "applicantOpenid", "direction": 1 },
+          { "field": "status", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Claim history and active retention holds"
+      },
+      {
+        "name": "claims_publisher_status_created",
+        "collection": "claims",
+        "keys": [
+          { "field": "publisherOpenid", "direction": 1 },
+          { "field": "status", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Finder claim queue"
+      },
+      {
+        "name": "claims_status",
+        "collection": "claims",
+        "keys": [{ "field": "status", "direction": 1 }],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Administrator claim review queue"
+      },
+      {
+        "name": "claim_attempts_claim_created",
+        "collection": "claimAttempts",
+        "keys": [
+          { "field": "claimId", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Thirty-day retry limit"
+      },
+      {
+        "name": "claim_decisions_claim_created",
+        "collection": "claimDecisions",
+        "keys": [
+          { "field": "claimId", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Immutable administrator claim decisions"
+      },
+      {
+        "name": "handovers_publisher_completed",
+        "collection": "handovers",
+        "keys": [
+          { "field": "publisherOpenid", "direction": 1 },
+          { "field": "completedAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Finder handover and achievement history"
+      },
+      {
+        "name": "handovers_publisher_proof_retention",
+        "collection": "handovers",
+        "keys": [
+          { "field": "publisherOpenid", "direction": 1 },
+          { "field": "proofRetentionUntil", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Finder-side proof-photo retention hold during deletion review"
+      },
+      {
+        "name": "handovers_applicant_completed",
+        "collection": "handovers",
+        "keys": [
+          { "field": "applicantOpenid", "direction": 1 },
+          { "field": "completedAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Owner handover history"
+      },
+      {
+        "name": "handovers_applicant_proof_retention",
+        "collection": "handovers",
+        "keys": [
+          { "field": "applicantOpenid", "direction": 1 },
+          { "field": "proofRetentionUntil", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Applicant-side proof-photo retention hold during deletion review"
+      },
+      {
+        "name": "handovers_official_point_verified",
+        "collection": "handovers",
+        "keys": [{ "field": "officialPointVerified", "direction": 1 }],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Administrator risk review queue"
+      },
+      {
+        "name": "handovers_thanks_wall",
+        "collection": "handovers",
+        "keys": [
+          { "field": "valid", "direction": 1 },
+          { "field": "approvedThanks", "direction": 1 },
+          { "field": "completedAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Public approved thanks feed"
+      },
+      {
+        "name": "handovers_proof_file",
+        "collection": "handovers",
+        "keys": [{ "field": "proofFileId", "direction": 1 }],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Removal of deleted handover-proof references"
+      },
+      {
+        "name": "identity_corrections_status_created",
+        "collection": "identityCorrectionRequests",
+        "keys": [
+          { "field": "status", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Administrator identity-correction queue"
+      },
+      {
+        "name": "identity_corrections_applicant_status",
+        "collection": "identityCorrectionRequests",
+        "keys": [
+          { "field": "applicantOpenid", "direction": 1 },
+          { "field": "status", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Idempotent pending identity-correction requests"
+      },
+      {
+        "name": "record_reports_status_created",
+        "collection": "recordReports",
+        "keys": [
+          { "field": "status", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Administrator report queue"
+      },
+      {
+        "name": "record_reports_reported_status",
+        "collection": "recordReports",
+        "keys": [
+          { "field": "reportedOpenid", "direction": 1 },
+          { "field": "status", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Active disputes received by a user"
+      },
+      {
+        "name": "record_reports_reporter_status",
+        "collection": "recordReports",
+        "keys": [
+          { "field": "reporterOpenid", "direction": 1 },
+          { "field": "status", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Active disputes submitted by a user"
+      },
+      {
+        "name": "uploaded_files_file_id",
+        "collection": "uploadedFiles",
+        "keys": [{ "field": "fileId", "direction": 1 }],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Private-file registry cleanup"
+      },
+      {
+        "name": "uploaded_files_referenced_created",
+        "collection": "uploadedFiles",
+        "keys": [
+          { "field": "referenced", "direction": 1 },
+          { "field": "createdAt", "direction": 1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Orphan upload retention"
+      },
+      {
+        "name": "matches_lost_report",
+        "collection": "matches",
+        "keys": [{ "field": "lostReportId", "direction": 1 }],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Removal of matches after lost-report expiry"
+      },
+      {
+        "name": "feedback_status",
+        "collection": "feedback",
+        "keys": [{ "field": "status", "direction": 1 }],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Administrator feedback queue"
+      },
+      {
+        "name": "found_cards_status_created",
+        "collection": "foundCards",
+        "keys": [
+          { "field": "status", "direction": 1 },
+          { "field": "createdAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Public card listing query"
+      }
+    ],
+    "scheduledCleanupPagination": {
+      "strategy": "primary-key-scan",
+      "cursor": ["phase", "lastId"],
+      "where": "_id > lastId",
+      "orderBy": [{ "field": "_id", "direction": 1 }],
+      "index": "built-in _id",
+      "deadlineFieldsEvaluatedAfterRead": [
+        "foundCards.createdAt",
+        "uploadedFiles.createdAt",
+        "lostReports.activeUntil",
+        "lostReports.purgeAt",
+        "messages.expiresAt",
+        "auditLogs.createdAt",
+        "fileCleanupJobs.notBefore"
+      ],
+      "rationale": "Avoid unsupported or index-incompatible simultaneous range predicates while preserving resumable no-skip pagination"
+    }
+  },
+  "storage": {
+    "permission": "CUSTOM",
+    "rules": {
+      "read": false,
+      "write": "auth != null && auth.loginType != 'ANONYMOUS' && resource.openid == auth.openid && /^temporary-cards\\//.test(resource.path) == true"
+    }
+  },
+  "functionDefaults": {
+    "*": { "invoke": false }
+  },
+  "functions": {
+    "api": {
+      "invoke": "auth != null && auth.loginType != 'ANONYMOUS'",
+      "clientCallable": true
+    },
+    "deletionWorker": {
+      "invoke": false,
+      "clientCallable": false,
+      "trigger": "timer",
+      "operations": ["processDeletionJobs", "inventory", "apply"],
+      "migrationSafety": "inventory and dryRun apply are required before apply with dryRun=false"
+    },
+    "processCardImage": {
+      "invoke": "auth != null && auth.loginType != 'ANONYMOUS'",
+      "clientCallable": true
+    },
+    "scheduledCleanup": {
+      "invoke": false,
+      "clientCallable": false,
+      "trigger": "timer"
+    }
+  },
+  "migrationGuard": {
+    "requiredForPhase": "post-migration",
+    "workerVersion": "0.6.0",
+    "maximumEvidenceAgeSeconds": 900,
+    "maximumClockSkewSeconds": 60,
+    "requiredConflictCounts": {
+      "identityConflicts": 0,
+      "roleConflicts": 0,
+      "userKeyConflicts": 0,
+      "emptyOpenidUsers": 0,
+      "conflictingDuplicateGroups": 0,
+      "scanTruncated": 0,
+      "total": 0
+    },
+    "userKeyBackfillVerified": true,
+    "openidBackfillVerified": true
+  }
+}

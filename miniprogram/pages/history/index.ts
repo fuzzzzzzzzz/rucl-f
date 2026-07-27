@@ -1,4 +1,9 @@
-import { closeRecord, listMyFoundHistory, listMyLostHistory, reportRecord } from '../../services/card-service'
+import {
+  closeCloudRecord as closeRecord,
+  listCloudFoundHistory as listMyFoundHistory,
+  listCloudLostHistory as listMyLostHistory,
+} from '../../services/cloud-card-service'
+import { createLatestRequestGate, createPageLifetimeGate, runExclusiveAction } from '../../shared/async-control'
 import type { FoundHistoryItem, LostHistoryItem } from '../../shared/models'
 
 const foundStatus: Record<string, string> = {
@@ -27,6 +32,20 @@ interface LostHistoryView extends LostHistoryItem {
   statusText: string
 }
 
+const historyRequests = createLatestRequestGate()
+const historyLifetime = createPageLifetimeGate()
+
+function chooseCloseReason(): Promise<string | null> {
+  const reasons = ['已自行找回', '已补办或旧卡失效', '信息填写错误', '已转交其他官方部门']
+  return new Promise((resolve) => {
+    wx.showActionSheet({
+      itemList: reasons,
+      success: (result) => resolve(reasons[result.tapIndex] || null),
+      fail: () => resolve(null),
+    })
+  })
+}
+
 Page({
   data: {
     type: 'found' as 'found' | 'lost',
@@ -34,6 +53,7 @@ Page({
     englishTitle: 'MY POSTS',
     loading: true,
     error: '',
+    busyKey: '',
     foundRecords: [] as FoundHistoryView[],
     lostRecords: [] as LostHistoryView[],
   },
@@ -44,65 +64,72 @@ Page({
       title: type === 'lost' ? '我登记的失卡' : '我发布的招领',
       englishTitle: type === 'lost' ? 'MY LOST CARDS' : 'MY POSTS',
     })
+  },
+  onShow() {
+    historyLifetime.activate()
     void this.loadHistory()
   },
+  onHide() {
+    historyRequests.invalidate()
+    historyLifetime.deactivate()
+  },
+  onUnload() {
+    historyRequests.invalidate()
+    historyLifetime.deactivate()
+  },
   async loadHistory() {
+    const lifetime = historyLifetime.capture()
+    if (!historyLifetime.isActive(lifetime)) return
+    const generation = historyRequests.begin()
     try {
       this.setData({ loading: true, error: '' })
       if (this.data.type === 'lost') {
         const records = await listMyLostHistory()
+        if (!historyLifetime.isActive(lifetime) || !historyRequests.isCurrent(generation)) return
         this.setData({
           lostRecords: records.map((item) => ({ ...item, statusText: lostStatus[item.status] || '处理中' })),
         })
       } else {
         const records = await listMyFoundHistory()
+        if (!historyLifetime.isActive(lifetime) || !historyRequests.isCurrent(generation)) return
         this.setData({
           foundRecords: records.map((item) => ({ ...item, statusText: foundStatus[item.status] || '处理中' })),
         })
       }
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : '读取记录失败，请稍后重试' })
+      if (historyLifetime.isActive(lifetime) && historyRequests.isCurrent(generation)) {
+        this.setData({ error: error instanceof Error ? error.message : '读取记录失败，请稍后重试' })
+      }
     } finally {
-      this.setData({ loading: false })
+      if (historyLifetime.isActive(lifetime) && historyRequests.isCurrent(generation)) this.setData({ loading: false })
     }
   },
   goTransfer(e: WechatMiniprogram.TouchEvent) {
+    if (this.data.busyKey) return
     const cardId = encodeURIComponent(String(e.currentTarget.dataset.id || ''))
     const campusId = encodeURIComponent(String(e.currentTarget.dataset.campus || 'zhongguancun'))
     wx.navigateTo({ url: `/pages/transfer/index?cardId=${cardId}&campusId=${campusId}` })
   },
-  closeItem(e: WechatMiniprogram.TouchEvent) {
+  async closeItem(e: WechatMiniprogram.TouchEvent) {
+    if (this.data.busyKey) return
     const recordId = String(e.currentTarget.dataset.id || '')
-    const reasons = ['已自行找回', '已补办或旧卡失效', '信息填写错误', '已转交其他官方部门']
-    wx.showActionSheet({
-      itemList: reasons,
-      success: async (result) => {
-        try {
-          await closeRecord(this.data.type, recordId, reasons[result.tapIndex])
-          wx.showToast({ title: '记录已关闭', icon: 'none' })
-          await this.loadHistory()
-        } catch (error) {
-          wx.showToast({ title: error instanceof Error ? error.message : '关闭失败', icon: 'none' })
-        }
-      },
-    })
-  },
-  reportItem(e: WechatMiniprogram.TouchEvent) {
-    const recordId = String(e.currentTarget.dataset.id || '')
-    wx.showModal({
-      title: '举报这条记录',
-      content: '请说明信息错误、重复或其他问题',
-      editable: true,
-      placeholderText: '填写举报原因',
-      success: async (result) => {
-        if (!result.confirm || !result.content?.trim()) return
-        try {
-          await reportRecord(this.data.type, recordId, result.content.trim())
-          wx.showToast({ title: '举报已提交', icon: 'none' })
-        } catch (error) {
-          wx.showToast({ title: error instanceof Error ? error.message : '提交失败', icon: 'none' })
-        }
-      },
-    })
+    if (!recordId) return
+    const lifetime = historyLifetime.capture()
+    if (!historyLifetime.isActive(lifetime)) return
+    try {
+      await runExclusiveAction(this, `close:${recordId}`, async () => {
+        const reason = await chooseCloseReason()
+        if (!reason) return
+        if (!historyLifetime.isActive(lifetime)) return
+        await closeRecord(this.data.type, recordId, reason)
+        if (!historyLifetime.isActive(lifetime)) return
+        wx.showToast({ title: '记录已关闭', icon: 'none' })
+        await this.loadHistory()
+      })
+    } catch (error) {
+      if (historyLifetime.isActive(lifetime)) {
+        wx.showToast({ title: error instanceof Error ? error.message : '关闭失败', icon: 'none' })
+      }
+    }
   },
 })

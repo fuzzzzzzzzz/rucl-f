@@ -1,4 +1,4 @@
 {
-  "read": false,
-  "write": false
+  "defaultPermission": "ADMINONLY",
+  "source": "security/cloud-resource-contract.json#database.rules"
 }

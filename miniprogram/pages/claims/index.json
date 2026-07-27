@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "我的认领"
+  "navigationBarTitleText": "我的认领",
+  "usingComponents": {
+    "privacy-consent": "/components/privacy-consent/index"
+  }
 }

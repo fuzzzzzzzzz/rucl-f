@@ -1,64 +1,77 @@
 import { Buffer } from 'node:buffer'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputDirectory = resolve(root, 'miniprogram', 'assets', 'icons')
-const sourceRoot = 'https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web'
+const sourceDirectory = resolve(root, 'third_party', 'material-symbols')
+const manifest = JSON.parse(readFileSync(resolve(outputDirectory, 'manifest.json'), 'utf8'))
+const checkOnly = process.argv.includes('--check')
+const refreshSources = process.argv.includes('--refresh-sources')
+const sourceRoot = `${manifest.upstreamRepository.replace('github.com', 'raw.githubusercontent.com')}/${manifest.upstreamCommit}`
 
-const icons = [
-  ['home', 'home'],
-  ['home-filled', 'home', true],
-  ['search', 'search'],
-  ['search-filled', 'search', true],
-  ['add-box', 'add_box'],
-  ['add-box-filled', 'add_box', true],
-  ['person', 'person'],
-  ['person-filled', 'person', true],
-  ['search-off', 'search_off'],
-  ['search-off-white', 'search_off', false, '#ffffff'],
-  ['front-hand', 'front_hand'],
-  ['verified-user', 'verified_user'],
-  ['verified-user-white', 'verified_user', false, '#ffffff'],
-  ['lock', 'lock'],
-  ['info', 'info'],
-  ['notifications', 'notifications'],
-  ['photo-camera', 'photo_camera'],
-  ['add-a-photo', 'add_a_photo'],
-  ['badge', 'badge'],
-  ['volunteer-activism', 'volunteer_activism'],
-  ['workspace-premium', 'workspace_premium'],
-  ['shield', 'shield'],
-  ['handshake', 'handshake'],
-  ['bolt', 'bolt'],
-  ['map', 'map'],
-  ['favorite', 'favorite'],
-  ['add', 'add'],
-  ['settings', 'settings'],
-  ['help', 'help'],
-  ['chevron-right', 'chevron_right'],
-  ['expand-more', 'expand_more'],
-]
+if (manifest.icons.length !== 31 || new Set(manifest.icons.map((icon) => icon.output)).size !== 31) {
+  throw new Error('The Material Symbols manifest must declare exactly 31 unique outputs')
+}
+if (!/^[a-f0-9]{40}$/.test(manifest.upstreamCommit) || manifest.license !== 'Apache-2.0') {
+  throw new Error('The Material Symbols source must be pinned to a commit under Apache-2.0')
+}
+if (checkOnly && refreshSources) throw new Error('--check and --refresh-sources cannot be combined')
 
-await mkdir(outputDirectory, { recursive: true })
-
-for (const [outputName, sourceName, filled = false, color = '#191919'] of icons) {
-  const variant = filled ? '_fill1' : ''
-  const url = `${sourceRoot}/${sourceName}/materialsymbolsoutlined/${sourceName}${variant}_24px.svg`
-  const response = await globalThis.fetch(url)
-
-  if (!response.ok) {
-    throw new Error(`Unable to download ${sourceName}: ${response.status} ${url}`)
-  }
-
-  const svg = Buffer.from(await response.arrayBuffer())
-    .toString('utf8')
-    .replaceAll('<path ', `<path fill="${color}" `)
-  const png = await sharp(Buffer.from(svg)).resize(96, 96, { fit: 'contain' }).png().toBuffer()
-
-  await writeFile(resolve(outputDirectory, `${outputName}.png`), png)
+function digest(bytes) {
+  return createHash('sha256').update(bytes).digest('hex')
 }
 
-globalThis.console.log(`Generated ${icons.length} Stitch-compatible Material Symbols icons.`)
+async function downloadSource(icon) {
+  const url = `${sourceRoot}/${icon.source}`
+  let lastStatus = 0
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const response = await globalThis.fetch(url)
+    lastStatus = response.status
+    if (response.ok) return Buffer.from(await response.arrayBuffer())
+    await new Promise((resolveRetry) => setTimeout(resolveRetry, 250 * (attempt + 1)))
+  }
+  throw new Error(`Unable to download ${url}: ${lastStatus}`)
+}
+
+async function loadSource(icon) {
+  const sourcePath = resolve(sourceDirectory, icon.source)
+  let bytes
+  if (refreshSources || !existsSync(sourcePath)) {
+    if (checkOnly) throw new Error(`Missing cached source: ${icon.source}`)
+    bytes = await downloadSource(icon)
+    mkdirSync(dirname(sourcePath), { recursive: true })
+    writeFileSync(sourcePath, bytes)
+  } else {
+    bytes = readFileSync(sourcePath)
+  }
+  if (digest(bytes) !== icon.sha256) throw new Error(`SVG checksum mismatch: ${icon.source}`)
+  return bytes
+}
+
+mkdirSync(outputDirectory, { recursive: true })
+const renderedByOutput = new Map()
+for (const icon of manifest.icons) {
+  const source = await loadSource(icon)
+  const svg = source.toString('utf8').replaceAll('<path ', `<path fill="${icon.color}" `)
+  const png = await sharp(Buffer.from(svg))
+    .resize(manifest.canvas.width, manifest.canvas.height, { fit: 'contain' })
+    .png()
+    .toBuffer()
+  const outputPath = resolve(outputDirectory, `${icon.output}.png`)
+  if (checkOnly) {
+    if (!existsSync(outputPath) || !readFileSync(outputPath).equals(png)) {
+      throw new Error(`${icon.output}.png is not reproducible from the pinned SVG`)
+    }
+  } else {
+    writeFileSync(outputPath, png)
+  }
+  renderedByOutput.set(icon.output, true)
+}
+
+globalThis.console.log(
+  `${checkOnly ? 'Verified' : 'Generated'} ${renderedByOutput.size} Material Symbols from ${manifest.upstreamCommit}.`,
+)
