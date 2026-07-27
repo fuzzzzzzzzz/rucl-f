@@ -5,23 +5,35 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { processCardPhoto } from '../../miniprogram/services/cloud-card-service'
 
 const require = createRequire(import.meta.url)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const {
   base64EncodedLength,
+  ocrUploadRegistryId,
   parseDailyLimit,
-  requireOwnedTemporaryFileId,
+  requireAuthorizedOcrUpload,
   requireTemporaryFileId,
   startOfChinaDay,
+  temporaryCloudPath,
 } = require('../../cloudfunctions/processCardImage/domain')
+
+const uploadToken = 'a'.repeat(48)
+const expectedCloudPath = `temporary-cards/${'b'.repeat(48)}.jpg`
+const ownedFileId = `cloud://demo.example/${expectedCloudPath}`
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 function loadCloudFunction({
   openid = 'owner-123',
   configured = true,
   failDelete = false,
   failCleanupJob = false,
+  authorization = {},
 } = {}) {
   const source = fs.readFileSync(path.join(root, 'cloudfunctions/processCardImage/index.js'), 'utf8')
   const deleteFile = vi.fn(async () => {
@@ -31,6 +43,17 @@ function loadCloudFunction({
   const cleanupSet = vi.fn(async () => {
     if (failCleanupJob) throw new Error('cleanup failed for a sensitive file id')
   })
+  const registryUpdate = vi.fn(async () => undefined)
+  const registryRemove = vi.fn(async () => undefined)
+  const registryRecord = {
+    ownerOpenid: 'owner-123',
+    kind: 'ocr_raw',
+    expectedCloudPath,
+    referenced: false,
+    consumed: false,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    ...authorization,
+  }
   const collection = vi.fn((name) => {
     if (name === 'auditLogs') {
       return {
@@ -41,12 +64,27 @@ function loadCloudFunction({
     if (name === 'fileCleanupJobs') {
       return { doc: () => ({ set: cleanupSet }) }
     }
+    if (name === 'uploadedFiles') {
+      return {
+        doc: (id) => ({
+          get: async () => ({ data: id === ocrUploadRegistryId(uploadToken) ? registryRecord : null }),
+          update: registryUpdate,
+          remove: registryRemove,
+        }),
+      }
+    }
     throw new Error(`unexpected collection: ${name}`)
   })
+  const database = {
+    command: { gte: (value) => value },
+    collection,
+    serverDate: () => new Date(),
+    runTransaction: async (operation) => operation(database),
+  }
   const cloud = {
     DYNAMIC_CURRENT_ENV: 'test',
     init: vi.fn(),
-    database: () => ({ command: { gte: (value) => value }, collection, serverDate: () => new Date() }),
+    database: () => database,
     getWXContext: () => ({ OPENID: openid }),
     downloadFile: async () => ({ fileContent: Buffer.from('safe test image') }),
     deleteFile,
@@ -90,7 +128,15 @@ function loadCloudFunction({
   const filename = path.join(root, 'cloudfunctions/processCardImage/index.js')
   wrapper(localRequire, module, module.exports, filename, path.dirname(filename))
 
-  return { cleanupSet, collection, consoleError, deleteFile, main: module.exports.main }
+  return {
+    cleanupSet,
+    collection,
+    consoleError,
+    deleteFile,
+    main: module.exports.main,
+    registryRemove,
+    registryUpdate,
+  }
 }
 
 describe('OCR cloud function limits', () => {
@@ -121,34 +167,49 @@ describe('OCR cloud function limits', () => {
     expect(() => requireTemporaryFileId('https://example.com/one.jpg')).toThrow('无效的临时图片')
   })
 
-  it('requires an exact temporary-card path owned by the current user', () => {
-    const owned = 'cloud://demo.example/temporary-cards/owner-123/card.jpg'
-    expect(requireOwnedTemporaryFileId(owned, 'owner-123')).toBe(owned)
+  it('binds an opaque one-time upload authorization to owner, path and expiry', () => {
+    const record = {
+      ownerOpenid: 'owner-123',
+      kind: 'ocr_raw',
+      expectedCloudPath,
+      consumed: false,
+      expiresAt: new Date('2026-07-27T00:10:00.000Z'),
+    }
+    expect(
+      requireAuthorizedOcrUpload(record, {
+        fileId: ownedFileId,
+        openid: 'owner-123',
+        uploadToken,
+        now: Date.parse('2026-07-27T00:00:00.000Z'),
+      }),
+    ).toEqual({ fileId: ownedFileId, registryId: ocrUploadRegistryId(uploadToken) })
+    expect(temporaryCloudPath(ownedFileId)).toBe(expectedCloudPath)
 
-    expect(() => requireOwnedTemporaryFileId(owned, '')).toThrow('请先登录')
-    expect(() =>
-      requireOwnedTemporaryFileId('cloud://demo.example/temporary-cards/owner-123-other/card.jpg', 'owner-123'),
-    ).toThrow('只能识别自己')
-    expect(() =>
-      requireOwnedTemporaryFileId('cloud://owner-123.example/temporary-cards/other/card.jpg', 'owner-123'),
-    ).toThrow('只能识别自己')
-    expect(() =>
-      requireOwnedTemporaryFileId('cloud://demo.example/temporary-cards/owner-123/../other/card.jpg', 'owner-123'),
-    ).toThrow('无效的临时图片')
+    for (const input of [
+      { ...record, ownerOpenid: 'other-user' },
+      { ...record, consumed: true },
+      { ...record, expectedCloudPath: 'temporary-cards/other.jpg' },
+      { ...record, expiresAt: new Date('2026-07-26T23:59:59.000Z') },
+    ]) {
+      expect(() =>
+        requireAuthorizedOcrUpload(input, {
+          fileId: ownedFileId,
+          openid: 'owner-123',
+          uploadToken,
+          now: Date.parse('2026-07-27T00:00:00.000Z'),
+        }),
+      ).toThrow('图片上传凭证无效')
+    }
   })
 
   it('never deletes or queues an unowned file when login or ownership checks fail', async () => {
     const missingLogin = loadCloudFunction({ openid: '' })
-    await expect(
-      missingLogin.main({ fileId: 'cloud://demo.example/temporary-cards/owner-123/card.jpg' }),
-    ).rejects.toThrow('请先登录')
+    await expect(missingLogin.main({ fileId: ownedFileId, uploadToken })).rejects.toThrow('请先登录')
     expect(missingLogin.deleteFile).not.toHaveBeenCalled()
     expect(missingLogin.cleanupSet).not.toHaveBeenCalled()
 
     const wrongOwner = loadCloudFunction({ openid: 'other-user' })
-    await expect(
-      wrongOwner.main({ fileId: 'cloud://demo.example/temporary-cards/owner-123/card.jpg' }),
-    ).rejects.toThrow('只能识别自己')
+    await expect(wrongOwner.main({ fileId: ownedFileId, uploadToken })).rejects.toThrow('图片上传凭证无效')
     expect(wrongOwner.deleteFile).not.toHaveBeenCalled()
     expect(wrongOwner.cleanupSet).not.toHaveBeenCalled()
   })
@@ -156,9 +217,7 @@ describe('OCR cloud function limits', () => {
   it('fails a successful OCR request when neither deletion nor cleanup enqueue succeeds', async () => {
     const harness = loadCloudFunction({ failDelete: true, failCleanupJob: true })
 
-    await expect(harness.main({ fileId: 'cloud://demo.example/temporary-cards/owner-123/card.jpg' })).rejects.toThrow(
-      'OCR原图清理失败',
-    )
+    await expect(harness.main({ fileId: ownedFileId, uploadToken })).rejects.toThrow('OCR原图清理失败')
     expect(harness.cleanupSet).toHaveBeenCalledOnce()
     expect(harness.consoleError).toHaveBeenCalledWith('OCR temporary file cleanup job enqueue failed')
   })
@@ -166,9 +225,7 @@ describe('OCR cloud function limits', () => {
   it('does not let cleanup-job failure replace the primary OCR error', async () => {
     const harness = loadCloudFunction({ configured: false, failDelete: true, failCleanupJob: true })
 
-    await expect(harness.main({ fileId: 'cloud://demo.example/temporary-cards/owner-123/card.jpg' })).rejects.toThrow(
-      'OCR尚未配置',
-    )
+    await expect(harness.main({ fileId: ownedFileId, uploadToken })).rejects.toThrow('OCR尚未配置')
     expect(harness.cleanupSet).toHaveBeenCalledOnce()
     expect(harness.consoleError).toHaveBeenCalledWith('OCR temporary file cleanup job enqueue failed')
   })
@@ -188,10 +245,59 @@ describe('OCR cloud function limits', () => {
     expect(source).toContain("ConfigID: 'OCR'")
   })
 
-  it('lets the client retry raw-image deletion after both successful and failed OCR calls', () => {
-    const source = fs.readFileSync(path.join(root, 'miniprogram/services/cloud-card-service.ts'), 'utf8')
-    const processCardPhoto = source.match(/export async function processCardPhoto[\s\S]+?\n}\n/)?.[0] || ''
+  it('lets the client retry raw-image deletion after both successful and failed OCR calls', async () => {
+    const deleteFile = vi.fn(async () => ({ fileList: [] }))
+    const authorizations = [
+      { uploadToken: '1'.repeat(48), cloudPath: `temporary-cards/${'2'.repeat(48)}.jpg` },
+      { uploadToken: '3'.repeat(48), cloudPath: `temporary-cards/${'4'.repeat(48)}.jpg` },
+    ]
+    let authorizationIndex = 0
+    let ocrIndex = 0
+    const callFunction = vi.fn(async ({ name }) => {
+      if (name === 'api') return { result: authorizations[authorizationIndex++] }
+      if (ocrIndex++ === 0) return { result: { ocrLines: ['recognized'] } }
+      throw new Error('temporary OCR failure')
+    })
+    const uploadFile = vi
+      .fn()
+      .mockResolvedValueOnce({ fileID: `cloud://demo.example/${authorizations[0].cloudPath}` })
+      .mockResolvedValueOnce({ fileID: `cloud://demo.example/${authorizations[1].cloudPath}` })
 
-    expect(processCardPhoto).toMatch(/finally\s*{[\s\S]*wx\.cloud\.deleteFile/)
+    vi.stubGlobal('getApp', () => ({
+      globalData: {
+        cloudEnabled: true,
+        readyPromise: Promise.resolve(),
+        startupState: 'ready',
+      },
+    }))
+    vi.stubGlobal('wx', {
+      getImageInfo: ({ success }) => success({ width: 1000, height: 700 }),
+      cloud: { callFunction, deleteFile, uploadFile },
+    })
+
+    await expect(processCardPhoto('success.jpg')).resolves.toEqual({ ocrLines: ['recognized'] })
+    await expect(processCardPhoto('failure.jpg')).rejects.toBeInstanceOf(Error)
+
+    expect(uploadFile).toHaveBeenNthCalledWith(1, {
+      cloudPath: authorizations[0].cloudPath,
+      filePath: 'success.jpg',
+    })
+    expect(uploadFile).toHaveBeenNthCalledWith(2, {
+      cloudPath: authorizations[1].cloudPath,
+      filePath: 'failure.jpg',
+    })
+    expect(callFunction).toHaveBeenCalledWith({
+      name: 'processCardImage',
+      data: {
+        fileId: `cloud://demo.example/${authorizations[0].cloudPath}`,
+        uploadToken: authorizations[0].uploadToken,
+      },
+    })
+    expect(deleteFile).toHaveBeenNthCalledWith(1, {
+      fileList: [`cloud://demo.example/${authorizations[0].cloudPath}`],
+    })
+    expect(deleteFile).toHaveBeenNthCalledWith(2, {
+      fileList: [`cloud://demo.example/${authorizations[1].cloudPath}`],
+    })
   })
 })

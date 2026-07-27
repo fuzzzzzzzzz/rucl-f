@@ -14,9 +14,10 @@ const claimsWxss = fs.readFileSync(path.join(root, 'miniprogram/pages/claims/ind
 const claimsScript = fs.readFileSync(path.join(root, 'miniprogram/pages/claims/index.ts'), 'utf8')
 
 describe('lost-card real-device layout', () => {
-  it('renders the English identity label without an HTML entity', () => {
-    expect(wxml).toContain('NAME & ID CHECK')
-    expect(wxml).not.toContain('NAME &amp; ID CHECK')
+  it('labels the server-verified identity flow without collecting it again', () => {
+    expect(wxml).toContain('VERIFIED MATCH ONLY')
+    expect(wxml).not.toContain('value="{{studentNumber}}"')
+    expect(script).not.toMatch(/\bstudentNumber\b|\bname\b/)
   })
 
   it('keeps both claim action buttons inside a narrow result card', () => {
@@ -26,21 +27,20 @@ describe('lost-card real-device layout', () => {
   })
 
   it('blocks repeated claim submissions while the first request is running', () => {
-    expect(wxml).toMatch(/class="claim-submit"[^>]*disabled="{{claimSubmitting}}"/)
-    expect(script).toMatch(/async submitClaim\(\)\s*{\s*if \(this\.data\.claimSubmitting\) return/)
+    expect(wxml).toMatch(/class="claim-submit"[^>]*disabled="{{!!busyKey}}"/)
+    expect(script).toContain("runExclusiveAction(this, 'claim'")
   })
 
   it('distinguishes an unrelated search from hidden pickup details', () => {
-    expect(wxml).toContain('这里只查询与“我的信息”中姓名和学号同时一致的卡片')
-    expect(wxml).toContain('无关用户不会看到卡片信息')
-    expect(wxml).toContain('确认是你的卡之前，存放照片和领取地点不会显示')
+    expect(wxml).toContain('这里只显示与已绑定身份匹配的卡片，无关用户不会看到卡片信息')
+    expect(wxml).toContain('确认认领完成前，存放照片和领取地点不会显示')
     expect(wxml).toMatch(/wx:if="{{!searched \|\| results\.length === 0}}"/)
     expect(wxml).not.toContain('信息会保持模糊')
   })
 
   it('replaces the mosaic with both the storage photo and pickup point', () => {
     expect(wxml).toContain('领取地点：{{revealedStoragePoint}}')
-    expect(wxml).toContain('上方已显示存放照片和领取地点。取到卡后，请在“我的认领”拍照完成交接。')
+    expect(wxml).toContain('src="{{revealedStoragePhotoUrl}}"')
     expect(script).toContain("revealedStoragePoint: claim.card?.officialStoragePoint || ''")
   })
 
@@ -55,8 +55,7 @@ describe('lost-card real-device layout', () => {
   })
 
   it('restores a ready pickup into the search reveal panel on return', () => {
-    expect(script).toContain('listMyClaims')
-    expect(script).toContain('restoreReadyClaim')
+    expect(script).toContain('listCloudClaims')
     expect(script).toMatch(/status === 'ready_for_pickup'/)
     expect(script).toContain('informationRevealed: true')
   })

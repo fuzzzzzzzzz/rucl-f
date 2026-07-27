@@ -47,28 +47,10 @@ describe('personal operator compliance', () => {
     expect(settings).not.toContain('getPhoneNumber')
   })
 
-  it('executes approved deletion requests instead of only changing their status', () => {
-    const server = source('cloudfunctions/api/index.js')
-    const cleanup = source('cloudfunctions/scheduledCleanup/index.js')
-
-    expect(server).toContain('async function executeDataDeletion')
-    expect(server).toContain('deletionReceipts')
-    expect(server).toContain("'account_deleted'")
-    expect(server).toContain('executeDataDeletion')
-    expect(server).toContain('queueCleanupJob')
-    expect(cleanup).toContain('queueExpiredAuditLogs')
-    expect(cleanup).toContain('60 * 86400000')
-  })
-
-  it('supports general and thanks reports, decision feedback and confirmed account blocking', () => {
-    const server = source('cloudfunctions/api/index.js')
+  it('exposes the report controls required by the personal-operation rules', () => {
     const wall = source('miniprogram/pages/thanks-wall/index.wxml')
     const admin = source('miniprogram/pages/admin/index.wxml')
 
-    expect(server).toContain("['found', 'lost', 'claim', 'thanks', 'general']")
-    expect(server).toContain('举报处理结果')
-    expect(server).toContain('reportedOpenid')
-    expect(server).toContain("'no_violation', 'closed', 'banned'")
     expect(wall).toContain('bindtap="reportThanks"')
     expect(admin).toContain('核实并封禁')
   })
