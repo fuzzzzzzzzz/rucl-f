@@ -17,7 +17,7 @@ const {
 const PAGE_SIZE = 100
 const WORK_BUDGET_MS = 50000
 const LEASE_MS = 60000
-const VERSION = '0.6.0'
+const VERSION = '0.6.1'
 
 function createDeletionWorker(dependencies) {
   if (!dependencies?.cloud) throw new Error('删除工作器运行时未配置')
@@ -592,7 +592,7 @@ function createDeletionWorker(dependencies) {
         proofFileId: '',
       },
     )
-    for (const field of ['confirmedByOpenid', 'reviewedBy', 'invalidatedBy', 'completedByOpenid']) {
+    for (const field of ['confirmedBy', 'confirmedByOpenid', 'reviewedBy', 'invalidatedBy', 'completedByOpenid']) {
       await anonymize('handovers', { [field]: openid }, { [field]: '' })
     }
     await anonymize('riskReviews', { reviewerOpenid: openid }, { reviewerOpenid: '' })

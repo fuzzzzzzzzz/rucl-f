@@ -3,9 +3,11 @@ const crypto = require('crypto')
 const https = require('https')
 const {
   base64EncodedLength,
+  decodeInlineOcrImage,
   ocrUploadRegistryId,
   parseDailyLimit,
   requireAuthorizedOcrUpload,
+  requireAuthorizedInlineOcrUpload,
   requireTemporaryFileId,
   startOfChinaDay,
 } = require('./domain')
@@ -106,19 +108,30 @@ async function reserveOcrRequest(openid) {
 
 async function consumeOcrUploadAuthorization(event, openid) {
   if (!String(openid || '').trim()) throw new Error('请先登录后再识别图片')
-  const fileId = requireTemporaryFileId(event && event.fileId)
+  const inline = Object.prototype.hasOwnProperty.call(event || {}, 'contentBase64')
+  const fileId = inline ? '' : requireTemporaryFileId(event && event.fileId)
   const uploadToken = String((event && event.uploadToken) || '')
   const registryId = ocrUploadRegistryId(uploadToken)
   /** @type {{fileId: string, registryId: string} | null} */
   let authorization = null
   await db.runTransaction(async (transaction) => {
     const result = await transaction.collection('uploadedFiles').doc(registryId).get()
-    authorization = requireAuthorizedOcrUpload(result.data, {
-      fileId,
-      openid,
-      uploadToken,
-      now: Date.now(),
-    })
+    const context = { fileId, openid, uploadToken, now: Date.now() }
+    authorization = inline
+      ? requireAuthorizedInlineOcrUpload(result.data, context)
+      : requireAuthorizedOcrUpload(result.data, context)
+    {
+      const users = await transaction.collection('users').where({ openid }).limit(1).get()
+      const user = users.data[0]
+      if (
+        !user ||
+        user.creditStatus === 'blocked' ||
+        user.accountState === 'deleting' ||
+        user.accountState === 'deleted'
+      ) {
+        throw new Error('账号当前不可操作')
+      }
+    }
     await transaction
       .collection('uploadedFiles')
       .doc(registryId)
@@ -137,7 +150,9 @@ async function consumeOcrUploadAuthorization(event, openid) {
 
 async function cleanupOwnedTemporaryFile(ownedFileId, registryId) {
   try {
-    await cloud.deleteFile({ fileList: [ownedFileId] })
+    const result = await cloud.deleteFile({ fileList: [ownedFileId] })
+    const deletedFile = result.fileList?.find((file) => file.fileID === ownedFileId)
+    if (!deletedFile || deletedFile.status !== 0) throw new Error('file_delete_not_confirmed')
   } catch (_) {
     try {
       const id = crypto.createHash('sha256').update(`ocr_raw:${ownedFileId}`).digest('hex')
@@ -190,13 +205,15 @@ exports.main = async (event) => {
     const authorization = await consumeOcrUploadAuthorization(event, OPENID)
     ownedFileId = authorization.fileId
     registryId = authorization.registryId
+    const inline = Object.prototype.hasOwnProperty.call(event || {}, 'contentBase64')
+    const buffer = inline ? decodeInlineOcrImage(event.contentBase64) : null
     assertConfigured()
-    const downloaded = await cloud.downloadFile({ fileID: ownedFileId })
-    if (base64EncodedLength(downloaded.fileContent.length) > MAX_OCR_BASE64_BYTES) {
+    const fileContent = buffer || (await cloud.downloadFile({ fileID: ownedFileId })).fileContent
+    if (base64EncodedLength(fileContent.length) > MAX_OCR_BASE64_BYTES) {
       throw new Error('图片编码后不能超过10MB，请重新拍摄')
     }
     await reserveOcrRequest(OPENID)
-    const ocrLines = await recognize(downloaded.fileContent)
+    const ocrLines = await recognize(fileContent)
     result = { ocrLines, requiresPublisherConfirmation: true }
   } catch (error) {
     primaryError = error
@@ -209,6 +226,12 @@ exports.main = async (event) => {
     } catch (error) {
       cleanupError = error
     }
+  } else if (registryId) {
+    await db
+      .collection('uploadedFiles')
+      .doc(registryId)
+      .remove()
+      .catch(() => console.error('OCR inline registry cleanup failed'))
   }
   if (primaryError) throw primaryError
   if (cleanupError) throw cleanupError

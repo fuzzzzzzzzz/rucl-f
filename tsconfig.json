@@ -5,7 +5,7 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["wechat-miniprogram"]
+    "types": ["wechat-miniprogram", "node"]
   },
   "include": ["miniprogram/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", "cloudfunctions"]

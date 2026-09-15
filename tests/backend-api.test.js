@@ -253,7 +253,7 @@ function createHarness(seed = {}, nowValue = Date.parse('2026-07-27T00:00:00.000
     })),
     uploadFile: vi.fn(async ({ cloudPath }) => ({ fileID: `cloud://test/${cloudPath}` })),
     downloadFile: vi.fn(async () => ({ fileContent: Buffer.from([0xff, 0xd8, 0xff, 0xd9]) })),
-    deleteFile: vi.fn(async () => ({ fileList: [] })),
+    deleteFile: vi.fn(async ({ fileList }) => ({ fileList: fileList.map((fileID) => ({ fileID, status: 0 })) })),
     openapi: {
       subscribeMessage: { send: subscribeSend },
       security: { msgSecCheck: vi.fn(async () => ({ result: { suggest: 'pass' } })) },
@@ -275,6 +275,53 @@ function identity(studentNumber, name) {
     nameHmac: crypto.createHmac('sha256', secret).update(`name:${name}`).digest('hex'),
   }
 }
+
+it('queues failed-upload cleanup when rollback deletion reports per-file failure', async () => {
+  const harness = createHarness(actorRecords({ owner: { openid: 'user-1' } }))
+  const collection = harness.database.collection.bind(harness.database)
+  vi.spyOn(harness.database, 'collection').mockImplementation((name) => {
+    const result = collection(name)
+    if (name === 'auditLogs')
+      result.add = async () => {
+        throw new Error('audit unavailable')
+      }
+    return result
+  })
+  harness.cloud.deleteFile.mockImplementation(async ({ fileList }) => ({
+    fileList: fileList.map((fileID) => ({ fileID, status: -1 })),
+  }))
+  await expect(
+    harness.handler({
+      action: 'uploadPrivateImage',
+      input: {
+        kind: 'handover_proof',
+        mimeType: 'image/jpeg',
+        contentBase64: Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64'),
+      },
+    }),
+  ).rejects.toThrow('audit unavailable')
+  expect(Object.values(harness.database.records.fileCleanupJobs || {})).toHaveLength(1)
+})
+
+it('retains abandoned upload tracking and queues retry on per-file deletion failure', async () => {
+  const harness = createHarness(actorRecords({ owner: { openid: 'user-1' } }))
+  const uploaded = await harness.handler({
+    action: 'uploadPrivateImage',
+    input: {
+      kind: 'handover_proof',
+      mimeType: 'image/jpeg',
+      contentBase64: Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64'),
+    },
+  })
+  harness.cloud.deleteFile.mockImplementation(async ({ fileList }) => ({
+    fileList: fileList.map((fileID) => ({ fileID, status: -1 })),
+  }))
+  await harness.handler({ action: 'discardPrivateUpload', input: uploaded })
+  expect(Object.values(harness.database.records.fileCleanupJobs || {})).toHaveLength(1)
+  expect(Object.values(harness.database.records.uploadedFiles)).toHaveLength(1)
+  await harness.handler({ action: 'discardPrivateUpload', input: uploaded })
+  expect(harness.cloud.deleteFile).toHaveBeenCalledOnce()
+})
 
 function actorRecords(entries) {
   const users = {}
@@ -372,7 +419,7 @@ describe('backend API handler contract', () => {
 
     harness.context.openid = 'deleting-openid'
     await expect(harness.handler({ action: 'getAccountSettings', input: {} })).resolves.toMatchObject({
-      version: '0.6.0',
+      version: '0.6.1',
     })
     await expect(harness.handler({ action: 'listPublicCards', input: {} })).rejects.toThrow('账号当前不可操作')
   })
@@ -416,6 +463,14 @@ describe('backend API handler contract', () => {
       kind: 'ocr_raw',
       expectedCloudPath: prepared.cloudPath,
       referenced: false,
+      consumed: false,
+    })
+    const inline = await harness.handler({ action: 'prepareOcrUpload', input: { transport: 'inline' } })
+    const inlineId = crypto.createHash('sha256').update(`ocr_upload:${inline.uploadToken}`).digest('hex')
+    expect(inline).not.toHaveProperty('cloudPath')
+    expect(harness.database.records.uploadedFiles[inlineId]).toMatchObject({
+      transport: 'inline',
+      ownerOpenid: 'user-1',
       consumed: false,
     })
   })
@@ -1011,6 +1066,35 @@ describe('backend API handler contract', () => {
     expect(harness.database.records.claims[activeClaimId]).toBeDefined()
   })
 
+  it.each(['closed', 'banned'])('releases a found card when a reported claim is %s', async (decision) => {
+    const harness = createHarness({
+      ...actorRecords({ admin: { openid: 'admin-a', role: 'admin' }, applicant: { openid: 'applicant-a' } }),
+      recordReports: {
+        report: {
+          reporterOpenid: 'finder',
+          reportedOpenid: 'applicant-a',
+          type: 'claim',
+          recordId: 'claim',
+          status: 'pending',
+        },
+      },
+      claims: {
+        claim: {
+          cardId: 'card',
+          applicantOpenid: 'applicant-a',
+          publisherOpenid: 'finder',
+          status: 'ready_for_pickup',
+        },
+      },
+      foundCards: { card: { publisherOpenid: 'finder', status: 'ready_for_pickup', activeClaimId: 'claim' } },
+    })
+    harness.context.openid = 'admin-a'
+    await harness.handler({ action: 'resolveReport', input: { reportId: 'report', decision } })
+    expect(harness.database.records.claims.claim.status).toBe('closed')
+    expect(harness.database.records.foundCards.card.status).toBe('pending_match')
+    expect(harness.database.records.foundCards.card.activeClaimId).toBeUndefined()
+  })
+
   it('serializes opposite report decisions and keeps target state consistent with the winner', async () => {
     const actors = actorRecords({
       adminA: { openid: 'admin-a', role: 'admin' },
@@ -1191,7 +1275,7 @@ describe('backend API handler contract', () => {
     ).resolves.toMatchObject({ status: 'pending' })
     await expect(harness.handler({ action: 'getAccountSettings' })).resolves.toMatchObject({
       notificationPreferences: { matchFound: false, officialTransfer: false },
-      version: '0.6.0',
+      version: '0.6.1',
     })
 
     await expect(
@@ -1279,6 +1363,28 @@ describe('backend API handler contract', () => {
     expect(harness.database.records.identityBindings[secondIdentity.studentHmac]).toBeUndefined()
   })
 
+  it('does not publish private or legacy thanks without explicit public consent', async () => {
+    const harness = createHarness({
+      ...actorRecords({ finder: { openid: 'finder', maskedName: '拾*' } }),
+      handovers: Object.fromEntries(
+        ['private', 'legacy', 'public'].map((id) => [
+          id,
+          {
+            valid: true,
+            approvedThanks: true,
+            publisherOpenid: 'finder',
+            thanksText: id,
+            completedAt: new Date(),
+            ...(id === 'legacy' ? {} : { thanksPublic: id === 'public' }),
+          },
+        ]),
+      ),
+    })
+    harness.context.openid = 'finder'
+    const wall = await harness.handler({ action: 'listThanksWall', input: {} })
+    expect(wall.map((item) => item.text)).toEqual(['public'])
+  })
+
   it('runs claim transfer, private proof, handover, thanks and risk-review behavior', async () => {
     const digests = identity('2023200931', '张三')
     const actors = actorRecords({
@@ -1347,7 +1453,12 @@ describe('backend API handler contract', () => {
     await expect(
       harness.handler({
         action: 'confirmClaimHandover',
-        input: { claimId: claim.id, proofUploadToken: uploaded.uploadToken, thanksText: '谢谢热心同学' },
+        input: {
+          claimId: claim.id,
+          proofUploadToken: uploaded.uploadToken,
+          thanksText: '谢谢热心同学',
+          thanksPublic: true,
+        },
       }),
     ).resolves.toMatchObject({ status: 'returned', alreadyCompleted: false, thanksAccepted: true })
     await expect(

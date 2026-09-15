@@ -12,6 +12,7 @@ const require = createRequire(import.meta.url)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const {
   base64EncodedLength,
+  decodeInlineOcrImage,
   ocrUploadRegistryId,
   parseDailyLimit,
   requireAuthorizedOcrUpload,
@@ -32,18 +33,20 @@ function loadCloudFunction({
   openid = 'owner-123',
   configured = true,
   failDelete = false,
+  deleteStatus = 0,
   failCleanupJob = false,
   authorization = {},
+  user = { openid: 'owner-123', creditStatus: 'normal' },
 } = {}) {
   const source = fs.readFileSync(path.join(root, 'cloudfunctions/processCardImage/index.js'), 'utf8')
   const deleteFile = vi.fn(async () => {
     if (failDelete) throw new Error('delete failed for a sensitive file id')
-    return { fileList: [] }
+    return { fileList: [{ fileID: ownedFileId, status: deleteStatus }] }
   })
   const cleanupSet = vi.fn(async () => {
     if (failCleanupJob) throw new Error('cleanup failed for a sensitive file id')
   })
-  const registryUpdate = vi.fn(async () => undefined)
+  const registryUpdate = vi.fn(async ({ data }) => Object.assign(registryRecord, data))
   const registryRemove = vi.fn(async () => undefined)
   const registryRecord = {
     ownerOpenid: 'owner-123',
@@ -55,6 +58,8 @@ function loadCloudFunction({
     ...authorization,
   }
   const collection = vi.fn((name) => {
+    if (name === 'users')
+      return { where: () => ({ limit: () => ({ get: async () => ({ data: user ? [user] : [] }) }) }) }
     if (name === 'auditLogs') {
       return {
         where: () => ({ count: async () => ({ total: 0 }) }),
@@ -86,7 +91,7 @@ function loadCloudFunction({
     init: vi.fn(),
     database: () => database,
     getWXContext: () => ({ OPENID: openid }),
-    downloadFile: async () => ({ fileContent: Buffer.from('safe test image') }),
+    downloadFile: vi.fn(async () => ({ fileContent: Buffer.from('safe test image') })),
     deleteFile,
   }
   const httpsRequest = vi.fn((_options, callback) => {
@@ -134,12 +139,86 @@ function loadCloudFunction({
     consoleError,
     deleteFile,
     main: module.exports.main,
+    downloadFile: cloud.downloadFile,
+    httpsRequest,
     registryRemove,
     registryUpdate,
   }
 }
 
 describe('OCR cloud function limits', () => {
+  it('accepts the full 2MiB transport budget without regex stack overflow', () => {
+    const bytes = Buffer.alloc(2 * 1024 * 1024)
+    bytes.set([255, 216, 255])
+    expect(decodeInlineOcrImage(bytes.toString('base64')).equals(bytes)).toBe(true)
+  })
+  it('accepts PNG selected from an album without lossy conversion', () => {
+    const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0])
+    expect(decodeInlineOcrImage(bytes.toString('base64')).equals(bytes)).toBe(true)
+  })
+  const contentBase64 = Buffer.from([255, 216, 255, 224, 0, 16, 255, 217]).toString('base64')
+  it('recognizes inline JPEG without storage and consumes authorization once', async () => {
+    const harness = loadCloudFunction({ authorization: { transport: 'inline' } })
+    await expect(harness.main({ uploadToken, contentBase64 })).resolves.toEqual({
+      ocrLines: ['recognized'],
+      requiresPublisherConfirmation: true,
+    })
+    expect(harness.downloadFile).not.toHaveBeenCalled()
+    expect(harness.deleteFile).not.toHaveBeenCalled()
+    expect(harness.registryRemove).toHaveBeenCalledOnce()
+    await expect(harness.main({ uploadToken, contentBase64 })).rejects.toThrow('图片上传凭证无效')
+    expect(harness.httpsRequest).toHaveBeenCalledOnce()
+  })
+
+  it('rejects inline owner, expiry, transport and account violations before paid OCR', async () => {
+    for (const options of [
+      { openid: 'other-user' },
+      { authorization: { transport: 'inline', consumed: true } },
+      { authorization: { transport: 'inline', expiresAt: new Date(0) } },
+      { authorization: { transport: 'legacy' } },
+      { user: null },
+      { user: { creditStatus: 'blocked' } },
+      { user: { accountState: 'deleting' } },
+      { user: { accountState: 'deleted' } },
+    ]) {
+      const harness = loadCloudFunction({ authorization: { transport: 'inline' }, ...options })
+      await expect(harness.main({ uploadToken, contentBase64, fileId: ownedFileId })).rejects.toThrow()
+      expect(harness.httpsRequest).not.toHaveBeenCalled()
+      expect(harness.downloadFile).not.toHaveBeenCalled()
+      expect(harness.deleteFile).not.toHaveBeenCalled()
+    }
+  })
+
+  it('rejects malformed, non-JPEG and oversized inline payloads without file fallback', async () => {
+    for (const invalid of [
+      '',
+      '!!!',
+      `${contentBase64}\n`,
+      '/9j/4AAR/9l=',
+      Buffer.from('not jpeg').toString('base64'),
+      Buffer.alloc(2 * 1024 * 1024 + 1, 255).toString('base64'),
+    ]) {
+      const harness = loadCloudFunction({ authorization: { transport: 'inline' } })
+      await expect(harness.main({ uploadToken, contentBase64: invalid, fileId: ownedFileId })).rejects.toThrow()
+      expect(harness.httpsRequest).not.toHaveBeenCalled()
+      expect(harness.downloadFile).not.toHaveBeenCalled()
+    }
+  })
+
+  it('removes consumed inline authorization even if OCR fails', async () => {
+    const harness = loadCloudFunction({ authorization: { transport: 'inline' }, configured: false })
+    await expect(harness.main({ uploadToken, contentBase64 })).rejects.toThrow('OCR尚未配置')
+    expect(harness.registryRemove).toHaveBeenCalledOnce()
+    expect(harness.deleteFile).not.toHaveBeenCalled()
+  })
+  it('rejects legacy uploads after the account is blocked or deleting', async () => {
+    for (const user of [{ creditStatus: 'blocked' }, { accountState: 'deleting' }, { accountState: 'deleted' }, null]) {
+      const harness = loadCloudFunction({ user })
+      await expect(harness.main({ fileId: ownedFileId, uploadToken })).rejects.toThrow('账号当前不可操作')
+      expect(harness.httpsRequest).not.toHaveBeenCalled()
+      expect(harness.downloadFile).not.toHaveBeenCalled()
+    }
+  })
   it('checks the encoded request size rather than only the raw image size', () => {
     expect(base64EncodedLength(3)).toBe(4)
     expect(base64EncodedLength(7_864_320)).toBe(10_485_760)
@@ -214,6 +293,13 @@ describe('OCR cloud function limits', () => {
     expect(wrongOwner.cleanupSet).not.toHaveBeenCalled()
   })
 
+  it('queues cleanup and retains the registry when the file deletion result reports failure', async () => {
+    const harness = loadCloudFunction({ deleteStatus: -1 })
+    await harness.main({ fileId: ownedFileId, uploadToken })
+    expect(harness.cleanupSet).toHaveBeenCalledOnce()
+    expect(harness.registryRemove).not.toHaveBeenCalled()
+  })
+
   it('fails a successful OCR request when neither deletion nor cleanup enqueue succeeds', async () => {
     const harness = loadCloudFunction({ failDelete: true, failCleanupJob: true })
 
@@ -245,7 +331,7 @@ describe('OCR cloud function limits', () => {
     expect(source).toContain("ConfigID: 'OCR'")
   })
 
-  it('lets the client retry raw-image deletion after both successful and failed OCR calls', async () => {
+  it('sends inline JPEG from the client without storage on success or failure', async () => {
     const deleteFile = vi.fn(async () => ({ fileList: [] }))
     const authorizations = [
       { uploadToken: '1'.repeat(48), cloudPath: `temporary-cards/${'2'.repeat(48)}.jpg` },
@@ -272,32 +358,30 @@ describe('OCR cloud function limits', () => {
     }))
     vi.stubGlobal('wx', {
       getImageInfo: ({ success }) => success({ width: 1000, height: 700 }),
+      getFileSystemManager: () => ({ readFile: ({ success }) => success({ data: contentBase64 }) }),
       cloud: { callFunction, deleteFile, uploadFile },
     })
 
     await expect(processCardPhoto('success.jpg')).resolves.toEqual({ ocrLines: ['recognized'] })
     await expect(processCardPhoto('failure.jpg')).rejects.toBeInstanceOf(Error)
 
-    expect(uploadFile).toHaveBeenNthCalledWith(1, {
-      cloudPath: authorizations[0].cloudPath,
-      filePath: 'success.jpg',
-    })
-    expect(uploadFile).toHaveBeenNthCalledWith(2, {
-      cloudPath: authorizations[1].cloudPath,
-      filePath: 'failure.jpg',
+    expect(uploadFile).not.toHaveBeenCalled()
+    expect(callFunction).toHaveBeenCalledWith({
+      name: 'api',
+      data: { action: 'prepareOcrUpload', input: { transport: 'inline' } },
     })
     expect(callFunction).toHaveBeenCalledWith({
       name: 'processCardImage',
       data: {
-        fileId: `cloud://demo.example/${authorizations[0].cloudPath}`,
+        contentBase64,
         uploadToken: authorizations[0].uploadToken,
       },
     })
-    expect(deleteFile).toHaveBeenNthCalledWith(1, {
-      fileList: [`cloud://demo.example/${authorizations[0].cloudPath}`],
+    expect(deleteFile).not.toHaveBeenCalled()
+    globalThis.wx.getFileSystemManager = () => ({
+      readFile: ({ success }) => success({ data: Buffer.alloc(2 * 1024 * 1024 + 1).toString('base64') }),
     })
-    expect(deleteFile).toHaveBeenNthCalledWith(2, {
-      fileList: [`cloud://demo.example/${authorizations[1].cloudPath}`],
-    })
+    await expect(processCardPhoto('oversize.jpg')).rejects.toThrow('重新拍摄或手动填写')
+    expect(callFunction).toHaveBeenCalledTimes(4)
   })
 })

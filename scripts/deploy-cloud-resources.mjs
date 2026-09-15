@@ -30,6 +30,9 @@ if (!apply) {
 }
 
 const state = requireExplicitDeploymentState()
+if (process.env.STORAGE_MAINTENANCE_CONFIRMED !== 'yes') {
+  throw new Error('Storage switch requires verified inline OCR rollout and STORAGE_MAINTENANCE_CONFIRMED=yes')
+}
 globalThis.console.log(`Applying ${phase} CloudBase contract to ${envId} with MINIPROGRAM_STATE=${state}.`)
 
 const tables = unwrapResponse(callTcb('ListTables', { MgoLimit: 100, MgoOffset: 0 }))
@@ -66,26 +69,20 @@ for (const [collection, permission] of Object.entries(contract.database.rules)) 
   }
 }
 
-const storageResult = runCloudbase([
-  'storage',
-  'rules',
-  'update',
-  '--acl',
-  contract.storage.permission,
-  '--rule',
-  JSON.stringify(contract.storage.rules),
-  '--json',
-])
+const storageResult = runCloudbase(['storage', 'rules', 'update', '--acl', contract.storage.permission, '--json'])
 const storagePayload = storageResult.data || storageResult.Data || storageResult
 if (
   (storagePayload.acl || storagePayload.Acl || storagePayload.permission || storagePayload.Permission) !==
     contract.storage.permission ||
-  !sameJson(
-    normalizeSecurityRule(
-      storagePayload.rule || storagePayload.Rule || storagePayload.securityRule || storagePayload.SecurityRule,
-    ),
-    contract.storage.rules,
-  )
+  (normalizeSecurityRule(
+    storagePayload.rule || storagePayload.Rule || storagePayload.securityRule || storagePayload.SecurityRule,
+  ) !== null &&
+    !sameJson(
+      normalizeSecurityRule(
+        storagePayload.rule || storagePayload.Rule || storagePayload.securityRule || storagePayload.SecurityRule,
+      ),
+      contract.storage.rules,
+    ))
 ) {
   throw new Error('Cloud storage rule update did not return the requested contract')
 }

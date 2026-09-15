@@ -44,18 +44,18 @@
 
 ## 3. 云存储规则
 
-云存储安全规则设置为客户端读取一律拒绝；只有非匿名登录用户可向 `temporary-cards/` 临时前缀写入自己创建的文件。规则修改通常需要约 1–3 分钟生效，部署后必须等待并运行远端回读校验。
+云存储使用基础 ADMINONLY 权限，禁止客户端直接读写。先部署兼容新版 OCR 的云函数，再完成新开发版真机验证，最后在维护窗口切换权限并回读校验。执行资源部署前需显式设置 STORAGE_MAINTENANCE_CONFIRMED=yes；不能通过此标志代替实际验收。
 
 长期保存的存放环境照片和取卡证明不由小程序直接调用 `wx.cloud.uploadFile`。小程序先把照片压缩到 1MB 以内，再调用 `uploadPrivateImage`；云函数保存文件并只向小程序返回一次性随机凭证，不返回文件 ID。后续发布、转交或完成交接时，云函数核对凭证所属账号和用途，业务记录中只保存服务端文件 ID。
 
-校园卡原图是例外：它只上传到 `temporary-cards/{openid}` 供 OCR 使用，识别函数在 `finally` 中立即删除；删除失败会进入 `fileCleanupJobs`。
+新版校园卡原图经一次性凭证直接传入识别函数，JPEG 原始字节最多 2 MiB，不保存到云存储。旧版临时文件入口过渡期保留，处理后删除，删除失败进入 fileCleanupJobs。切换 ADMINONLY 后旧版直传将失效，因此必须先完成新版用户切换。
 
 `security/storage.rules.json` 与资源契约保持一致：
 
 ```json
 {
   "read": false,
-  "write": "auth != null && auth.loginType != 'ANONYMOUS' && resource.openid == auth.openid && /^temporary-cards\\//.test(resource.path) == true"
+  "write": false
 }
 ```
 
@@ -88,7 +88,7 @@
 2. `npm run migration:capture -- --mode=inventory --output=inventory.json` 直接调用远端 `deletionWorker` 生成原始盘点回包；如发现身份或角色冲突立即停止；
 3. `npm run migration:capture -- --mode=dry-run --output=apply-dry-run.json` 复核迁移范围；
 4. 人工确认后运行 `npm run migration:capture -- --mode=apply --confirm-apply --output=apply.json` 完成安全回填。脚本不会把令牌写入证据；
-5. 在15分钟内运行 `npm run resources:deploy -- --phase=post-migration --migration-validation=.release-evidence/apply.json --apply`。脚本只接受远端原始调用回包，并校验环境 ID、`0.6.0` worker 版本、生成时间、完整零冲突扫描以及 `userKeys`/OpenID 回填结果，不能用手工平铺字段替代；
+5. 在15分钟内运行 `npm run resources:deploy -- --phase=post-migration --migration-validation=.release-evidence/apply.json --apply`。脚本只接受远端原始调用回包，并校验环境 ID、`0.6.1` worker 版本、生成时间、完整零冲突扫描以及 `userKeys`/OpenID 回填结果，不能用手工平铺字段替代；
 6. 迁移结束后立即轮换或移除远端 `OPERATIONAL_MIGRATION_TOKEN`，并从当前进程清除；
 7. 运行 `npm run resources:readback -- --phase=post-migration`，逐项比对数据库、存储、函数规则和索引；存储规则部署后等待 1–3 分钟再复核。
 

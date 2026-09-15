@@ -94,16 +94,21 @@ Page({
   },
   async submit() {
     if (this.data.busyKey || this.data.photoBusy) return
+    const lifetime = transferLifetime.capture()
+    if (!lifetime) return
     if (!this.data.detail.trim()) return wx.showToast({ title: '请填写具体存放位置', icon: 'none' })
     try {
       await runExclusiveAction(this, 'submit', async () => {
         await transferFoundCardToOfficial(this.data.cardId, this.buildLocation(), this.data.photoPath)
+        if (!transferLifetime.isActive(lifetime)) return
         this.setData({ detail: '', photoPath: '' })
         wx.showToast({ title: '已登记官方地点', icon: 'none' })
         wx.navigateBack()
       })
     } catch (error) {
-      wx.showToast({ title: error instanceof Error ? error.message : '提交失败，请稍后重试', icon: 'none' })
+      if (transferLifetime.isActive(lifetime)) {
+        wx.showToast({ title: error instanceof Error ? error.message : '提交失败，请稍后重试', icon: 'none' })
+      }
     }
   },
 })

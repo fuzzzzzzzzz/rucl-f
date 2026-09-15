@@ -48,6 +48,7 @@ Page({
   },
   async onShow() {
     const lifetime = lostLifetime.activate()
+    this.setData({ ...clearedClaimDisclosure(), results: [], searched: false })
     this.getTabBar()?.setData({ selected: 1 })
     const generation = pageStateRequests.begin()
     try {
@@ -119,6 +120,7 @@ Page({
     }
   },
   onHide() {
+    this.setData({ ...clearedClaimDisclosure(), results: [], searched: false })
     lostLifetime.deactivate()
     pageStateRequests.invalidate()
     searchRequests.invalidate()

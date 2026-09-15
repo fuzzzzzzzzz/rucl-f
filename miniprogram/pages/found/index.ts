@@ -94,7 +94,7 @@ Page({
     const lifetime = foundLifetime.capture()
     if (!lifetime) return
     const generation = ocrRequests.begin()
-    this.setData({ photoPath })
+    this.setData({ photoPath, name: '', studentNumber: '' })
     try {
       const processed = await processCardPhoto(photoPath)
       if (!foundLifetime.isActive(lifetime) || !ocrRequests.isCurrent(generation)) return

@@ -90,7 +90,7 @@ const REPORT_DAILY_LIMIT = 10
 const MESSAGE_RETENTION_MS = 60 * 24 * 60 * 60 * 1000
 const LOST_ACTIVE_MS = 30 * 24 * 60 * 60 * 1000
 const LOST_PURGE_MS = 60 * 24 * 60 * 60 * 1000
-const APP_VERSION = '0.6.0'
+const APP_VERSION = '0.6.1'
 
 function timestamp(value) {
   if (!value) return 0
@@ -185,42 +185,7 @@ async function audit(openid, action, targetId, metadata = {}) {
   }
 }
 
-const MESSAGE_KINDS = Object.freeze({
-  match_found: { route: 'pages/messages/index', preference: 'matchFound', templateEnv: 'SUBSCRIPTION_TEMPLATE_ID' },
-  claim_submitted: { route: 'pages/claims/index', preference: 'reviewResult', templateEnv: 'SUBSCRIPTION_TEMPLATE_ID' },
-  claim_review_result: {
-    route: 'pages/claims/index',
-    preference: 'reviewResult',
-    templateEnv: 'SUBSCRIPTION_TEMPLATE_ID',
-  },
-  official_transfer: {
-    route: 'pages/claims/index',
-    preference: 'officialTransfer',
-    templateEnv: 'SUBSCRIPTION_TEMPLATE_ID',
-  },
-  pickup_reminder: {
-    route: 'pages/claims/index',
-    preference: 'pickupReminder',
-    templateEnv: 'SUBSCRIPTION_TEMPLATE_ID',
-  },
-  handover_completed: {
-    route: 'pages/claims/index',
-    preference: 'pickupReminder',
-    templateEnv: 'SUBSCRIPTION_TEMPLATE_ID',
-  },
-  identity_review_result: {
-    route: 'pages/messages/index',
-    preference: 'reviewResult',
-    templateEnv: 'SUBSCRIPTION_TEMPLATE_ID',
-  },
-  report_result: {
-    route: 'pages/messages/index',
-    preference: 'reviewResult',
-    templateEnv: 'SUBSCRIPTION_TEMPLATE_ID',
-  },
-  thanks: { route: 'pages/messages/index', preference: null, templateEnv: null },
-  system: { route: 'pages/messages/index', preference: null, templateEnv: null },
-})
+const { MESSAGE_KINDS, deliverNotification } = require('./notification')
 
 function requireMessageKind(kind) {
   const value = String(kind || '')
@@ -276,83 +241,7 @@ async function enqueueMessage(transaction, message) {
 }
 
 async function deliverOutbox(messageId) {
-  if (!messageId) return
-  let outbox
-  try {
-    outbox = await getOptionalDocument(db.collection('notificationOutbox').doc(messageId))
-    if (!outbox.data || outbox.data.status !== 'pending') return
-    const policy = MESSAGE_KINDS[outbox.data.kind]
-    const templateId = policy?.templateEnv ? process.env[policy.templateEnv] : ''
-    const miniprogramState = String(process.env.MINIPROGRAM_STATE || '').trim()
-    if (
-      !policy ||
-      !templateId ||
-      !['formal', 'trial', 'developer'].includes(miniprogramState) ||
-      !cloud.openapi?.subscribeMessage?.send
-    ) {
-      await db
-        .collection('notificationOutbox')
-        .doc(messageId)
-        .update({
-          data: {
-            status: 'pending',
-            lastError: 'notification_configuration_missing',
-            notBefore: new Date(now() + 5 * 60 * 1000),
-            updatedAt: db.serverDate(),
-          },
-        })
-      return
-    }
-    const [recipient, message] = await Promise.all([
-      currentUser(outbox.data.recipientOpenid),
-      getOptionalDocument(db.collection('messages').doc(messageId)),
-    ])
-    if (!message.data) return
-    const preferences = recipient?.notificationPreferences || {}
-    if (policy.preference && preferences[policy.preference] === false) {
-      await db
-        .collection('notificationOutbox')
-        .doc(messageId)
-        .update({
-          data: { status: 'skipped', updatedAt: db.serverDate() },
-        })
-      return
-    }
-    await cloud.openapi.subscribeMessage.send({
-      touser: outbox.data.recipientOpenid,
-      page: policy.route,
-      templateId,
-      miniprogramState,
-      lang: 'zh_CN',
-      data: {
-        thing1: { value: '校园卡' },
-        thing2: { value: String(message.data.title).slice(0, 20) },
-      },
-    })
-    await db
-      .collection('notificationOutbox')
-      .doc(messageId)
-      .update({
-        data: { status: 'sent', sentAt: db.serverDate(), updatedAt: db.serverDate() },
-      })
-  } catch (error) {
-    if (outbox?.data) {
-      await db
-        .collection('notificationOutbox')
-        .doc(messageId)
-        .update({
-          data: {
-            status: 'pending',
-            attempts: Number(outbox.data.attempts || 0) + 1,
-            notBefore: new Date(now() + 60000),
-            lastError: String(error?.message || error).slice(0, 300),
-            updatedAt: db.serverDate(),
-          },
-        })
-        .catch(() => undefined)
-    }
-    console.error('subscription message fallback to in-app', error)
-  }
+  return deliverNotification({ db, cloud, now }, messageId)
 }
 
 async function createMessage(message) {
@@ -450,8 +339,9 @@ const PRIVATE_IMAGE_DIRECTORIES = { storage_scene: 'storage-scenes', handover_pr
 const MAX_PRIVATE_IMAGE_BYTES = 1024 * 1024
 const PRIVATE_IMAGE_DAILY_LIMIT = 20
 
-async function prepareOcrUpload(openid) {
+async function prepareOcrUpload(openid, input = {}) {
   await requireActiveUser(openid)
+  const inline = input.transport === 'inline'
   const uploadToken = randomBytes(24).toString('hex')
   const pathOpaque = crypto
     .createHash('sha256')
@@ -467,6 +357,7 @@ async function prepareOcrUpload(openid) {
       data: {
         ownerOpenid: openid,
         kind: 'ocr_raw',
+        ...(inline ? { transport: 'inline' } : {}),
         expectedCloudPath: cloudPath,
         referenced: false,
         consumed: false,
@@ -474,7 +365,7 @@ async function prepareOcrUpload(openid) {
         createdAt: db.serverDate(),
       },
     })
-  return { uploadToken, cloudPath }
+  return inline ? { uploadToken } : { uploadToken, cloudPath }
 }
 
 async function uploadPrivateImage(openid, input) {
@@ -533,7 +424,9 @@ async function uploadPrivateImage(openid, input) {
     }
     if (fileId) {
       try {
-        await cloud.deleteFile({ fileList: [fileId] })
+        const deletion = await cloud.deleteFile({ fileList: [fileId] })
+        const deletedFile = deletion.fileList?.find((file) => file.fileID === fileId)
+        if (!deletedFile || deletedFile.status !== 0) throw new Error('file_delete_not_confirmed')
       } catch (deleteError) {
         await db
           .runTransaction(async (transaction) => {
@@ -598,7 +491,9 @@ async function discardPrivateUpload(openid, input) {
   })
   if (!record) return { discarded: false }
   try {
-    await cloud.deleteFile({ fileList: [record.fileId] })
+    const deletion = await cloud.deleteFile({ fileList: [record.fileId] })
+    const deletedFile = deletion.fileList?.find((file) => file.fileID === record.fileId)
+    if (!deletedFile || deletedFile.status !== 0) throw new Error('file_delete_not_confirmed')
     await db.collection('uploadedFiles').doc(record._id).remove()
   } catch (error) {
     await db.runTransaction(async (transaction) => {
@@ -1352,6 +1247,15 @@ async function submitClaim(openid, input) {
         }
         if (card.data.publisherOpenid === openid) throw new Error('不能认领自己发布的校园卡')
 
+        // Shared write with lost-report retention prevents claim insertion
+        // racing the cleanup transaction's active-claim existence check.
+        await transaction
+          .collection('users')
+          .doc(user._id)
+          .update({
+            data: { claimRetentionCheckedAt: db.serverDate() },
+          })
+
         const attemptPlan = planClaimAttempt(existing.data, now())
         attemptNumber = attemptPlan.attemptNumber
 
@@ -1862,6 +1766,7 @@ async function confirmClaimHandover(openid, input) {
             data: {
               thanksMessageId,
               thanksMessageEmittedAt: db.serverDate(),
+              thanksPublic: input.thanksPublic === true,
             },
           })
       }
@@ -2207,7 +2112,7 @@ async function listThanksWall(openid) {
   const finders = await usersByOpenid(result.data.map((handover) => handover.publisherOpenid))
   const rows = result.data.map((handover) => {
     const finder = finders.get(handover.publisherOpenid)
-    if (!finder || !handover.thanksText) return null
+    if (!finder || !handover.thanksText || handover.thanksPublic !== true) return null
     return {
       id: handover._id,
       maskedFinderName: finder.maskedName || '热心同学',
@@ -2691,6 +2596,20 @@ async function resolveReport(openid, input) {
               },
             })
         } else {
+          if (targetCollection === 'claims' && target.data.cardId) {
+            const cardRef = transaction.collection('foundCards').doc(target.data.cardId)
+            const card = await getOptionalDocument(cardRef)
+            if (card.data?.activeClaimId === report.recordId) {
+              await cardRef.update({
+                data: {
+                  activeClaimId: _.remove(),
+                  retentionHold: '',
+                  ...(!['returned', 'closed'].includes(card.data.status) ? { status: 'pending_match' } : {}),
+                  updatedAt: db.serverDate(),
+                },
+              })
+            }
+          }
           await transaction
             .collection(targetCollection)
             .doc(report.recordId)
@@ -2834,7 +2753,7 @@ const ACTION_HANDLERS = Object.freeze({
   saveUserProfile,
   updateProfileDetails,
   requestIdentityCorrection,
-  prepareOcrUpload: (openid) => prepareOcrUpload(openid),
+  prepareOcrUpload,
   uploadPrivateImage,
   discardPrivateUpload,
   createFoundCard,

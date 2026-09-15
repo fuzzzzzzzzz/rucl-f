@@ -60,7 +60,7 @@ describe('engineering tooling contract', () => {
   it('measures executable coverage with explicit thresholds', () => {
     expect(existsSync(resolve(root, 'vitest.config.mjs'))).toBe(true)
     const config = read('vitest.config.mjs')
-    expect(config).toContain("provider: 'v8'")
+    expect(config).toContain("customProviderModule: './scripts/native-cloud-v8-coverage.mjs'")
     expect(config).toContain('thresholds:')
     expect(config).toContain('miniprogram/shared/')
     expect(config).toContain('cloudfunctions/api/{auth,claim,deletion,handler}.js')

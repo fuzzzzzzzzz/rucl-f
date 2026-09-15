@@ -43,6 +43,7 @@ Page({
     claims: [] as ClaimView[],
     proofPaths: {} as Record<string, string>,
     thanksTexts: {} as Record<string, string>,
+    thanksPublic: {} as Record<string, boolean>,
     busyKey: '',
     photoBusyId: '',
   },
@@ -55,7 +56,7 @@ Page({
     if (!claimsLifetime.isActive(lifetime)) return
     const generation = claimRequests.begin()
     try {
-      this.setData({ loading: true, error: '' })
+      this.setData({ loading: true, error: '', claims: [] })
       const claims = await listMyClaims()
       if (!claimsLifetime.isActive(lifetime) || !claimRequests.isCurrent(generation)) return
       this.setData({ claims: claims.map((claim) => ({ ...claim, statusText: statusText[claim.status] })) })
@@ -108,6 +109,11 @@ Page({
     const claimId = String(e.currentTarget.dataset.id || '')
     this.setData({ [`thanksTexts.${claimId}`]: e.detail.value.slice(0, 30) })
   },
+  onThanksPublic(e: WechatMiniprogram.SwitchChange) {
+    if (this.data.busyKey || this.data.photoBusyId) return
+    const claimId = String(e.currentTarget.dataset.id || '')
+    this.setData({ [`thanksPublic.${claimId}`]: e.detail.value })
+  },
   async confirmReceived(e: WechatMiniprogram.TouchEvent) {
     if (this.data.busyKey || this.data.photoBusyId) return
     const claimId = String(e.currentTarget.dataset.id || '')
@@ -127,13 +133,20 @@ Page({
         })
         if (!confirmed) return
         if (!claimsLifetime.isActive(lifetime)) return
-        const result = await confirmMyClaimHandover(claimId, proofPath, this.data.thanksTexts[claimId] || '')
+        const result = await confirmMyClaimHandover(
+          claimId,
+          proofPath,
+          this.data.thanksTexts[claimId] || '',
+          this.data.thanksPublic[claimId] === true,
+        )
         if (!claimsLifetime.isActive(lifetime)) return
         const proofPaths = { ...this.data.proofPaths }
         const thanksTexts = { ...this.data.thanksTexts }
+        const thanksPublic = { ...this.data.thanksPublic }
         delete proofPaths[claimId]
         delete thanksTexts[claimId]
-        this.setData({ proofPaths, thanksTexts })
+        delete thanksPublic[claimId]
+        this.setData({ proofPaths, thanksTexts, thanksPublic })
         wx.showToast({ title: result.thanksAccepted ? '交接完成，感谢已送出' : '交接任务已完成', icon: 'none' })
         await this.loadClaims()
       })
@@ -166,7 +179,7 @@ Page({
   onHide() {
     claimRequests.invalidate()
     claimsLifetime.deactivate()
-    this.setData({ photoBusyId: '' })
+    this.setData({ photoBusyId: '', claims: [] })
     cancelPendingPrivacyAuthorization()
   },
   onUnload() {

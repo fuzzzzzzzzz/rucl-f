@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   LEGACY_STORAGE_KEYS,
   clearLegacyClientStorage,
+  getReadyAccountSummary,
   isVerifiedAccountSummary,
   startCloudSession,
   waitForCloudReady,
@@ -33,6 +34,24 @@ function appFixture() {
 }
 
 describe('client startup session', () => {
+  it('refreshes a pending identity from the cloud when a page reopens', async () => {
+    const app = appFixture()
+    vi.stubGlobal('getApp', () => app)
+    await startCloudSession(app, {
+      cloudAvailable: true,
+      init: vi.fn(),
+      login: async () => ({ profileBindingStatus: 'correction_pending' }),
+    })
+    const login = vi.fn(async () => ({ profileBindingStatus: 'unbound' as const }))
+    const init = vi.fn()
+    const summary = await getReadyAccountSummary(app, { cloudAvailable: true, init, login })
+    expect(login).toHaveBeenCalledTimes(1)
+    expect(summary).toBeNull()
+    expect(app.globalData.profileBindingStatus).toBe('unbound')
+    expect(init).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
   it('shares one ready promise and does not expose stale account state before login finishes', async () => {
     const login = deferred<{
       role: string

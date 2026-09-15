@@ -92,15 +92,8 @@ const storageCopy = JSON.parse(readFileSync(resolve(root, 'security/storage.rule
 if (JSON.stringify(storageCopy) !== JSON.stringify(contract.storage.rules)) {
   throw new Error('security/storage.rules.json differs from the cloud resource contract')
 }
-const storageWrite = contract.storage.rules.write
-for (const required of [
-  "auth.loginType != 'ANONYMOUS'",
-  'resource.openid == auth.openid',
-  'temporary-cards',
-  '.test(',
-]) {
-  if (!storageWrite.includes(required)) throw new Error(`Storage write rule is missing: ${required}`)
-}
+if (contract.storage.permission !== 'ADMINONLY' || contract.storage.rules.write !== false)
+  throw new Error('Storage must be ADMINONLY; all uploads must use authenticated server functions')
 if (contract.storage.rules.read !== false) throw new Error('Client storage reads must be disabled')
 
 const expectedFunctionNames = Object.keys(contract.functions).sort()

@@ -39,16 +39,14 @@ describe('cloud deployment contract', () => {
     })
   })
 
-  it('denies client reads and limits client writes to owned temporary card images', () => {
+  it('requires ADMINONLY storage with all client storage access disabled', () => {
     const resources = readJson('security/cloud-resource-contract.json')
     const storageRules = readJson('security/storage.rules.json')
 
     expect(storageRules).toEqual(resources.storage.rules)
+    expect(resources.storage.permission).toBe('ADMINONLY')
     expect(storageRules.read).toBe(false)
-    expect(storageRules.write).toContain("auth.loginType != 'ANONYMOUS'")
-    expect(storageRules.write).toContain('resource.openid == auth.openid')
-    expect(storageRules.write).toContain('temporary-cards')
-    expect(storageRules.write).toContain('.test(resource.path)')
+    expect(storageRules.write).toBe(false)
   })
 
   it('uses one release manifest for the root, all cloud functions, client and documentation', () => {
@@ -61,7 +59,7 @@ describe('cloud deployment contract', () => {
       .map((entry) => `cloudfunctions/${entry.name}/package.json`)
       .sort()
 
-    expect(manifest.version).toBe('0.6.0')
+    expect(manifest.version).toBe('0.6.1')
     expect(manifest.packages.slice(1).sort()).toEqual(actualCloudPackages)
     for (const packagePath of manifest.packages) expect(readJson(packagePath).version).toBe(manifest.version)
     expect(read(manifest.clientVersionFile)).toContain(`'${manifest.version}'`)
