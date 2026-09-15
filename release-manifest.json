@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "tooling": {
     "nodeRuntime": "Nodejs20.19",
     "cloudbaseCli": "3.6.2"

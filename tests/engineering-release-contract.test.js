@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const expectedVersion = '0.6.0'
+const expectedVersion = '0.6.1'
 
 function read(relativePath) {
   return readFileSync(resolve(root, relativePath), 'utf8')
@@ -16,7 +16,21 @@ function readJson(relativePath) {
 }
 
 describe('engineering release contract', () => {
-  it('uses one 0.6.0 release manifest across packages, client and release documentation', () => {
+  it('fails closed when review readiness is requested without collected evidence', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['scripts/check-release-readiness.mjs', '--state=developer', '--review'],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, MINIPROGRAM_STATE: '' },
+      },
+    )
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Review evidence is required')
+  })
+
+  it('uses one 0.6.1 release manifest across packages, client and release documentation', () => {
     const manifest = readJson('release-manifest.json')
     expect(manifest.version).toBe(expectedVersion)
     expect(manifest.tooling).toEqual({

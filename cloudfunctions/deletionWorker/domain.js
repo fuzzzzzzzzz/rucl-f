@@ -94,6 +94,7 @@ const PII_FIELD_REGISTRY = Object.freeze({
   handovers: [
     'applicantOpenid',
     'publisherOpenid',
+    'confirmedBy',
     'confirmedByOpenid',
     'reviewedBy',
     'invalidatedBy',

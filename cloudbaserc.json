@@ -60,6 +60,10 @@
       "runtime": "Nodejs20.19",
       "memorySize": 256,
       "installDependency": true,
+      "envVariables": {
+        "SUBSCRIPTION_TEMPLATE_ID": "{{env.SUBSCRIPTION_TEMPLATE_ID}}",
+        "MINIPROGRAM_STATE": "{{env.MINIPROGRAM_STATE}}"
+      },
       "triggers": [
         {
           "name": "dailyCleanup",

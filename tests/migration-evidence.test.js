@@ -7,7 +7,7 @@ const now = Date.parse('2026-07-27T01:30:00.000Z')
 function migrationApply(overrides = {}) {
   const verification = {
     environmentId,
-    version: '0.6.0',
+    version: '0.6.1',
     generatedAt: '2026-07-27T01:29:30.000Z',
     readyToApply: true,
     userKeyBackfillVerified: true,
@@ -25,7 +25,7 @@ function migrationApply(overrides = {}) {
   }
   return {
     environmentId,
-    version: '0.6.0',
+    version: '0.6.1',
     generatedAt: '2026-07-27T01:29:40.000Z',
     dryRun: false,
     applied: true,

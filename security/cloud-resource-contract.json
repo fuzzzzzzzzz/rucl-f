@@ -481,10 +481,10 @@
     }
   },
   "storage": {
-    "permission": "CUSTOM",
+    "permission": "ADMINONLY",
     "rules": {
       "read": false,
-      "write": "auth != null && auth.loginType != 'ANONYMOUS' && resource.openid == auth.openid && /^temporary-cards\\//.test(resource.path) == true"
+      "write": false
     }
   },
   "functionDefaults": {
@@ -514,7 +514,7 @@
   },
   "migrationGuard": {
     "requiredForPhase": "post-migration",
-    "workerVersion": "0.6.0",
+    "workerVersion": "0.6.1",
     "maximumEvidenceAgeSeconds": 900,
     "maximumClockSkewSeconds": 60,
     "requiredConflictCounts": {

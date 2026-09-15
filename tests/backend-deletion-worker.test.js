@@ -1,11 +1,12 @@
 import crypto from 'node:crypto'
 import { createRequire } from 'node:module'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const originalMigrationToken = process.env.OPERATIONAL_MIGRATION_TOKEN
 
 afterEach(() => {
+  vi.restoreAllMocks()
   if (originalMigrationToken === undefined) delete process.env.OPERATIONAL_MIGRATION_TOKEN
   else process.env.OPERATIONAL_MIGRATION_TOKEN = originalMigrationToken
 })
@@ -165,6 +166,162 @@ function harness(seed, openid = '', now = Date.parse('2026-07-27T00:00:00Z')) {
 }
 
 describe('deletion worker', () => {
+  it('scrubs previous deletion requests while retaining unrelated non-personal nested data', async () => {
+    const now = Date.parse('2026-07-27T00:00:00Z')
+    const test = harness({
+      users: { subject: { openid: 'subject', studentHmac: 'binding', name: 'sample-name' } },
+      dataDeletionRequests: {
+        current: { applicantOpenid: 'subject', status: 'approved', nextAttemptAt: new Date(now - 1) },
+        previous: { applicantOpenid: 'subject', status: 'rejected', content: 'sample-name' },
+      },
+      auditLogs: { unrelated: { metadata: { nullable: null, enabled: false, count: 4, values: ['public'] } } },
+    })
+    expect((await test.worker()).counts.completed).toBe(1)
+    expect(test.database.records.dataDeletionRequests.previous).toMatchObject({
+      applicantOpenid: '',
+      content: '',
+      subjectDeleted: true,
+    })
+    expect(test.database.records.auditLogs.unrelated.metadata.count).toBe(4)
+  })
+
+  it.each(['removed', 'rejected'])('does not acquire a request that became %s after selection', async (status) => {
+    const now = Date.parse('2026-07-27T00:00:00Z')
+    const test = harness({
+      dataDeletionRequests: {
+        request: { applicantOpenid: 'subject', status: 'approved', nextAttemptAt: new Date(now - 1) },
+      },
+    })
+    const transaction = test.database.runTransaction.bind(test.database)
+    test.database.runTransaction = async (operation) => {
+      if (status === 'removed') delete test.database.records.dataDeletionRequests.request
+      else test.database.records.dataDeletionRequests.request.status = status
+      return transaction(operation)
+    }
+    expect((await test.worker()).counts.leasedElsewhere).toBe(1)
+    expect(Object.values(test.database.records.deletionReceipts || {})).toHaveLength(0)
+  })
+
+  it.each([
+    [new Error('document does not exist'), true],
+    [{ errMsg: 'document does not exist' }, true],
+    ['document does not exist', true],
+    [null, false],
+    [new Error('database unavailable'), false],
+  ])('only treats missing-document errors as an absent receipt: %j', async (error, completes) => {
+    const now = Date.parse('2026-07-27T00:00:00Z')
+    const test = harness({
+      dataDeletionRequests: {
+        request: { applicantOpenid: 'subject', status: 'approved', nextAttemptAt: new Date(now - 1) },
+      },
+    })
+    const get = Document.prototype.get
+    vi.spyOn(Document.prototype, 'get').mockImplementation(async function () {
+      if (this.collectionName === 'deletionReceipts') throw error
+      return get.call(this)
+    })
+    const result = await test.worker()
+    expect(result.counts.completed).toBe(completes ? 1 : 0)
+    expect(result.counts.failed).toBe(completes ? 0 : 1)
+    expect(Object.values(test.database.records.deletionReceipts || {})).toHaveLength(completes ? 1 : 0)
+  })
+
+  it('scans beyond the first migration inventory page', async () => {
+    process.env.OPERATIONAL_MIGRATION_TOKEN = 'migration-secret'
+    const users = Object.fromEntries(
+      Array.from({ length: 101 }, (_, index) => [String(index), { openid: `user-${index}` }]),
+    )
+    const test = harness({ users })
+    const result = await test.worker({ mode: 'inventory', migrationToken: 'migration-secret' })
+    expect(result.counts.users).toBe(101)
+    expect(result.conflicts.total).toBe(0)
+  })
+
+  it.each(['studentHmac', 'nameHmac', 'maskedName', 'maskedStudentNumber', 'profileBindingStatus'])(
+    'refuses migration when duplicate accounts disagree on %s',
+    async (field) => {
+      process.env.OPERATIONAL_MIGRATION_TOKEN = 'migration-secret'
+      const test = harness({
+        users: {
+          first: { openid: 'duplicate', role: 'student', [field]: 'first-value' },
+          second: { openid: 'duplicate', role: 'student', [field]: 'second-value' },
+        },
+      })
+      const before = structuredClone(test.database.records)
+      const result = await test.worker({ mode: 'apply', dryRun: false, migrationToken: 'migration-secret' })
+      expect(result.applied).toBe(false)
+      expect(result.inventory.conflicts.identityConflicts).toBeGreaterThan(0)
+      expect(test.database.records).toEqual(before)
+    },
+  )
+
+  it('defaults a conflict-free migration to a read-only dry run', async () => {
+    process.env.OPERATIONAL_MIGRATION_TOKEN = 'migration-secret'
+    const test = harness({ users: { user: { openid: 'owner' } } })
+    const before = structuredClone(test.database.records)
+    expect(await test.worker({ mode: 'apply', migrationToken: 'migration-secret' })).toMatchObject({
+      dryRun: true,
+      applied: false,
+    })
+    expect(test.database.records).toEqual(before)
+  })
+
+  it('backfills proof deadlines without resurrecting expired thanks messages', async () => {
+    process.env.OPERATIONAL_MIGRATION_TOKEN = 'migration-secret'
+    const now = Date.parse('2026-07-27T00:00:00Z')
+    const old = new Date(now - 90 * 86400000)
+    const test = harness({
+      handovers: {
+        expired: { proofFileId: 'cloud://old', completedAt: old, thanksText: 'old thanks' },
+        fallback: {
+          proofFileId: 'cloud://fallback',
+          createdAt: old,
+          approvedThanks: false,
+          thanksText: 'not approved',
+        },
+        undated: { proofFileId: 'cloud://undated' },
+        marked: { thanksText: 'already delivered', thanksMessageEmittedAt: old },
+      },
+    })
+    const result = await test.worker({ mode: 'apply', dryRun: false, migrationToken: 'migration-secret' })
+    expect(result.counts.proofRetentionBackfilled).toBe(3)
+    expect(test.database.records.handovers.expired.proofRetentionUntil).toEqual(new Date(Number(old) + 7 * 86400000))
+    expect(test.database.records.handovers.fallback.proofRetentionUntil).toEqual(new Date(Number(old) + 7 * 86400000))
+    expect(test.database.records.handovers.undated.proofRetentionUntil).toEqual(new Date(now + 7 * 86400000))
+    expect(test.database.records.handovers.expired.thanksMessageId).toBe('')
+    expect(Object.values(test.database.records.messages || {})).toHaveLength(0)
+    const repeat = await test.worker({ mode: 'apply', dryRun: false, migrationToken: 'migration-secret' })
+    expect(repeat.counts.proofRetentionBackfilled).toBe(0)
+    expect(repeat.counts.thanksMarkersBackfilled).toBe(0)
+  })
+
+  it('removes the actual handover confirmedBy identity and completes idempotently', async () => {
+    const now = Date.parse('2026-07-27T00:00:00Z')
+    const openid = 'handover-confirming-subject'
+    const test = harness({
+      users: { subject: { openid, role: 'student', accountState: 'deleting' } },
+      dataDeletionRequests: {
+        request: { applicantOpenid: openid, status: 'approved', nextAttemptAt: new Date(now - 1) },
+      },
+      handovers: {
+        handover: {
+          applicantOpenid: openid,
+          publisherOpenid: 'finder',
+          confirmedBy: openid,
+          completedAt: new Date(now - 9 * 86400000),
+          proofFileId: '',
+        },
+      },
+    })
+    const first = await test.worker()
+    expect(first.counts.completed).toBe(1)
+    expect(test.database.records.handovers.handover.confirmedBy).toBe('')
+    const receipt = structuredClone(test.database.records.deletionReceipts)
+    await test.worker()
+    expect(test.database.records.deletionReceipts).toEqual(receipt)
+    expect(JSON.stringify(receipt)).not.toContain(openid)
+  })
+
   it('requires a cloud dependency and supports cloud defaults with an empty invocation context', async () => {
     const { createDeletionWorker } = require('../cloudfunctions/deletionWorker/handler')
     expect(() => createDeletionWorker()).toThrow()
@@ -418,7 +575,7 @@ describe('deletion worker', () => {
 
     expect(result).toMatchObject({
       environmentId: 'test-environment',
-      version: '0.6.0',
+      version: '0.6.1',
       dryRun: true,
       applied: false,
       reason: 'conflicts_present',
@@ -979,7 +1136,7 @@ describe('deletion worker', () => {
     const result = await worker()
 
     expect(result).toEqual({
-      version: '0.6.0',
+      version: '0.6.1',
       counts: {
         completed: 0,
         blocked: 0,

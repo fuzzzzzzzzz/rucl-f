@@ -1,5 +1,6 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const { deliverNotification } = require('./notification')
 const {
   RETENTION,
   assertScheduledInvocation,
@@ -159,7 +160,11 @@ async function processCleanupJobs(now, deadline = Infinity, cursor = '') {
     lastId = job._id
     if (job.status !== 'pending' || timestamp(job.notBefore) > now) continue
     try {
-      await cloud.deleteFile({ fileList: [job.fileId] })
+      const deletion = await cloud.deleteFile({ fileList: [job.fileId] })
+      const deletedFile = deletion.fileList?.find((file) => file.fileID === job.fileId)
+      if (!deletedFile || deletedFile.status !== 0) {
+        throw new Error('file_delete_not_confirmed')
+      }
       if (job.reason === 'proof_retention_expired') {
         const handovers = await db.collection('handovers').where({ proofFileId: job.fileId }).limit(100).get()
         await Promise.all(
@@ -245,29 +250,6 @@ async function expireLostReports(now, deadline = Infinity, cursor = '') {
     ),
   }
   if (!scanned.data.length) return phasePage({ lostExpired: 0 }, [], 0, cursor)
-  const owners = [...new Set(stale.data.map((report) => report.ownerOpenid).filter(Boolean))]
-  const claimPages = []
-  for (let index = 0; index < owners.length; index += 20) {
-    claimPages.push(
-      db
-        .collection('claims')
-        .where({
-          applicantOpenid: _.in(owners.slice(index, index + 20)),
-          status: _.in([
-            'review',
-            'approved',
-            'handover',
-            'admin_review',
-            'awaiting_official_transfer',
-            'ready_for_pickup',
-          ]),
-        })
-        .limit(100)
-        .get(),
-    )
-  }
-  const activeClaims = (await Promise.all(claimPages)).flatMap((page) => page.data)
-  const heldIdentities = new Set(activeClaims.map((claim) => `${claim.applicantOpenid}:${claim.studentHmac || ''}`))
   let expired = 0
   const expiredIds = []
   let processed = 0
@@ -278,11 +260,40 @@ async function expireLostReports(now, deadline = Infinity, cursor = '') {
     processed += 1
     lastId = report._id
     if (!staleIds.has(report._id)) continue
-    const held = heldIdentities.has(`${report.ownerOpenid}:${report.studentHmac || ''}`)
-    const plan = planLostReportRetention(report, now, held)
     await db.runTransaction(async (transaction) => {
       const fresh = await transaction.collection('lostReports').doc(report._id).get()
       if (!fresh.data || fresh.data.status !== 'active') return
+      if (!fresh.data.activeUntil || timestamp(fresh.data.activeUntil) > now) return
+      // Serialize with submitClaim on the existing applicant document. A claims
+      // query alone cannot protect against a concurrently inserted claim.
+      if (!fresh.data.ownerOpenid) return
+      const owners = await transaction.collection('users').where({ openid: fresh.data.ownerOpenid }).limit(2).get()
+      // Missing or ambiguous legacy owners cannot provide a safe shared guard.
+      if (owners.data.length !== 1) return
+      await transaction
+        .collection('users')
+        .doc(owners.data[0]._id)
+        .update({
+          data: { claimRetentionCheckedAt: db.serverDate() },
+        })
+      const activeClaims = await transaction
+        .collection('claims')
+        .where({
+          applicantOpenid: fresh.data.ownerOpenid,
+          studentHmac: fresh.data.studentHmac || '',
+          status: _.in([
+            'review',
+            'approved',
+            'handover',
+            'admin_review',
+            'awaiting_official_transfer',
+            'ready_for_pickup',
+          ]),
+        })
+        .limit(1)
+        .get()
+      const held = activeClaims.data.length > 0
+      const plan = planLostReportRetention(fresh.data, now, held)
       if (plan.action === 'hold') {
         await transaction
           .collection('lostReports')
@@ -311,7 +322,7 @@ async function expireLostReports(now, deadline = Infinity, cursor = '') {
               locationDescription: '',
               retentionHold: '',
               expiredAt: db.serverDate(),
-              purgeAt: fresh.data.purgeAt || plan.purgeAt,
+              purgeAt: plan.purgeAt,
               updatedAt: db.serverDate(),
             },
           })
@@ -374,7 +385,30 @@ async function purgeMessages(now, deadline = Infinity, cursor = '') {
   return phasePage({ messagesRemoved: removed }, expired.data, processed, lastId)
 }
 
-const PHASES = ['expiredCards', 'orphanUploads', 'lostExpiry', 'lostPurge', 'messages', 'auditLogs', 'fileCleanup']
+async function retryNotifications(now, deadline = Infinity, cursor = '') {
+  const page = await scanPage('notificationOutbox', cursor)
+  let processed = 0
+  let lastId = cursor
+  for (const job of page.data) {
+    if (Date.now() >= deadline) break
+    processed += 1
+    lastId = job._id
+    if (!['pending', 'sending'].includes(job.status) || timestamp(job.notBefore) > now) continue
+    await deliverNotification({ db, cloud }, job._id)
+  }
+  return phasePage({ notificationJobsScanned: processed }, page.data, processed, lastId)
+}
+
+const PHASES = [
+  'expiredCards',
+  'orphanUploads',
+  'lostExpiry',
+  'lostPurge',
+  'messages',
+  'auditLogs',
+  'fileCleanup',
+  'notifications',
+]
 
 async function runPhase(phase, now, deadline, cursor) {
   if (phase === 'expiredCards') return queueExpiredCards(now, deadline, cursor)
@@ -384,6 +418,7 @@ async function runPhase(phase, now, deadline, cursor) {
   if (phase === 'messages') return purgeMessages(now, deadline, cursor)
   if (phase === 'auditLogs') return queueExpiredAuditLogs(now, deadline, cursor)
   if (phase === 'fileCleanup') return processCleanupJobs(now, deadline, cursor)
+  if (phase === 'notifications') return retryNotifications(now, deadline, cursor)
   throw new Error('unknown cleanup phase')
 }
 

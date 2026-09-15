@@ -3,13 +3,14 @@ import {
   syncUserProfile,
   updateCloudProfileDetails,
 } from '../../services/cloud-card-service'
-import { createLatestRequestGate, runExclusiveAction } from '../../shared/async-control'
+import { createLatestRequestGate, createPageLifetimeGate, runExclusiveAction } from '../../shared/async-control'
 import { clearedProfileIdentityFields } from '../../shared/client-forms'
 import type { CardCategory } from '../../shared/models'
 import { cardCategories, campuses, validateRucStudentNumber } from '../../shared/ruc'
 import { getReadyAccountSummary } from '../../shared/startup-session'
 
 const profileRequests = createLatestRequestGate()
+const profileLifetime = createPageLifetimeGate()
 
 Page({
   data: {
@@ -27,6 +28,7 @@ Page({
     identityStatusText: '首次保存后，姓名和学号将锁定并用于安全匹配。',
   },
   async onLoad() {
+    profileLifetime.activate()
     const generation = profileRequests.begin()
     try {
       const summary = await getReadyAccountSummary()
@@ -62,6 +64,7 @@ Page({
     }
   },
   onUnload() {
+    profileLifetime.deactivate()
     profileRequests.invalidate()
   },
   onName(e: WechatMiniprogram.Input) {
@@ -108,7 +111,9 @@ Page({
     }
   },
   async save() {
-    if (this.data.busyKey) return
+    if (this.data.busyKey || this.data.loading) return
+    const lifetime = profileLifetime.capture()
+    if (!lifetime) return
     if (this.data.correctionPending) {
       wx.showToast({ title: '身份信息修改申请处理中，请等待审核结果', icon: 'none' })
       return
@@ -139,12 +144,15 @@ Page({
             campusId,
           })
         }
+        if (!profileLifetime.isActive(lifetime)) return
         this.setData(clearedProfileIdentityFields())
         wx.showToast({ title: '保存成功', icon: 'none' })
         wx.navigateBack()
       })
     } catch (error) {
-      wx.showToast({ title: error instanceof Error ? error.message : '保存失败', icon: 'none' })
+      if (profileLifetime.isActive(lifetime)) {
+        wx.showToast({ title: error instanceof Error ? error.message : '保存失败', icon: 'none' })
+      }
     }
   },
 })

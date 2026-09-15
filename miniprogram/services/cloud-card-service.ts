@@ -306,21 +306,18 @@ export async function processCardPhoto(filePath: string): Promise<ImageProcessin
   if (!filePath) return {}
   await waitForCloudReady()
   const preparedPath = await prepareOcrImage(filePath)
-  const authorization = await callCloudApi<OcrUploadAuthorization>('prepareOcrUpload')
-  const uploaded = await wx.cloud.uploadFile({
-    cloudPath: authorization.cloudPath,
-    filePath: preparedPath,
-  })
+  const contentBase64 = await readFileAsBase64(preparedPath)
+  const rawBytes = Math.floor((contentBase64.replace(/=+$/, '').length * 3) / 4)
+  if (!contentBase64 || rawBytes > 2 * 1024 * 1024) throw new Error('照片超过2MiB，请重新拍摄或手动填写')
+  const authorization = await callCloudApi<OcrUploadAuthorization>('prepareOcrUpload', { transport: 'inline' })
   try {
     const response = await wx.cloud.callFunction({
       name: 'processCardImage',
-      data: { fileId: uploaded.fileID, uploadToken: authorization.uploadToken },
+      data: { contentBase64, uploadToken: authorization.uploadToken },
     })
     return (response.result || {}) as ImageProcessingResult
   } catch (error) {
     throw new Error(friendlyOcrErrorMessage(error))
-  } finally {
-    await wx.cloud.deleteFile({ fileList: [uploaded.fileID] }).catch(() => undefined)
   }
 }
 
@@ -507,10 +504,11 @@ export async function confirmCloudClaimHandover(
   claimId: string,
   proofPath: string,
   thanksText = '',
+  thanksPublic = false,
 ): Promise<{ status: 'returned'; thanksAccepted: boolean }> {
   const proofUploadToken = await uploadPrivateImage(proofPath, 'handover_proof')
   try {
-    return await callCloudApi('confirmClaimHandover', { claimId, proofUploadToken, thanksText })
+    return await callCloudApi('confirmClaimHandover', { claimId, proofUploadToken, thanksText, thanksPublic })
   } catch (error) {
     await discardPrivateUpload(proofUploadToken).catch(() => undefined)
     throw error

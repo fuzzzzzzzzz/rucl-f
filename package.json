@@ -1,6 +1,6 @@
 {
   "name": "kale-miniprogram",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "scripts": {
     "icons:generate": "node scripts/generate-material-icons.mjs",
@@ -21,6 +21,7 @@
     "resources:readback": "node scripts/readback-cloud-resources.mjs",
     "migration:capture": "node scripts/capture-migration-evidence.mjs",
     "release:check": "node scripts/check-release-readiness.mjs --state=developer",
+    "review:check": "node scripts/check-release-readiness.mjs --state=developer --review",
     "release:formal": "node scripts/check-release-readiness.mjs --state=formal",
     "line-endings:check": "node scripts/check-line-endings.mjs",
     "package-budget:check": "node scripts/check-miniprogram-budget.mjs",

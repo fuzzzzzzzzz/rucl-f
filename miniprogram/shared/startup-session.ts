@@ -148,7 +148,13 @@ export async function waitForCloudReady(app: StartupApp = getApp<IAppOption>()):
   }
 }
 
-export async function getReadyAccountSummary(): Promise<AccountProfileSummary | null> {
-  await waitForCloudReady()
-  return getApp<IAppOption>().globalData.accountSummary
+export async function getReadyAccountSummary(
+  app: StartupApp = getApp<IAppOption>(),
+  dependencies?: StartupDependencies,
+): Promise<AccountProfileSummary | null> {
+  await waitForCloudReady(app)
+  // Reuse the same session gate for refreshes; do not reinitialize the SDK.
+  await startCloudSession(app, { ...(dependencies || defaultDependencies(app)), init: () => undefined })
+  await waitForCloudReady(app)
+  return app.globalData.accountSummary
 }

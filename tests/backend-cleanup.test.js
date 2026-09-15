@@ -34,6 +34,9 @@ describe('backend retention policy', () => {
       action: 'hold',
       reason: 'active_claim',
     })
+    expect(planLostReportRetention({ ...stale, purgeAt: new Date(now - 1) }, now, false).purgeAt).toEqual(
+      new Date(now + 30 * 86400000),
+    )
   })
 
   it('deletes expired messages and does not recreate an already-emitted thanks message', () => {

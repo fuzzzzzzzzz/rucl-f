@@ -3,7 +3,7 @@
   <view wx:if="{{loading}}" class="neo-card empty-state">正在读取认领记录…</view>
   <view wx:elif="{{error}}" class="neo-card empty-state error-state">{{error}}<button class="retry" disabled="{{!!busyKey || !!photoBusyId}}" bindtap="loadClaims">重新读取</button></view>
   <view wx:elif="{{claims.length === 0}}" class="neo-card empty-state">目前还没有认领申请。</view>
-  <view wx:for="{{claims}}" wx:key="id" class="neo-card claim-card">
+  <view wx:for="{{!loading && !error ? claims : []}}" wx:key="id" class="neo-card claim-card">
     <view class="claim-head"><view><view class="claim-name">{{item.maskedName}} · {{item.category}}</view><view class="number">{{item.maskedStudentNumber}}</view></view><view class="claim-status status-{{item.status}}">{{item.statusText}}</view></view>
     <view class="claim-meta"><text>{{item.campusName}}</text><text>{{item.createdAt}}</text></view>
     <view wx:if="{{item.officialStoragePoint}}" class="handover-point"><b>卡片存放地点</b><text>{{item.officialStoragePoint}}</text><small>请按页面提示前往存放地点，取到卡后拍照确认完成。</small></view>
@@ -21,6 +21,8 @@
         <block wx:else><image src="/assets/icons/photo-camera.png" mode="aspectFit" /><text>{{photoBusyId === item.id ? '正在打开相机…' : '现场拍摄已取到的卡'}}</text></block>
       </view>
       <textarea class="thanks-input" data-id="{{item.id}}" maxlength="30" value="{{thanksTexts[item.id]}}" disabled="{{!!busyKey || !!photoBusyId}}" placeholder="给拾卡同学一句感谢（选填，最多30字）" bindinput="onThanks" />
+      <view class="proof-help">感谢默认仅通过站内消息发送给拾卡者。请勿填写姓名、学号或联系方式。</view>
+      <view class="proof-help"><switch data-id="{{item.id}}" checked="{{thanksPublic[item.id] === true}}" disabled="{{!!busyKey || !!photoBusyId}}" bindchange="onThanksPublic" />同意将感谢文字展示在感谢墙，供其他使用者查看（可选）</view>
       <button class="complete-button" data-id="{{item.id}}" loading="{{busyKey === 'confirm:' + item.id}}" disabled="{{!!busyKey || !!photoBusyId}}" bindtap="confirmReceived">我已取到卡，完成任务</button>
     </view>
     <button wx:if="{{item.status !== 'closed'}}" class="report-button" data-id="{{item.id}}" loading="{{busyKey === 'report:' + item.id}}" disabled="{{!!busyKey || !!photoBusyId}}" bindtap="reportClaim">举报认领流程问题</button>

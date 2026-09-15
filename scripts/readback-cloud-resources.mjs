@@ -51,7 +51,7 @@ const storagePermission =
 const storageRule = normalizeSecurityRule(
   storagePayload.securityRule || storagePayload.SecurityRule || storagePayload.rule || storagePayload.Rule,
 )
-if (storagePermission !== 'CUSTOM' || !sameJson(storageRule, contract.storage.rules)) {
+if (storagePermission !== 'ADMINONLY' || (storageRule !== null && !sameJson(storageRule, contract.storage.rules))) {
   throw new Error('Remote cloud storage permission differs from the contract')
 }
 

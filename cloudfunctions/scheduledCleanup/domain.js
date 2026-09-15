@@ -28,7 +28,7 @@ function planLostReportRetention(report, now, hasActiveClaim) {
   return {
     action: 'expire',
     scrub: true,
-    purgeAt: report.purgeAt || new Date(Number(now) + RETENTION.lostPurgeAfterScrubDays * DAY_MS),
+    purgeAt: new Date(Number(now) + RETENTION.lostPurgeAfterScrubDays * DAY_MS),
   }
 }
 

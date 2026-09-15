@@ -1,4 +1,42 @@
 const crypto = require('crypto')
+const MAX_INLINE_OCR_BYTES = 2 * 1024 * 1024
+
+function decodeInlineOcrImage(value) {
+  if (typeof value !== 'string' || !value) throw new Error('照片格式无法识别，请重新拍摄')
+  if (value.length > base64EncodedLength(MAX_INLINE_OCR_BYTES)) {
+    throw new Error('照片超过2MiB，请重新拍摄或手动填写')
+  }
+  if (value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    throw new Error('照片格式无法识别，请重新拍摄')
+  }
+  const buffer = Buffer.from(value, 'base64')
+  if (buffer.length > MAX_INLINE_OCR_BYTES) throw new Error('照片超过2MiB，请重新拍摄或手动填写')
+  const jpeg = buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
+  const png = buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  if (buffer.toString('base64') !== value || (!jpeg && !png)) {
+    throw new Error('照片格式无法识别，请重新拍摄')
+  }
+  return buffer
+}
+
+function requireAuthorizedInlineOcrUpload(record, { openid, uploadToken, now = Date.now() }) {
+  const registryId = ocrUploadRegistryId(uploadToken)
+  const expiresAt =
+    record?.expiresAt instanceof Date ? record.expiresAt.getTime() : Date.parse(String(record?.expiresAt))
+  if (
+    !openid ||
+    !record ||
+    record.ownerOpenid !== openid ||
+    record.kind !== 'ocr_raw' ||
+    record.transport !== 'inline' ||
+    record.consumed === true ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= Number(now)
+  ) {
+    throw new Error('图片上传凭证无效、已过期或已使用')
+  }
+  return { fileId: '', registryId }
+}
 
 function parseDailyLimit(value) {
   const parsed = Number.parseInt(String(value || ''), 10)
@@ -55,6 +93,7 @@ function requireAuthorizedOcrUpload(record, { fileId, openid: openidValue, uploa
     !record ||
     record.ownerOpenid !== openid ||
     record.kind !== 'ocr_raw' ||
+    record.transport === 'inline' ||
     record.consumed === true ||
     !Number.isFinite(expiresAt) ||
     expiresAt <= Number(now) ||
@@ -69,6 +108,8 @@ function requireAuthorizedOcrUpload(record, { fileId, openid: openidValue, uploa
 }
 
 module.exports = {
+  decodeInlineOcrImage,
+  requireAuthorizedInlineOcrUpload,
   base64EncodedLength,
   ocrUploadRegistryId,
   parseDailyLimit,
