@@ -12,7 +12,7 @@
     }
   },
   "dependencies": {
-    "lodash.set": "file:vendor/lodash-set",
+    "lodash.set": "file:vendor/kale-lodash-set-compat-1.0.0.tgz",
     "wx-server-sdk": "4.0.2"
   }
 }

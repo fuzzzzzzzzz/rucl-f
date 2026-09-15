@@ -11,7 +11,7 @@
       "timeout": 15,
       "runtime": "Nodejs20.19",
       "memorySize": 256,
-      "installDependency": true,
+      "installDependency": false,
       "envVariables": {
         "STUDENT_HMAC_SECRET": "{{env.STUDENT_HMAC_SECRET}}",
         "SUBSCRIPTION_TEMPLATE_ID": "{{env.SUBSCRIPTION_TEMPLATE_ID}}",
@@ -25,7 +25,7 @@
       "timeout": 60,
       "runtime": "Nodejs20.19",
       "memorySize": 256,
-      "installDependency": true,
+      "installDependency": false,
       "envVariables": {
         "OPERATIONAL_MIGRATION_TOKEN": "{{env.OPERATIONAL_MIGRATION_TOKEN}}"
       },
@@ -44,7 +44,7 @@
       "timeout": 20,
       "runtime": "Nodejs20.19",
       "memorySize": 256,
-      "installDependency": true,
+      "installDependency": false,
       "envVariables": {
         "TENCENT_SECRET_ID": "{{env.TENCENT_SECRET_ID}}",
         "TENCENT_SECRET_KEY": "{{env.TENCENT_SECRET_KEY}}",
@@ -59,7 +59,7 @@
       "timeout": 60,
       "runtime": "Nodejs20.19",
       "memorySize": 256,
-      "installDependency": true,
+      "installDependency": false,
       "envVariables": {
         "SUBSCRIPTION_TEMPLATE_ID": "{{env.SUBSCRIPTION_TEMPLATE_ID}}",
         "MINIPROGRAM_STATE": "{{env.MINIPROGRAM_STATE}}"
