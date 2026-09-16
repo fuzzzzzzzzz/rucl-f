@@ -36,6 +36,11 @@ function fixture() {
   return { expected, evidence }
 }
 describe('review evidence gate', () => {
+  it('requires content safety evidence independently of the exported checklist', () => {
+    const { evidence, expected } = fixture()
+    delete evidence.checks.contentSafety
+    expect(() => validateReviewEvidence(evidence, expected)).toThrow('contentSafety')
+  })
   it('accepts complete current matching evidence', () => {
     const { evidence, expected } = fixture()
     expect(validateReviewEvidence(evidence, expected)).toBe(true)

@@ -14,6 +14,7 @@ export const REVIEW_CHECKS = Object.freeze([
   'filing',
   'serviceCategory',
   'privacyEffective',
+  'contentSafety',
   'subscriptionTemplates',
   'developmentUpload',
   'reviewerInstructions',

@@ -14,6 +14,10 @@ function readJson(relativePath) {
 }
 
 describe('engineering tooling contract', () => {
+  it('collects and enforces coverage for the new content safety boundary', () => {
+    expect(read('vitest.config.mjs')).toContain("'cloudfunctions/api/content-safety.js'")
+    expect(read('scripts/check-coverage-contract.mjs')).toContain("'cloudfunctions/api/content-safety.js'")
+  })
   it('pins repository and formatter line endings to LF', () => {
     expect(existsSync(resolve(root, '.gitattributes'))).toBe(true)
     expect(read('.gitattributes')).toContain('* text=auto eol=lf')
