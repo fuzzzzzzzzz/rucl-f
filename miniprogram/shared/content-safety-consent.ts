@@ -21,7 +21,7 @@ export async function requestContentSafetyConsent(action: string): Promise<strin
       wx.showModal({
         title: '本次文字内容安全检查',
         content: `为识别违法违规文字，${fields}将连同你的微信 OpenID 发送至微信内容安全接口。不包含学号，也不进行图片内容安全检查。本次同意仅用于本次提交，拒绝将取消本次操作。`,
-        confirmText: '同意并提交',
+        confirmText: '同意提交',
         cancelText: '取消',
         success: (result) => (result.confirm === true ? resolve() : reject(error())),
         fail: () => reject(error()),

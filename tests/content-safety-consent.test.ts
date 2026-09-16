@@ -3,7 +3,13 @@ import { callCloudApi } from '../miniprogram/services/cloud-card-service'
 
 const version = '2026-09-16-text-v1'
 const actions = ['saveUserProfile', 'createFoundCard', 'createLostReport', 'transferFoundCardToOfficial']
-type Modal = { content: string; success: (result: { confirm?: unknown }) => void; fail: () => void }
+type Modal = {
+  content: string
+  confirmText: string
+  cancelText: string
+  success: (result: { confirm?: unknown }) => void
+  fail: () => void
+}
 
 describe('request-scoped content safety consent through the real cloud service', () => {
   const callFunction = vi.fn(async () => ({ result: { ok: true } }))
@@ -22,6 +28,8 @@ describe('request-scoped content safety consent through the real cloud service',
     const input = { name: '张三', contentSafetyConsentVersion: 'forged' }
     await callCloudApi(action, input)
     expect(showModal).toHaveBeenCalledOnce()
+    expect(showModal.mock.calls[0][0].confirmText.length).toBeLessThanOrEqual(4)
+    expect(showModal.mock.calls[0][0].cancelText.length).toBeLessThanOrEqual(4)
     expect(showModal.mock.calls[0][0].content).toMatch(/微信.*内容安全/)
     expect(showModal.mock.calls[0][0].content).toContain('OpenID')
     expect(showModal.mock.calls[0][0].content).toContain('不包含学号')
