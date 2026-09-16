@@ -256,7 +256,7 @@ function createHarness(seed = {}, nowValue = Date.parse('2026-07-27T00:00:00.000
     deleteFile: vi.fn(async ({ fileList }) => ({ fileList: fileList.map((fileID) => ({ fileID, status: 0 })) })),
     openapi: {
       subscribeMessage: { send: subscribeSend },
-      security: { msgSecCheck: vi.fn(async () => ({ result: { suggest: 'pass' } })) },
+      security: { msgSecCheck: vi.fn(async () => ({ errCode: 0, result: { suggest: 'pass' } })) },
     },
   }
   const handler = createApiHandler({
@@ -344,6 +344,192 @@ process.env.SUBSCRIPTION_TEMPLATE_ID = 'template-test'
 process.env.MINIPROGRAM_STATE = 'developer'
 
 describe('backend API handler contract', () => {
+  const moderatedLocation = { category: '官方交卡点', place: '保卫处', area: '一层', detail: '值班窗口' }
+  const moderatedInputs = {
+    saveUserProfile: { name: ' 张三 ', studentNumber: '2023200931', category: '本科生', campusId: 'zhongguancun' },
+    createFoundCard: {
+      name: ' 张三 ',
+      studentNumber: '2023200931',
+      category: '本科生',
+      campusId: 'zhongguancun',
+      pickupLocation: moderatedLocation,
+      storageLocation: moderatedLocation,
+      foundAt: '2026-07-26',
+      privateFeature: ' 蓝色卡套 ',
+    },
+    createLostReport: { lostAt: '2026-07-26', locationDescription: ' 明德楼附近 ', privateFeature: ' 蓝色卡套 ' },
+    transferFoundCardToOfficial: { cardId: 'card', storageLocation: moderatedLocation },
+  }
+
+  it.each(
+    Object.keys(moderatedInputs).flatMap((action) =>
+      ['risky', 'review', 'provider-error', 'missing-api', 'timeout'].map((mode) => [action, mode]),
+    ),
+  )('rejects %s on %s before any persistent mutation or notification', async (action, mode) => {
+    const harness = createHarness({
+      ...actorRecords({
+        user: {
+          openid: 'user-1',
+          profileBindingStatus: action === 'saveUserProfile' ? 'unbound' : 'locked',
+          category: '本科生',
+          campusId: 'zhongguancun',
+          ...identity('2023200931', '张三'),
+        },
+      }),
+      foundCards: { card: { publisherOpenid: 'user-1', status: 'matched', activeClaimId: 'claim' } },
+      claims: { claim: { status: 'awaiting_official_transfer', applicantOpenid: 'owner' } },
+    })
+    const input = { ...moderatedInputs[action] }
+    if (['createFoundCard', 'transferFoundCardToOfficial'].includes(action)) {
+      const uploaded = await harness.handler({
+        action: 'uploadPrivateImage',
+        input: {
+          kind: 'storage_scene',
+          mimeType: 'image/jpeg',
+          contentBase64: Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64'),
+        },
+      })
+      input.storagePhotoUploadToken = uploaded.uploadToken
+    }
+    const before = clone(harness.database.records)
+    const transaction = vi.spyOn(harness.database, 'runTransaction')
+    const check = harness.cloud.openapi.security.msgSecCheck
+    if (mode === 'provider-error') check.mockRejectedValue(new Error('provider detail'))
+    else if (mode === 'missing-api') harness.cloud.openapi.security = {}
+    else if (mode === 'timeout') check.mockImplementation(() => new Promise(() => {}))
+    else check.mockResolvedValue({ errCode: 0, result: { suggest: mode } })
+    if (mode === 'timeout') vi.useFakeTimers()
+    try {
+      const assertion = expect(harness.handler({ action, input })).rejects.toThrow('内容')
+      if (mode === 'timeout') await vi.advanceTimersByTimeAsync(5000)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(harness.database.records).toEqual(before)
+    expect(transaction).not.toHaveBeenCalled()
+    expect(harness.subscribeSend).not.toHaveBeenCalled()
+    expect(check).toHaveBeenCalledTimes(mode === 'missing-api' ? 0 : 1)
+  })
+
+  it.each(Object.keys(moderatedInputs))('never screens unauthenticated %s input', async (action) => {
+    const harness = createHarness()
+    harness.context.openid = ''
+    await expect(harness.handler({ action, input: moderatedInputs[action] })).rejects.toThrow()
+    expect(harness.cloud.openapi.security.msgSecCheck).not.toHaveBeenCalled()
+  })
+
+  it.each(Object.keys(moderatedInputs))('screens exact persisted normalized fields for %s', async (action) => {
+    const harness = createHarness({
+      ...actorRecords({
+        user: {
+          openid: 'user-1',
+          profileBindingStatus: action === 'saveUserProfile' ? 'unbound' : 'locked',
+          category: '本科生',
+          campusId: 'zhongguancun',
+          ...identity('2023200931', '张三'),
+        },
+      }),
+      foundCards: { card: { publisherOpenid: 'user-1', status: 'pending_match' } },
+    })
+    const input = { ...moderatedInputs[action], openid: 'forged-actor' }
+    if (action === 'createFoundCard') input.privateFeature = ` ${'特'.repeat(350)}`
+    await harness.handler({ action, input })
+    const locationText = '官方交卡点\n保卫处\n一层\n值班窗口'
+    const expectedText = {
+      saveUserProfile: '张三',
+      createFoundCard: `张三\n${locationText}\n${locationText}\n${String(input.privateFeature).slice(0, 300)}`,
+      createLostReport: '明德楼附近\n蓝色卡套',
+      transferFoundCardToOfficial: locationText,
+    }[action]
+    expect(harness.cloud.openapi.security.msgSecCheck).toHaveBeenCalledExactlyOnceWith({
+      openid: 'user-1',
+      version: 2,
+      scene: action === 'saveUserProfile' ? 1 : 3,
+      content: expectedText,
+    })
+    if (action === 'createFoundCard') {
+      expect(
+        Object.values(harness.database.records.foundCards).find((card) => card.privateFeature)?.privateFeature,
+      ).toBe(input.privateFeature.slice(0, 300))
+    }
+  })
+
+  it.each(['risky', 'review', 'provider-error', 'missing-api', 'timeout'])(
+    'drops %s thanks without preventing completed handover',
+    async (mode) => {
+      const harness = createHarness({
+        ...actorRecords({
+          user: { openid: 'user-1', ...identity('2023200931', '张三') },
+          finder: { openid: 'finder' },
+        }),
+        foundCards: {
+          card: {
+            publisherOpenid: 'finder',
+            status: 'ready_for_pickup',
+            activeClaimId: 'claim',
+            storageLocation: moderatedLocation,
+            createdAt: new Date('2026-07-26'),
+          },
+        },
+        claims: {
+          claim: {
+            cardId: 'card',
+            status: 'ready_for_pickup',
+            applicantOpenid: 'user-1',
+            publisherOpenid: 'finder',
+            ...identity('2023200931', '张三'),
+          },
+        },
+      })
+      const uploaded = await harness.handler({
+        action: 'uploadPrivateImage',
+        input: {
+          kind: 'handover_proof',
+          mimeType: 'image/jpeg',
+          contentBase64: Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64'),
+        },
+      })
+      const check = harness.cloud.openapi.security.msgSecCheck
+      if (mode === 'provider-error') check.mockRejectedValue(new Error('private provider error'))
+      else if (mode === 'missing-api') harness.cloud.openapi.security = {}
+      else if (mode === 'timeout') check.mockImplementation(() => new Promise(() => {}))
+      else check.mockResolvedValue({ errCode: 0, result: { suggest: mode } })
+      if (mode === 'timeout') vi.useFakeTimers()
+      try {
+        const result = harness.handler({
+          action: 'confirmClaimHandover',
+          input: {
+            claimId: 'claim',
+            proofUploadToken: uploaded.uploadToken,
+            thanksText: '谢谢热心同学',
+            thanksPublic: true,
+          },
+        })
+        if (mode === 'timeout') await vi.advanceTimersByTimeAsync(5000)
+        await expect(result).resolves.toMatchObject({ status: 'returned', thanksAccepted: false })
+        expect(harness.database.records.handovers.claim.thanksText).toBe('')
+        expect(harness.database.records.claims.claim.status).toBe('returned')
+        expect(
+          Object.values(harness.database.records.messages || {}).filter((message) => message.kind === 'thanks'),
+        ).toHaveLength(0)
+      } finally {
+        vi.useRealTimers()
+      }
+    },
+  )
+
+  it('never screens an official transfer by a different publisher', async () => {
+    const harness = createHarness({
+      ...actorRecords({ user: { openid: 'user-1' } }),
+      foundCards: { card: { publisherOpenid: 'other', status: 'matched' } },
+    })
+    await expect(
+      harness.handler({ action: 'transferFoundCardToOfficial', input: moderatedInputs.transferFoundCardToOfficial }),
+    ).rejects.toThrow('只能更新自己')
+    expect(harness.cloud.openapi.security.msgSecCheck).not.toHaveBeenCalled()
+  })
+
   it('exports a declarative policy for every action and denies unknown actions', async () => {
     const { ACTION_HANDLERS, ACTION_POLICIES } = require('../cloudfunctions/api/handler')
     expect(Object.keys(ACTION_POLICIES).sort()).toEqual(Object.keys(ACTION_HANDLERS).sort())

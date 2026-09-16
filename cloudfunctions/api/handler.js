@@ -10,6 +10,7 @@ const {
   reviewReasonsForDecision,
 } = require('./claim')
 const { deletionRequestSummary, planDeletionReview } = require('./deletion')
+const { requireSafeText } = require('./content-safety')
 const {
   assertOwnerMayCloseRecord,
   completeHandoverRecords,
@@ -627,6 +628,7 @@ async function saveUserProfile(openid, input) {
   const category = requireChoice(input.category, CARD_CATEGORIES, '卡片类别')
   const campusId = requireChoice(input.campusId, CAMPUS_IDS, '校区')
   const profileBindingStatus = 'locked'
+  await requireSafeText(cloud, openid, [name], 1)
   await withTransactionRetry(() =>
     db.runTransaction(async (transaction) => {
       const [freshUser, binding] = await Promise.all([
@@ -707,6 +709,16 @@ async function createFoundCard(openid, input) {
   const pickupLocation = requireLocation(input.pickupLocation, '拾取地点')
   const storageLocation = requireLocation(input.storageLocation, '存放地点')
   const storagePhotoReference = privateUploadReference(input.storagePhotoUploadToken, 'storage_scene', true)
+  const category = requireChoice(input.category, CARD_CATEGORIES, '卡片类别')
+  const campusId = requireChoice(input.campusId, CAMPUS_IDS, '校区')
+  const foundAt = requireDate(input.foundAt, '拾取日期')
+  const privateFeature = String(input.privateFeature || '').slice(0, 300)
+  await requireSafeText(cloud, openid, [
+    name,
+    ...Object.values(pickupLocation),
+    ...Object.values(storageLocation),
+    privateFeature,
+  ])
   const cardId = randomBytes(16).toString('hex')
   /** @type {any} */
   let data
@@ -718,13 +730,13 @@ async function createFoundCard(openid, input) {
       nameHmac: nameHmac(name),
       maskedName: maskName(name),
       maskedStudentNumber: maskStudentNumber(number),
-      category: requireChoice(input.category, CARD_CATEGORIES, '卡片类别'),
-      campusId: requireChoice(input.campusId, CAMPUS_IDS, '校区'),
+      category,
+      campusId,
       pickupLocation,
       storageLocation,
       storagePhotoFileId: storagePhotoUpload ? storagePhotoUpload.fileId : '',
-      foundAt: requireDate(input.foundAt, '拾取日期'),
-      privateFeature: String(input.privateFeature || '').slice(0, 300),
+      foundAt,
+      privateFeature,
       custodyStatus:
         isOfficialStorage(storageLocation) || storagePhotoUpload ? 'ready_at_documented_location' : 'finder_custody',
       status: 'pending_match',
@@ -833,6 +845,7 @@ async function createLostReport(openid, input) {
     retentionPolicyVersion: 2,
     createdAt: db.serverDate(),
   }
+  await requireSafeText(cloud, openid, [data.locationDescription, data.privateFeature])
   const created = await db.collection('lostReports').add({ data })
   const matches = await db
     .collection('foundCards')
@@ -1563,6 +1576,10 @@ async function transferFoundCardToOfficial(openid, input) {
   const storageLocation = requireLocation(input.storageLocation, '官方交卡点')
   if (!isOfficialStorage(storageLocation)) throw new Error('请选择官方交卡点')
   const storagePhotoReference = privateUploadReference(input.storagePhotoUploadToken, 'storage_scene', true)
+  const preliminary = await db.collection('foundCards').doc(cardId).get()
+  if (!preliminary.data || preliminary.data.publisherOpenid !== openid) throw new Error('只能更新自己发布的校园卡')
+  if (['returned', 'closed'].includes(preliminary.data.status)) throw new Error('该记录已经结束')
+  await requireSafeText(cloud, openid, Object.values(storageLocation))
   /** @type {any} */
   let claimToNotify = null
   await db.runTransaction(async (transaction) => {
@@ -1631,19 +1648,9 @@ async function screenThanks(openid, value) {
   const local = validatePublicThanks(value)
   if (!local.accepted || !local.text) return local
   try {
-    if (!cloud.openapi || !cloud.openapi.security || !cloud.openapi.security.msgSecCheck) {
-      return { accepted: false, text: '' }
-    }
-    const result = await cloud.openapi.security.msgSecCheck({
-      openid,
-      scene: 2,
-      version: 2,
-      content: local.text,
-    })
-    const suggestion = result && result.result && result.result.suggest
-    return suggestion === 'pass' ? local : { accepted: false, text: '' }
-  } catch (error) {
-    console.error('thanks content check failed', error)
+    await requireSafeText(cloud, openid, [local.text], 2)
+    return local
+  } catch {
     return { accepted: false, text: '' }
   }
 }
