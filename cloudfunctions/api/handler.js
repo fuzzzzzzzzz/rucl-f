@@ -2851,6 +2851,14 @@ async function authorizeAction(policy, openid) {
   return assertActor(policy.actor, user)
 }
 
+const CONTENT_SAFETY_CONSENT_VERSION = '2026-09-16-text-v1'
+const CONTENT_SAFETY_CONSENT_ACTIONS = new Set([
+  'saveUserProfile',
+  'createFoundCard',
+  'createLostReport',
+  'transferFoundCardToOfficial',
+])
+
 function createApiHandler(dependencies) {
   const runtime = configureRuntime(dependencies)
   return (event = {}) =>
@@ -2862,6 +2870,13 @@ function createApiHandler(dependencies) {
       const openid = requireOpenid(cloud.getWXContext()?.OPENID)
       const input = event.input && typeof event.input === 'object' ? event.input : {}
       await authorizeAction(policy, openid)
+      // Protocol acknowledgment only: old clients must not enter expanded moderation silently.
+      if (
+        CONTENT_SAFETY_CONSENT_ACTIONS.has(action) &&
+        input.contentSafetyConsentVersion !== CONTENT_SAFETY_CONSENT_VERSION
+      ) {
+        throw new Error('请更新小程序并明确同意本次文字内容安全检查后重试')
+      }
       return handler(openid, input)
     })
 }

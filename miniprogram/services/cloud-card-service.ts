@@ -19,6 +19,7 @@ import type {
   UserProfileInput,
 } from '../shared/models'
 import { updateCurrentAccountSummary, waitForCloudReady } from '../shared/startup-session'
+import { requestContentSafetyConsent } from '../shared/content-safety-consent'
 import type { CardStatus } from '../shared/workflow'
 
 interface CloudAssetTokens {
@@ -174,8 +175,10 @@ export function friendlyCloudErrorMessage(error: unknown): string {
 
 export async function callCloudApi<T>(action: string, input: Record<string, unknown> = {}): Promise<T> {
   await waitForCloudReady()
+  const consentVersion = await requestContentSafetyConsent(action)
+  const requestInput = consentVersion ? { ...input, contentSafetyConsentVersion: consentVersion } : input
   try {
-    const response = await wx.cloud.callFunction({ name: 'api', data: { action, input } })
+    const response = await wx.cloud.callFunction({ name: 'api', data: { action, input: requestInput } })
     return response.result as T
   } catch (error) {
     throw new Error(friendlyCloudErrorMessage(error))

@@ -259,13 +259,16 @@ function createHarness(seed = {}, nowValue = Date.parse('2026-07-27T00:00:00.000
       security: { msgSecCheck: vi.fn(async () => ({ errCode: 0, result: { suggest: 'pass' } })) },
     },
   }
-  const handler = createApiHandler({
+  const rawHandler = createApiHandler({
     cloud,
     database,
     now: () => context.now,
     randomBytes: (length) => Buffer.alloc(length, 7),
   })
-  return { cloud, context, database, handler, subscribeSend }
+  // Most fixtures represent the current client; protocol rejection tests use rawHandler.
+  const handler = (event) =>
+    rawHandler({ ...event, input: { contentSafetyConsentVersion: '2026-09-16-text-v1', ...event.input } })
+  return { cloud, context, database, handler, rawHandler, subscribeSend }
 }
 
 function identity(studentNumber, name) {
@@ -361,11 +364,66 @@ describe('backend API handler contract', () => {
     transferFoundCardToOfficial: { cardId: 'card', storageLocation: moderatedLocation },
   }
 
+  it('performs actor authorization before checking the consent marker', async () => {
+    const harness = createHarness(actorRecords({ user: { openid: 'user-1', creditStatus: 'blocked' } }))
+    await expect(
+      harness.rawHandler({ action: 'createFoundCard', input: moderatedInputs.createFoundCard }),
+    ).rejects.toThrow('账号当前不可操作')
+    expect(harness.cloud.openapi.security.msgSecCheck).not.toHaveBeenCalled()
+  })
+
+  it('allows account bootstrap but rejects an old client before changing business records', async () => {
+    const harness = createHarness()
+    await expect(
+      harness.rawHandler({ action: 'saveUserProfile', input: moderatedInputs.saveUserProfile }),
+    ).rejects.toThrow('同意')
+    expect(Object.values(harness.database.records.users || {})).toHaveLength(1)
+    expect(Object.values(harness.database.records.users)[0].profileBindingStatus).toBe('unbound')
+    expect(harness.cloud.openapi.security.msgSecCheck).not.toHaveBeenCalled()
+    for (const collection of ['identityBindings', 'foundCards', 'lostReports', 'messages', 'uploadedFiles']) {
+      expect(Object.values(harness.database.records[collection] || {})).toHaveLength(0)
+    }
+  })
+
+  it.each(Object.keys(moderatedInputs).flatMap((action) => [undefined, 'outdated'].map((marker) => [action, marker])))(
+    'rejects %s with consent marker %s before moderation or business writes',
+    async (action, marker) => {
+      const harness = createHarness({
+        ...actorRecords({
+          user: { openid: 'user-1', category: '本科生', campusId: 'zhongguancun', ...identity('2023200931', '张三') },
+        }),
+        foundCards: { card: { publisherOpenid: 'user-1', status: 'pending_match' } },
+      })
+      const uploaded = await harness.handler({
+        action: 'uploadPrivateImage',
+        input: {
+          kind: 'storage_scene',
+          mimeType: 'image/jpeg',
+          contentBase64: Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64'),
+        },
+      })
+      const before = clone(harness.database.records)
+      await expect(
+        harness.rawHandler({
+          action,
+          input: {
+            ...moderatedInputs[action],
+            storagePhotoUploadToken: uploaded.uploadToken,
+            contentSafetyConsentVersion: marker,
+          },
+        }),
+      ).rejects.toThrow('同意')
+      expect(harness.cloud.openapi.security.msgSecCheck).not.toHaveBeenCalled()
+      expect(harness.database.records).toEqual(before)
+      expect(harness.subscribeSend).not.toHaveBeenCalled()
+    },
+  )
+
   it.each(
     Object.keys(moderatedInputs).flatMap((action) =>
       ['risky', 'review', 'provider-error', 'missing-api', 'timeout'].map((mode) => [action, mode]),
     ),
-  )('rejects %s on %s before any persistent mutation or notification', async (action, mode) => {
+  )('rejects %s on %s before changing business records or sending notifications', async (action, mode) => {
     const harness = createHarness({
       ...actorRecords({
         user: {
