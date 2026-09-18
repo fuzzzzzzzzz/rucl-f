@@ -14,6 +14,7 @@ export default defineConfig({
         'cloudfunctions/**/notification.js',
         'cloudfunctions/api/{auth,claim,deletion,handler}.js',
         'cloudfunctions/api/content-safety.js',
+        'cloudfunctions/api/recent-returns.js',
         'cloudfunctions/deletionWorker/handler.js',
       ],
       exclude: ['miniprogram/shared/models.ts', 'cloudfunctions/**/node_modules/**'],
@@ -34,7 +35,7 @@ export default defineConfig({
           branches: 75,
           statements: 80,
         },
-        'cloudfunctions/api/{auth,claim,deletion}.js': {
+        'cloudfunctions/api/{auth,claim,deletion,recent-returns}.js': {
           lines: 90,
           functions: 90,
           statements: 90,

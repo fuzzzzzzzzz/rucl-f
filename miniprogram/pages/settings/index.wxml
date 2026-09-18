@@ -10,6 +10,16 @@
     <view class="notification-tip">微信要求用户主动允许每次订阅；未允许或发送失败时，站内消息仍会保留。</view>
   </view>
 
+  <view class="neo-card recognition-settings">
+    <view class="section-title">暖心归还展示<text class="en">[ VOLUNTARY RECOGNITION ]</text></view><view class="rule" />
+    <view class="notification-tip">默认匿名。展示仅针对你作为拾卡者完成的有效交还；选择姓名展示仅适用于本次同意后的交还，可随时撤回。</view>
+    <view wx:if="{{returnRecognitionError}}" class="notification-tip">{{returnRecognitionError}}<button disabled="{{!!busyKey}}" bindtap="refreshReturnRecognition">重新读取</button></view>
+    <view wx:if="{{!returnRecognitionKnown}}" class="notification-tip">当前展示方式尚未确认，请以成功读取或保存后的结果为准。</view>
+    <button class="recognition-option {{returnRecognitionKnown && returnRecognitionMode === 'anonymous' ? 'is-selected' : ''}}" data-mode="anonymous" disabled="{{returnRecognitionLoading || !!busyKey}}" bindtap="changeReturnRecognition">{{returnRecognitionKnown && returnRecognitionMode === 'anonymous' ? '当前：' : ''}}匿名 · 一位热心同学</button>
+    <button class="recognition-option {{returnRecognitionKnown && returnRecognitionMode === 'masked' ? 'is-selected' : ''}}" data-mode="masked" disabled="{{returnRecognitionLoading || !!busyKey}}" bindtap="changeReturnRecognition">{{returnRecognitionKnown && returnRecognitionMode === 'masked' ? '当前：' : ''}}部分姓名与部分学号</button>
+    <button class="recognition-option {{returnRecognitionKnown && returnRecognitionMode === 'full' ? 'is-selected' : ''}}" data-mode="full" disabled="{{returnRecognitionLoading || !!busyKey}}" bindtap="changeReturnRecognition">{{returnRecognitionKnown && returnRecognitionMode === 'full' ? '当前：' : ''}}完整姓名与部分学号</button>
+    <view class="notification-tip">完整姓名需要单独确认并输入已绑定姓名核对。撤回后新读取立即匿名，但无法删除他人已保存的截图。</view>
+  </view>
   <button class="menu" disabled="{{!!busyKey}}" bindtap="goProfileEdit">申请修改姓名和学号</button>
   <button class="menu" disabled="{{!!busyKey}}" bindtap="goNotice">注意事项与使用规则</button>
   <button class="menu" disabled="{{!!busyKey}}" bindtap="goPrivacy">信息收集与保存说明</button>

@@ -1,5 +1,8 @@
 import type {
   AccountProfileSummary,
+  RecentReturn,
+  ReturnRecognitionInput,
+  ReturnRecognitionPreference,
   AdminClaimReviewItem,
   AdminIdentityReviewItem,
   AdminOperationSummary,
@@ -24,6 +27,45 @@ import type { CardStatus } from '../shared/workflow'
 
 interface CloudAssetTokens {
   storagePhotoUploadToken?: string
+}
+
+function normalizeReturnDate(value: unknown): string {
+  let date: Date
+  if (value instanceof Date) date = value
+  else if (typeof value === 'string') date = new Date(value)
+  else if (value && typeof value === 'object' && 'milliseconds' in value && typeof value.milliseconds === 'number')
+    date = new Date(value.milliseconds)
+  else if (value && typeof value === 'object' && 'seconds' in value && typeof value.seconds === 'number')
+    date = new Date(value.seconds * 1000)
+  else throw new Error('归还记录时间格式无效')
+  if (!Number.isFinite(date.getTime())) throw new Error('归还记录时间格式无效')
+  return date.toISOString()
+}
+
+export async function listCloudRecentReturns(): Promise<RecentReturn[]> {
+  const rows =
+    await callCloudApi<Array<Omit<RecentReturn, 'completedAt'> & { completedAt: unknown }>>('listRecentReturns')
+  if (!Array.isArray(rows)) throw new Error('归还记录暂不可用')
+  return rows.slice(0, 5).map((row) => ({
+    id: row.id,
+    displayName: row.displayName,
+    maskedStudentNumber: row.maskedStudentNumber,
+    completedAt: normalizeReturnDate(row.completedAt),
+  }))
+}
+
+export function getCloudReturnRecognitionPreference(): Promise<ReturnRecognitionPreference> {
+  return callCloudApi('getReturnRecognitionPreference')
+}
+
+export function updateCloudReturnRecognitionPreference(
+  input: ReturnRecognitionInput,
+): Promise<ReturnRecognitionPreference> {
+  return callCloudApi('updateReturnRecognitionPreference', {
+    mode: input.mode,
+    consentVersion: input.consentVersion,
+    ...(input.mode === 'full' ? { fullNameConsent: input.fullNameConsent, name: input.name } : {}),
+  })
 }
 
 interface PrivateUploadResult {

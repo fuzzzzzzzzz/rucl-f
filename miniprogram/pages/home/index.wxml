@@ -4,11 +4,6 @@
       <text class="brand-name">佧了</text>
       <text class="en">CARDIO</text>
     </view>
-    <text class="brand-tagline">人和卡重新找到彼此，这件事就此了结。</text>
-  </view>
-  <view class="non-official-notice" bindtap="goNotice">
-    <b>学生个人公益项目 · 非中国人民大学官方平台</b>
-    <text>点击查看运营者信息、使用规则和重要注意事项</text>
   </view>
   <view wx:if="{{cloudError}}" class="cloud-error"><view><b>云端服务暂不可用</b><text>{{cloudError}}</text><text>当前不会展示或写入任何替代业务数据。</text></view><button loading="{{busyKey === 'retry'}}" disabled="{{!!busyKey}}" bindtap="retryCloud">重试</button></view>
   <view class="hero-grid">
@@ -18,7 +13,7 @@
   <view class="neo-card guide">
     <view class="section-heading"><image class="section-icon" src="/assets/icons/info.png" mode="aspectFit" /><view class="section-title">使用说明<text class="en">[ HOW IT WORKS ]</text></view></view><view class="rule" />
     <view class="guide-row"><text class="guide-number number">1</text><text>系统会核对你填写的姓名和学号；</text></view>
-    <view class="guide-row"><text class="guide-number number">2</text><text>其他人只能看到隐藏后的姓名和学号；</text></view>
+    <view class="guide-row"><text class="guide-number number">2</text><text>失物信息中的姓名和学号会脱敏显示；</text></view>
     <view class="guide-row"><text class="guide-number number">3</text><text>姓名学号一致，且有存放照片或卡片已在官方地点后，才会显示存放地点。</text></view>
     <view class="profile-status" bindtap="goProfileEdit">
       <view class="profile-status-copy">
@@ -28,12 +23,27 @@
       <image class="profile-status-arrow" src="/assets/icons/chevron-right.png" mode="aspectFit" />
     </view>
   </view>
+  <view class="neo-card recent-returns">
+    <view class="section-title">近期暖心归还<text class="en">[ RECENT RETURNS ]</text></view>
+    <view class="rule" />
+    <view wx:if="{{recentReturnsLoading}}" class="return-state">正在读取暖心归还…</view>
+    <view wx:elif="{{recentReturnsError}}" class="return-state"><text>{{recentReturnsError}}</text><button class="return-retry" bindtap="refreshRecentReturns">重试</button></view>
+    <view wx:elif="{{!recentReturns.length}}" class="return-state">近30天暂无可展示的归还记录，期待下一份暖心善意。</view>
+    <view wx:for="{{recentReturns}}" wx:key="id" class="return-item">
+      <view class="return-line"><text class="return-badge">{{item.badge}}</text><text>{{item.sentence}}</text></view>
+      <view class="return-caption">{{item.caption}}</view>
+    </view>
+    <view class="return-privacy">仅展示近30天内最近5次有效交还，不作排名。拾卡者默认匿名，可在账号设置自愿选择展示方式。</view>
+  </view>
   <view class="neo-card brand-poster">
     <view class="brand-poster-mark">佧</view>
     <view class="brand-poster-copy">
       <b>佧了</b>
       <text class="en">CARDIO</text>
-      <text>人和卡重新找到彼此</text>
     </view>
+  </view>
+  <view class="non-official-notice" bindtap="goNotice">
+    <b>学生个人公益项目 · 非中国人民大学官方平台</b>
+    <text>点击查看运营者信息、使用规则和重要注意事项</text>
   </view>
 </view>

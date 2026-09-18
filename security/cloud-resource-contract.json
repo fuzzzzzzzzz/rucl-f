@@ -36,6 +36,17 @@
     },
     "indexes": [
       {
+        "name": "handovers_recent_returns",
+        "collection": "handovers",
+        "keys": [
+          { "field": "valid", "direction": 1 },
+          { "field": "completedAt", "direction": -1 }
+        ],
+        "unique": false,
+        "phase": "preflight",
+        "purpose": "Recent valid return feed, descending completion time within thirty days"
+      },
+      {
         "name": "users_openid_unique",
         "collection": "users",
         "keys": [{ "field": "openid", "direction": 1 }],

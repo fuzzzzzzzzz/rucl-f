@@ -12,6 +12,16 @@ const {
 const { deletionRequestSummary, planDeletionReview } = require('./deletion')
 const { requireSafeText } = require('./content-safety')
 const {
+  RETURN_CONSENT_VERSION,
+  RETURN_WINDOW_MS,
+  canRecognizeUser,
+  recognitionMode,
+  validateRecognitionInput,
+  isSafePublicName,
+  isCompletedReturn,
+  projectRecentReturn,
+} = require('./recent-returns')
+const {
   assertOwnerMayCloseRecord,
   completeHandoverRecords,
   decodePrivateImagePayload,
@@ -1150,6 +1160,7 @@ async function reviewIdentityProfile(openid, input) {
             nameHmac: _.remove(),
             maskedName: _.remove(),
             maskedStudentNumber: _.remove(),
+            returnRecognitionPreference: _.remove(),
             profileBindingStatus: 'unbound',
             updatedAt: db.serverDate(),
           },
@@ -1987,6 +1998,74 @@ async function reportRecord(openid, input) {
   return { id: reportId, status: 'pending', idempotent }
 }
 
+async function getReturnRecognitionPreference(openid) {
+  const user = await currentUser(openid)
+  return { mode: recognitionMode(user && user.returnRecognitionPreference) }
+}
+
+async function updateReturnRecognitionPreference(openid, input) {
+  const mode = validateRecognitionInput(input)
+  const user = await currentUser(openid)
+  if (!user) throw new Error('请先登录')
+  await withTransactionRetry(() =>
+    db.runTransaction(async (transaction) => {
+      const fresh = await transaction.collection('users').doc(user._id).get()
+      if (!fresh.data || fresh.data.openid !== openid) throw new Error('账号状态异常，请重新登录')
+      if (mode !== 'anonymous' && !canRecognizeUser(fresh.data)) throw new Error('请先完成个人信息绑定')
+      const preference = { mode, consentVersion: RETURN_CONSENT_VERSION, consentedAt: new Date(now()) }
+      if (mode === 'full') {
+        const publicName = normalizeIdentityName(requireText(input.name, '姓名', 20))
+        if (!isSafePublicName(publicName)) throw new Error('姓名不能包含完整学号，请选择部分姓名展示')
+        if (nameHmac(publicName) !== fresh.data.nameHmac) throw new Error('姓名与已绑定资料不一致')
+        Object.assign(preference, { fullNameConsent: true, publicName })
+      }
+      // Replace the document inside this transaction: nested update merges must not retain a withdrawn publicName.
+      const updatedUser = { ...fresh.data, returnRecognitionPreference: preference }
+      delete updatedUser._id
+      await transaction.collection('users').doc(user._id).set({ data: updatedUser })
+    }),
+  )
+  return { mode }
+}
+
+async function listRecentReturns() {
+  const nowMs = now()
+  const secret = process.env.STUDENT_HMAC_SECRET
+  if (!secret || secret.length < 32) throw new Error('服务端安全配置缺失')
+  const result = []
+  const pageSize = 50
+  for (let offset = 0; result.length < 5; offset += pageSize) {
+    const page = await db
+      .collection('handovers')
+      .where({ valid: true, completedAt: _.gte(new Date(nowMs - RETURN_WINDOW_MS)) })
+      .orderBy('completedAt', 'desc')
+      .skip(offset)
+      .limit(pageSize)
+      .get()
+    if (!page.data.length) break
+    const [claims, cards, users] = await Promise.all([
+      documentsByIds(
+        'claims',
+        page.data.map((row) => row.claimId),
+      ),
+      documentsByIds(
+        'foundCards',
+        page.data.map((row) => row.cardId),
+      ),
+      usersByOpenid(page.data.map((row) => row.publisherOpenid)),
+    ])
+    for (const row of page.data) {
+      if (!isCompletedReturn(row, claims.get(row.claimId), cards.get(row.cardId), nowMs)) continue
+      const id = crypto.createHmac('sha256', secret).update(`recent-return-public:${row._id}`).digest('hex')
+      result.push(projectRecentReturn(row, users.get(row.publisherOpenid), id, nameHmac))
+      if (result.length === 5) break
+    }
+    if (page.data.length < pageSize) break
+    if (offset + pageSize >= 1000 && result.length < 5) throw new Error('归还记录暂不可用，请稍后重试')
+  }
+  return result
+}
+
 async function getAccountSettings(openid) {
   const user = await currentUser(openid)
   if (!user) throw new Error('账号不存在，请重新登录')
@@ -2785,6 +2864,9 @@ const ACTION_HANDLERS = Object.freeze({
   closeOwnRecord,
   reportRecord,
   getAccountSettings: (openid) => getAccountSettings(openid),
+  listRecentReturns: () => listRecentReturns(),
+  getReturnRecognitionPreference,
+  updateReturnRecognitionPreference,
   updateNotificationPreferences,
   submitAccountRequest,
   listMyAchievements: (openid) => listMyAchievements(openid),
@@ -2830,6 +2912,9 @@ const ACTION_POLICIES = Object.freeze({
   closeOwnRecord: { actor: 'active' },
   reportRecord: { actor: 'active' },
   getAccountSettings: { actor: 'authenticated' },
+  listRecentReturns: { actor: 'active' },
+  getReturnRecognitionPreference: { actor: 'authenticated' },
+  updateReturnRecognitionPreference: { actor: 'authenticated' },
   updateNotificationPreferences: { actor: 'active' },
   submitAccountRequest: { actor: 'active' },
   listMyAchievements: { actor: 'active' },

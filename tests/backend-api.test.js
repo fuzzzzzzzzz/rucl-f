@@ -279,6 +279,244 @@ function identity(studentNumber, name) {
   }
 }
 
+describe('recent return recognition API', () => {
+  const now = Date.parse('2026-09-17T04:36:00Z')
+  const version = '2026-09-17-return-v1'
+  function fixture() {
+    const seed = actorRecords({
+      finder: {
+        openid: 'user-1',
+        maskedName: '张*',
+        maskedStudentNumber: '2023****31',
+        ...identity('2023200931', '张三'),
+      },
+      owner: { openid: 'owner-1' },
+    })
+    seed.handovers = {}
+    seed.claims = {}
+    seed.foundCards = {}
+    function add(id, completedAt = now - 1000, extra = {}) {
+      seed.handovers[id] = {
+        claimId: id,
+        cardId: `card-${id}`,
+        publisherOpenid: 'user-1',
+        applicantOpenid: 'owner-1',
+        completedBy: 'owner',
+        valid: true,
+        riskStatus: 'normal',
+        completedAt: new Date(completedAt),
+        proofFileId: 'secret-photo',
+        ...extra,
+      }
+      seed.claims[id] = {
+        status: 'returned',
+        cardId: `card-${id}`,
+        publisherOpenid: 'user-1',
+        applicantOpenid: 'owner-1',
+      }
+      seed.foundCards[`card-${id}`] = { status: 'returned', activeClaimId: id, publisherOpenid: 'user-1' }
+    }
+    add('handover-1')
+    return { seed, add }
+  }
+  it('defaults to anonymous and exposes exactly the public schema without business identifiers', async () => {
+    const { seed } = fixture()
+    const harness = createHarness(seed, now)
+    expect(await harness.handler({ action: 'getReturnRecognitionPreference', input: { openid: 'owner-1' } })).toEqual({
+      mode: 'anonymous',
+    })
+    const rows = await harness.handler({ action: 'listRecentReturns' })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toEqual({
+      id: expect.any(String),
+      displayName: '一位热心同学',
+      maskedStudentNumber: '',
+      completedAt: new Date(now - 1000).toISOString(),
+    })
+    expect(rows[0].id).not.toBe('handover-1')
+    for (const secret of ['user-1', 'owner-1', 'card-handover', 'secret-photo', '张三', '2023200931'])
+      expect(JSON.stringify(rows)).not.toContain(secret)
+  })
+  it.each(['2023200931', '张2023200931', '２０２３２００９３１', '张2023-20-0931'])(
+    'never publishes a student number through the full-name field: %s',
+    async (name) => {
+      const { seed } = fixture()
+      Object.assign(seed.users.finder, identity('2023200931', name))
+      const harness = createHarness(seed, now)
+      await expect(
+        harness.handler({
+          action: 'updateReturnRecognitionPreference',
+          input: {
+            mode: 'full',
+            consentVersion: version,
+            fullNameConsent: true,
+            name,
+          },
+        }),
+      ).rejects.toThrow('姓名不能包含完整学号')
+      expect(harness.database.records.users.finder.returnRecognitionPreference).toBeUndefined()
+    },
+  )
+  it('requires authentication for all recognition actions', async () => {
+    const harness = createHarness({}, now)
+    harness.context.openid = ''
+    for (const action of ['getReturnRecognitionPreference', 'updateReturnRecognitionPreference', 'listRecentReturns']) {
+      await expect(harness.handler({ action, input: { mode: 'anonymous' } })).rejects.toThrow('请先登录')
+    }
+  })
+  it('validates grants and full acknowledgment, writes only own preference, and allows unversioned withdrawal', async () => {
+    const { seed } = fixture()
+    const harness = createHarness(seed, now)
+    for (const input of [
+      { mode: 'other', consentVersion: version },
+      { mode: 'masked' },
+      { mode: 'full', consentVersion: version },
+      { mode: 'full', consentVersion: version, fullNameConsent: 'true' },
+    ]) {
+      await expect(harness.handler({ action: 'updateReturnRecognitionPreference', input })).rejects.toThrow()
+    }
+    expect(harness.database.records.users.finder.returnRecognitionPreference).toBeUndefined()
+    await expect(
+      harness.handler({
+        action: 'updateReturnRecognitionPreference',
+        input: { mode: 'full', consentVersion: version, fullNameConsent: true, name: '恶意姓名' },
+      }),
+    ).rejects.toThrow()
+    expect(
+      await harness.handler({
+        action: 'updateReturnRecognitionPreference',
+        input: {
+          mode: 'full',
+          consentVersion: version,
+          fullNameConsent: true,
+          openid: 'owner-1',
+          name: '张三',
+          studentNumber: '2023999999',
+        },
+      }),
+    ).toEqual({ mode: 'full' })
+    expect(harness.database.records.users.owner.returnRecognitionPreference).toBeUndefined()
+    expect(await harness.handler({ action: 'getReturnRecognitionPreference' })).toEqual({ mode: 'full' })
+    expect(
+      await harness.handler({ action: 'updateReturnRecognitionPreference', input: { mode: 'anonymous' } }),
+    ).toEqual({ mode: 'anonymous' })
+    expect(harness.database.records.users.finder.returnRecognitionPreference.publicName).toBeUndefined()
+  })
+  it('applies each consent prospectively, re-resolves preference per fetch, and never trusts malformed mask fields', async () => {
+    const { seed, add } = fixture()
+    add('new', now + 1000)
+    const harness = createHarness(seed, now)
+    await harness.handler({
+      action: 'updateReturnRecognitionPreference',
+      input: { mode: 'masked', consentVersion: version },
+    })
+    harness.context.now += 2000
+    let rows = await harness.handler({ action: 'listRecentReturns' })
+    expect(rows.map((row) => row.displayName)).toEqual(['张同学', '一位热心同学'])
+    expect(rows[0].maskedStudentNumber).toBe('2023****31')
+    await harness.handler({
+      action: 'updateReturnRecognitionPreference',
+      input: { mode: 'full', consentVersion: version, fullNameConsent: true, name: '张三' },
+    })
+    rows = await harness.handler({ action: 'listRecentReturns' })
+    expect(rows.every((row) => row.displayName === '一位热心同学')).toBe(true)
+    harness.database.records.handovers.new.completedAt = new Date(now + 3000)
+    harness.context.now += 2000
+    rows = await harness.handler({ action: 'listRecentReturns' })
+    expect(rows[0].displayName).toBe('张三')
+    harness.database.records.users.finder.maskedStudentNumber = '2023200931'
+    rows = await harness.handler({ action: 'listRecentReturns' })
+    expect(rows[0].maskedStudentNumber).toBe('')
+    await harness.handler({ action: 'updateReturnRecognitionPreference', input: { mode: 'anonymous' } })
+    expect(
+      (await harness.handler({ action: 'listRecentReturns' })).every(
+        (row) => row.displayName === '一位热心同学' && !row.maskedStudentNumber,
+      ),
+    ).toBe(true)
+  })
+  it('excludes invalid, review, future, old, official-transfer-only and mismatched records; returns newest five', async () => {
+    const { seed, add } = fixture()
+    for (let index = 0; index < 8; index += 1) add(`valid-${index}`, now - (index + 2) * 1000)
+    add('review', now, { riskStatus: 'review' })
+    add('invalid', now, { valid: false })
+    add('unknown-risk', now, { riskStatus: 'unknown' })
+    add('official-transfer', now, { completedBy: 'official_point' })
+    add('future', now + 1)
+    add('old', now - 30 * 86400000 - 1)
+    add('claim-not-returned', now)
+    seed.claims['claim-not-returned'].status = 'ready_for_pickup'
+    add('card-not-returned', now)
+    seed.foundCards['card-card-not-returned'].status = 'awaiting_official_transfer'
+    add('mismatch', now)
+    seed.claims.mismatch.publisherOpenid = 'other'
+    add('card-mismatch', now)
+    seed.foundCards['card-card-mismatch'].publisherOpenid = 'other'
+    const rows = await createHarness(seed, now).handler({
+      action: 'listRecentReturns',
+      input: { limit: 999, since: '2000-01-01' },
+    })
+    expect(rows).toHaveLength(5)
+    expect(rows.map((row) => row.completedAt)).toEqual(
+      [1, 2, 3, 4, 5].map((seconds) => new Date(now - seconds * 1000).toISOString()),
+    )
+  })
+  it('continues past a full page of non-public records and reports a bounded scan limit', async () => {
+    const { seed, add } = fixture()
+    for (let index = 0; index < 55; index += 1) add(`review-${index}`, now, { riskStatus: 'review' })
+    const harness = createHarness(seed, now)
+    expect(await harness.handler({ action: 'listRecentReturns' })).toHaveLength(1)
+    for (let index = 55; index < 1000; index += 1) {
+      harness.database.records.handovers[`review-${index}`] = { ...seed.handovers['review-0'] }
+    }
+    await expect(harness.handler({ action: 'listRecentReturns' })).rejects.toThrow('归还记录暂不可用')
+  })
+  it('clears full names on masked mode and approved identity corrections', async () => {
+    const { seed } = fixture()
+    Object.assign(seed, {
+      identityCorrectionRequests: { correction: { userId: 'finder', applicantOpenid: 'user-1', status: 'pending' } },
+    })
+    seed.users.owner.role = 'admin'
+    const harness = createHarness(seed, now)
+    const grant = { mode: 'full', consentVersion: version, fullNameConsent: true, name: '张三' }
+    await harness.handler({ action: 'updateReturnRecognitionPreference', input: grant })
+    await harness.handler({
+      action: 'updateReturnRecognitionPreference',
+      input: { mode: 'masked', consentVersion: version },
+    })
+    expect(harness.database.records.users.finder.returnRecognitionPreference.publicName).toBeUndefined()
+    expect(harness.database.records.users.finder.nameHmac).toBe(seed.users.finder.nameHmac)
+    await harness.handler({ action: 'updateReturnRecognitionPreference', input: grant })
+    harness.context.openid = 'owner-1'
+    await harness.handler({ action: 'reviewIdentityProfile', input: { requestId: 'correction', decision: 'approved' } })
+    expect(harness.database.records.users.finder.returnRecognitionPreference).toBeUndefined()
+  })
+  it.each([
+    { creditStatus: 'blocked' },
+    { accountState: 'deleting' },
+    { accountState: 'deleted' },
+    { profileBindingStatus: 'correction_pending' },
+    { profileBindingStatus: 'unbound' },
+  ])('hides finder identity for restricted users %j', async (restriction) => {
+    const { seed } = fixture()
+    Object.assign(seed.users.finder, {
+      returnRecognitionPreference: {
+        mode: 'full',
+        consentVersion: version,
+        fullNameConsent: true,
+        consentedAt: new Date(now - 10000),
+        publicName: '张三',
+      },
+    })
+    const harness = createHarness(seed, now)
+    harness.context.openid = 'owner-1'
+    expect((await harness.handler({ action: 'listRecentReturns' }))[0].displayName).toBe('张三')
+    Object.assign(harness.database.records.users.finder, restriction)
+    const rows = await harness.handler({ action: 'listRecentReturns' })
+    expect(rows[0].displayName).toBe('一位热心同学')
+    expect(rows[0].maskedStudentNumber).toBe('')
+  })
+})
+
 it('queues failed-upload cleanup when rollback deletion reports per-file failure', async () => {
   const harness = createHarness(actorRecords({ owner: { openid: 'user-1' } }))
   const collection = harness.database.collection.bind(harness.database)

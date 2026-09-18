@@ -11,14 +11,6 @@
   font-size: 52rpx;
   letter-spacing: 5rpx;
 }
-.brand-tagline {
-  display: block;
-  margin-top: 10rpx;
-  color: #efede8;
-  font-size: 22rpx;
-  font-weight: 700;
-  letter-spacing: 1rpx;
-}
 
 .non-official-notice {
   margin: 24rpx 0 30rpx;
@@ -205,4 +197,52 @@
   border: 3rpx solid #191919;
   background: #ffec00;
   font-weight: 900;
+}
+.recent-returns {
+  background: #fffdf4;
+}
+.return-item {
+  padding: 22rpx 0;
+  border-bottom: 2rpx dashed #d1cbbf;
+}
+.return-item:last-of-type {
+  border-bottom: 0;
+}
+.return-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  font-size: 25rpx;
+  font-weight: 700;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.return-badge {
+  flex: 0 0 38rpx;
+  font-size: 31rpx;
+}
+.return-caption {
+  margin: 8rpx 0 0 50rpx;
+  color: #625e58;
+  font-size: 23rpx;
+  line-height: 1.7;
+}
+.return-state {
+  font-size: 25rpx;
+  line-height: 1.8;
+  color: #625e58;
+}
+.return-privacy {
+  margin-top: 22rpx;
+  color: #625e58;
+  font-size: 21rpx;
+  line-height: 1.7;
+}
+.return-retry {
+  margin: 16rpx 0 0;
+  width: 140rpx;
+  border: 3rpx solid #191919;
+  border-radius: 0;
+  background: #ffec00;
+  font-size: 24rpx;
 }

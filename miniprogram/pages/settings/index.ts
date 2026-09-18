@@ -1,17 +1,21 @@
 import { APP_VERSION } from '../../config/version'
 import {
   getCloudAccountSettings,
+  getCloudReturnRecognitionPreference,
+  updateCloudReturnRecognitionPreference,
   reportCloudRecord,
   submitCloudAccountRequest,
   updateCloudNotificationPreferences,
 } from '../../services/cloud-card-service'
 import { createLatestRequestGate, runExclusiveAction, runOptimisticUpdate } from '../../shared/async-control'
 import { canSubmitDeletionRequest } from '../../shared/client-forms'
-import type { AccountSettings, NotificationPreferences } from '../../shared/models'
+import type { AccountSettings, NotificationPreferences, ReturnRecognitionMode } from '../../shared/models'
+import { requestReturnRecognitionConsent } from '../../shared/recent-returns'
 import { clearLegacyClientStorage } from '../../shared/startup-session'
 import { requestWechatNotification } from '../../shared/subscription'
 
 const settingsRequests = createLatestRequestGate()
+const recognitionRequests = createLatestRequestGate()
 type DeletionRequestStatus = NonNullable<AccountSettings['deletionRequest']>['status']
 const notificationPreferenceKeys: Array<keyof NotificationPreferences> = [
   'matchFound',
@@ -59,6 +63,10 @@ Page({
   data: {
     loading: true,
     busyKey: '',
+    returnRecognitionMode: 'anonymous' as ReturnRecognitionMode,
+    returnRecognitionKnown: false,
+    returnRecognitionLoading: true,
+    returnRecognitionError: '',
     preferences: {
       matchFound: true,
       reviewResult: true,
@@ -71,6 +79,7 @@ Page({
     deletionRequestStatus: null as DeletionRequestStatus | null,
   },
   async onLoad() {
+    const recognition = this.refreshReturnRecognition()
     const generation = settingsRequests.begin()
     try {
       const settings = await getCloudAccountSettings()
@@ -92,10 +101,45 @@ Page({
       }
     } finally {
       if (settingsRequests.isCurrent(generation)) this.setData({ loading: false })
+      await recognition
     }
   },
   onUnload() {
     settingsRequests.invalidate()
+    recognitionRequests.invalidate()
+  },
+  async refreshReturnRecognition() {
+    const generation = recognitionRequests.begin()
+    this.setData({ returnRecognitionLoading: true, returnRecognitionKnown: false, returnRecognitionError: '' })
+    try {
+      const preference = await getCloudReturnRecognitionPreference()
+      if (recognitionRequests.isCurrent(generation))
+        this.setData({ returnRecognitionMode: preference.mode, returnRecognitionKnown: true })
+    } catch {
+      if (recognitionRequests.isCurrent(generation))
+        this.setData({ returnRecognitionError: '归还展示设置暂不可用，请稍后重试' })
+    } finally {
+      if (recognitionRequests.isCurrent(generation)) this.setData({ returnRecognitionLoading: false })
+    }
+  },
+  async changeReturnRecognition(e: WechatMiniprogram.TouchEvent) {
+    const mode = String(e.currentTarget.dataset.mode || '')
+    if (!['anonymous', 'masked', 'full'].includes(mode) || this.data.busyKey) return
+    const generation = recognitionRequests.begin()
+    try {
+      await runExclusiveAction(this, 'return-recognition', async () => {
+        const input = await requestReturnRecognitionConsent(mode as ReturnRecognitionMode)
+        if (!input || !recognitionRequests.isCurrent(generation)) return
+        const saved = await updateCloudReturnRecognitionPreference(input)
+        if (recognitionRequests.isCurrent(generation))
+          this.setData({ returnRecognitionMode: saved.mode, returnRecognitionKnown: true, returnRecognitionError: '' })
+      })
+    } catch (error) {
+      if (recognitionRequests.isCurrent(generation))
+        wx.showToast({ title: error instanceof Error ? error.message : '保存失败，原设置未改变', icon: 'none' })
+    } finally {
+      if (recognitionRequests.isCurrent(generation)) this.setData({ returnRecognitionLoading: false })
+    }
   },
   async togglePreference(e: WechatMiniprogram.SwitchChange) {
     const candidate = String(e.currentTarget.dataset.key || '')

@@ -18,6 +18,7 @@ function coverageFor(relativePath) {
 
 const criticalFiles = [
   'cloudfunctions/api/content-safety.js',
+  'cloudfunctions/api/recent-returns.js',
   'cloudfunctions/api/auth.js',
   'cloudfunctions/api/claim.js',
   'cloudfunctions/api/deletion.js',

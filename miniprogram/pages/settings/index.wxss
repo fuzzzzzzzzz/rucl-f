@@ -67,3 +67,21 @@
   color: #625e58;
   margin-top: 8rpx;
 }
+.recognition-option {
+  margin-top: 18rpx;
+  padding: 20rpx 16rpx;
+  border: 3rpx solid #191919;
+  border-radius: 0;
+  background: #fffdf4;
+  color: #191919;
+  font-size: 25rpx;
+  line-height: 1.6;
+  text-align: left;
+}
+.recognition-option.is-selected {
+  background: #ffec00;
+  font-weight: 700;
+}
+.recognition-option::after {
+  border: 0;
+}

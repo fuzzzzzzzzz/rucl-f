@@ -10,6 +10,14 @@ function source(file) {
 }
 
 describe('personal operator compliance', () => {
+  it('omits the home slogan and keeps the clickable operator notice last', () => {
+    const home = source('miniprogram/pages/home/index.wxml')
+    expect(home).not.toContain('人和卡重新找到彼此')
+    expect(home).toMatch(
+      /<view class="non-official-notice" bindtap="goNotice">\s*<b>学生个人公益项目 · 非中国人民大学官方平台<\/b>\s*<text>点击查看运营者信息、使用规则和重要注意事项<\/text>\s*<\/view>\s*<\/view>\s*$/,
+    )
+  })
+
   it('publishes a clear personal and non-official operator notice', () => {
     const home = source('miniprogram/pages/home/index.wxml')
     const notice = source('miniprogram/pages/notice/index.wxml')

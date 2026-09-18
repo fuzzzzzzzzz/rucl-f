@@ -1,7 +1,10 @@
 import { createLatestRequestGate, runExclusiveAction } from '../../shared/async-control'
 import { getReadyAccountSummary, startCloudSession } from '../../shared/startup-session'
+import { listCloudRecentReturns } from '../../services/cloud-card-service'
+import { formatRecentReturn } from '../../shared/recent-returns'
 
 const homeRequests = createLatestRequestGate()
+const recentReturnRequests = createLatestRequestGate()
 
 Page({
   data: {
@@ -11,16 +14,37 @@ Page({
     maskedStudentNumber: '',
     profileStatus: '尚未绑定个人信息',
     cloudError: '',
+    recentReturns: [] as Array<ReturnType<typeof formatRecentReturn>>,
+    recentReturnsLoading: false,
+    recentReturnsError: '',
   },
   async onShow() {
     this.getTabBar()?.setData({ selected: 0 })
-    await this.refreshAccountSummary()
+    await Promise.all([this.refreshAccountSummary(), this.refreshRecentReturns()])
   },
   onHide() {
     homeRequests.invalidate()
+    recentReturnRequests.invalidate()
+    this.setData({ recentReturns: [], recentReturnsLoading: false, recentReturnsError: '' })
   },
   onUnload() {
     homeRequests.invalidate()
+    recentReturnRequests.invalidate()
+    this.setData({ recentReturns: [], recentReturnsLoading: false, recentReturnsError: '' })
+  },
+  async refreshRecentReturns() {
+    const generation = recentReturnRequests.begin()
+    this.setData({ recentReturns: [], recentReturnsLoading: true, recentReturnsError: '' })
+    try {
+      const rows = await listCloudRecentReturns()
+      if (!recentReturnRequests.isCurrent(generation)) return
+      this.setData({ recentReturns: rows.map(formatRecentReturn) })
+    } catch {
+      if (recentReturnRequests.isCurrent(generation))
+        this.setData({ recentReturns: [], recentReturnsError: '近期归还暂不可用，请稍后重试' })
+    } finally {
+      if (recentReturnRequests.isCurrent(generation)) this.setData({ recentReturnsLoading: false })
+    }
   },
   async refreshAccountSummary() {
     const generation = homeRequests.begin()

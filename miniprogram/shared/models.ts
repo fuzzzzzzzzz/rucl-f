@@ -1,6 +1,21 @@
 import type { CardStatus } from './workflow'
 
 export type CardCategory = '本科生' | '硕士生' | '博士生' | '教职工'
+export type ReturnRecognitionMode = 'anonymous' | 'masked' | 'full'
+export interface ReturnRecognitionPreference {
+  mode: ReturnRecognitionMode
+}
+export interface ReturnRecognitionInput extends ReturnRecognitionPreference {
+  consentVersion: string
+  fullNameConsent?: boolean
+  name?: string
+}
+export interface RecentReturn {
+  id: string
+  displayName: string
+  maskedStudentNumber: string
+  completedAt: string
+}
 export type ProfileBindingStatus = 'unbound' | 'locked' | 'correction_pending'
 export type ClaimStatus =
   'pending_match' | 'admin_review' | 'awaiting_official_transfer' | 'ready_for_pickup' | 'returned' | 'closed'
