@@ -236,7 +236,7 @@ class MemoryDatabase {
   }
 }
 
-function createHarness(seed = {}, nowValue = Date.parse('2026-07-27T00:00:00.000Z')) {
+function createHarness(seed = {}, nowValue = Date.parse('2026-07-27T00:00:00.000Z'), options = {}) {
   const { createApiHandler } = require('../cloudfunctions/api/handler')
   const database = new MemoryDatabase(seed)
   const context = { openid: 'user-1', now: nowValue }
@@ -259,12 +259,15 @@ function createHarness(seed = {}, nowValue = Date.parse('2026-07-27T00:00:00.000
       security: { msgSecCheck: vi.fn(async () => ({ errCode: 0, result: { suggest: 'pass' } })) },
     },
   }
-  const rawHandler = createApiHandler({
-    cloud,
-    database,
-    now: () => context.now,
-    randomBytes: (length) => Buffer.alloc(length, 7),
-  })
+  const rawHandler = createApiHandler(
+    {
+      cloud,
+      database,
+      now: () => context.now,
+      randomBytes: (length) => Buffer.alloc(length, 7),
+    },
+    options,
+  )
   // Most fixtures represent the current client; protocol rejection tests use rawHandler.
   const handler = (event) =>
     rawHandler({ ...event, input: { contentSafetyConsentVersion: '2026-09-16-text-v1', ...event.input } })
@@ -278,6 +281,71 @@ function identity(studentNumber, name) {
     nameHmac: crypto.createHmac('sha256', secret).update(`name:${name}`).digest('hex'),
   }
 }
+
+describe('admin-only recognition preview', () => {
+  const actions = ['listRecentReturns', 'getReturnRecognitionPreference', 'updateReturnRecognitionPreference']
+  const seed = (patch = {}) => actorRecords({ actor: { openid: 'user-1', role: 'admin', ...patch } })
+
+  it('permits the three recognition actions for an active administrator', async () => {
+    const harness = createHarness(seed(), undefined, { recognitionPreview: true })
+    await expect(harness.handler({ action: actions[0] })).resolves.toEqual([])
+    await expect(harness.handler({ action: actions[1] })).resolves.toMatchObject({ mode: 'anonymous' })
+    await expect(harness.handler({ action: actions[2], input: { mode: 'anonymous' } })).resolves.toMatchObject({
+      mode: 'anonymous',
+    })
+  })
+
+  it.each([{ role: 'user' }, { creditStatus: 'blocked' }, { accountState: 'deleting' }, { accountState: 'deleted' }])(
+    'rejects all preview actions before dispatch for ineligible actor %j',
+    async (patch) => {
+      const harness = createHarness(seed(patch), undefined, { recognitionPreview: true })
+      const before = structuredClone(harness.database.records)
+      for (const action of actions) {
+        await expect(
+          harness.rawHandler({
+            action,
+            recognitionPreview: false,
+            role: 'admin',
+            OPENID: 'admin',
+            input: { mode: 'anonymous', recognitionPreview: false, openid: 'admin' },
+          }),
+        ).rejects.toThrow('无管理员权限')
+      }
+      expect(harness.database.records).toEqual(before)
+    },
+  )
+
+  it('requires server identity and an existing administrator without auto-creating accounts', async () => {
+    const harness = createHarness({}, undefined, { recognitionPreview: true })
+    for (const action of actions) await expect(harness.handler({ action })).rejects.toThrow('无管理员权限')
+    harness.context.openid = ''
+    for (const action of actions)
+      await expect(harness.rawHandler({ action, OPENID: 'admin', openid: 'admin' })).rejects.toThrow('请先登录')
+    expect(harness.database.records.users || {}).toEqual({})
+  })
+
+  it.each(['login', 'getAccountSettings', 'listPublicCards', 'completeHandover', 'unknown', 'constructor'])(
+    'denies unsupported action %s even for an administrator',
+    async (action) => {
+      const harness = createHarness(seed(), undefined, { recognitionPreview: true })
+      await expect(harness.handler({ action })).rejects.toThrow('不支持的操作')
+    },
+  )
+
+  it('keeps normal API access unchanged and ignores event preview flags', async () => {
+    const harness = createHarness(seed({ role: 'user' }))
+    for (const action of actions) {
+      await expect(
+        harness.rawHandler({
+          action,
+          recognitionPreview: true,
+          input: { mode: 'anonymous', recognitionPreview: true },
+        }),
+      ).resolves.toBeDefined()
+    }
+    await expect(harness.handler({ action: 'login', recognitionPreview: true })).resolves.toBeDefined()
+  })
+})
 
 describe('recent return recognition API', () => {
   const now = Date.parse('2026-09-17T04:36:00Z')

@@ -33,7 +33,6 @@
       <view class="return-line"><text class="return-badge">{{item.badge}}</text><text>{{item.sentence}}</text></view>
       <view class="return-caption">{{item.caption}}</view>
     </view>
-    <view class="return-privacy">仅展示近30天内最近5次有效交还，不作排名。拾卡者默认匿名，可在账号设置自愿选择展示方式。</view>
   </view>
   <view class="neo-card brand-poster">
     <view class="brand-poster-mark">佧</view>

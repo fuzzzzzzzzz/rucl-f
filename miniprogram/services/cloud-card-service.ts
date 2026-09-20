@@ -23,6 +23,7 @@ import type {
 } from '../shared/models'
 import { updateCurrentAccountSummary, waitForCloudReady } from '../shared/startup-session'
 import { requestContentSafetyConsent } from '../shared/content-safety-consent'
+import { selectApiFunction } from '../shared/api-routing'
 import type { CardStatus } from '../shared/workflow'
 
 interface CloudAssetTokens {
@@ -220,7 +221,10 @@ export async function callCloudApi<T>(action: string, input: Record<string, unkn
   const consentVersion = await requestContentSafetyConsent(action)
   const requestInput = consentVersion ? { ...input, contentSafetyConsentVersion: consentVersion } : input
   try {
-    const response = await wx.cloud.callFunction({ name: 'api', data: { action, input: requestInput } })
+    const response = await wx.cloud.callFunction({
+      name: selectApiFunction(action),
+      data: { action, input: requestInput },
+    })
     return response.result as T
   } catch (error) {
     throw new Error(friendlyCloudErrorMessage(error))

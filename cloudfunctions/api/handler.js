@@ -2944,15 +2944,23 @@ const CONTENT_SAFETY_CONSENT_ACTIONS = new Set([
   'transferFoundCardToOfficial',
 ])
 
-function createApiHandler(dependencies) {
+const RECOGNITION_PREVIEW_ACTIONS = new Set([
+  'listRecentReturns',
+  'getReturnRecognitionPreference',
+  'updateReturnRecognitionPreference',
+])
+
+function createApiHandler(dependencies, { recognitionPreview = false } = {}) {
   const runtime = configureRuntime(dependencies)
   return (event = {}) =>
     runtimeContext.run(runtime, async () => {
       const action = String(event.action || '')
+      if (recognitionPreview && !RECOGNITION_PREVIEW_ACTIONS.has(action)) throw new Error('不支持的操作')
       const handler = ACTION_HANDLERS[action]
       const policy = ACTION_POLICIES[action]
       if (!handler || !policy) throw new Error('不支持的操作')
       const openid = requireOpenid(cloud.getWXContext()?.OPENID)
+      if (recognitionPreview) await requireAdmin(openid)
       const input = event.input && typeof event.input === 'object' ? event.input : {}
       await authorizeAction(policy, openid)
       // Protocol acknowledgment only: old clients must not enter expanded moderation silently.

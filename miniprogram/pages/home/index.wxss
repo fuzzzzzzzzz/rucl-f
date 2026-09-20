@@ -232,12 +232,6 @@
   line-height: 1.8;
   color: #625e58;
 }
-.return-privacy {
-  margin-top: 22rpx;
-  color: #625e58;
-  font-size: 21rpx;
-  line-height: 1.7;
-}
 .return-retry {
   margin: 16rpx 0 0;
   width: 140rpx;
