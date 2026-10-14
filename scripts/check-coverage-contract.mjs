@@ -17,6 +17,10 @@ function coverageFor(relativePath) {
 }
 
 const criticalFiles = [
+  'cloudfunctions/api/media-safety.js',
+  'cloudfunctions/api/media-callback-post.js',
+  'cloudfunctions/api/media-audit-binding.js',
+  'cloudfunctions/api/media-audit-service.js',
   'cloudfunctions/api/content-safety.js',
   'cloudfunctions/api/recent-returns.js',
   'cloudfunctions/api/auth.js',

@@ -1,278 +1,6 @@
 import crypto from 'node:crypto'
-import { createRequire } from 'node:module'
 import { describe, expect, it, vi } from 'vitest'
-
-const require = createRequire(import.meta.url)
-
-function clone(value) {
-  return value === undefined ? undefined : structuredClone(value)
-}
-
-function valueAt(row, path) {
-  return String(path)
-    .split('.')
-    .reduce((value, key) => value?.[key], row)
-}
-
-function matchesCondition(row, condition) {
-  return Object.entries(condition || {}).every(([field, expected]) => {
-    const actual = valueAt(row, field)
-    if (!expected || typeof expected !== 'object' || !expected.__op) return actual === expected
-    if (expected.__op === 'in') return expected.value.includes(actual)
-    if (expected.__op === 'gte') return Number(actual) >= Number(expected.value)
-    if (expected.__op === 'gt') return Number(actual) > Number(expected.value)
-    if (expected.__op === 'lte') return Number(actual) <= Number(expected.value)
-    if (expected.__op === 'lt') return Number(actual) < Number(expected.value)
-    if (expected.__op === 'neq') return actual !== expected.value
-    throw new Error(`unsupported query operator: ${expected.__op}`)
-  })
-}
-
-class MemoryQuery {
-  constructor(database, name, options = {}) {
-    this.database = database
-    this.name = name
-    this.condition = options.condition || {}
-    this.order = options.order || null
-    this.offset = options.offset || 0
-    this.maximum = options.maximum ?? Infinity
-  }
-
-  where(condition) {
-    return new MemoryQuery(this.database, this.name, { ...this, condition })
-  }
-
-  orderBy(field, direction) {
-    return new MemoryQuery(this.database, this.name, { ...this, order: { field, direction } })
-  }
-
-  skip(offset) {
-    return new MemoryQuery(this.database, this.name, { ...this, offset })
-  }
-
-  limit(maximum) {
-    return new MemoryQuery(this.database, this.name, { ...this, maximum })
-  }
-
-  rows() {
-    const collection = this.database.records[this.name] || {}
-    let rows = Object.entries(collection)
-      .map(([id, row]) => ({ _id: id, ...clone(row) }))
-      .filter((row) => matchesCondition(row, this.condition))
-    if (this.order) {
-      const multiplier = this.order.direction === 'desc' ? -1 : 1
-      rows.sort((left, right) => {
-        const leftValue = valueAt(left, this.order.field)
-        const rightValue = valueAt(right, this.order.field)
-        return (
-          (Number(leftValue) - Number(rightValue) || String(leftValue).localeCompare(String(rightValue))) * multiplier
-        )
-      })
-    }
-    return rows.slice(this.offset, this.offset + this.maximum)
-  }
-
-  async get() {
-    this.database.calls.push({ operation: 'get', collection: this.name })
-    this.database.noteCollectionRead(this.name)
-    return { data: this.rows() }
-  }
-
-  async count() {
-    this.database.calls.push({ operation: 'count', collection: this.name })
-    this.database.noteCollectionRead(this.name)
-    return { total: this.rows().length }
-  }
-
-  async add({ data }) {
-    const id = data._id || `${this.name}-${++this.database.sequence}`
-    const collection = (this.database.records[this.name] ||= {})
-    if (collection[id]) throw new Error('DATABASE_DUPLICATE_WRITE')
-    const stored = clone(data)
-    delete stored._id
-    collection[id] = stored
-    this.database.noteWrite(this.name, id)
-    return { _id: id }
-  }
-
-  doc(id) {
-    return new MemoryDocument(this.database, this.name, id)
-  }
-}
-
-class MemoryDocument {
-  constructor(database, name, id) {
-    this.database = database
-    this.name = name
-    this.id = id
-  }
-
-  async get() {
-    this.database.calls.push({ operation: 'doc.get', collection: this.name })
-    this.database.noteDocumentRead(this.name, this.id)
-    const row = this.database.records[this.name]?.[this.id]
-    return { data: row ? { _id: this.id, ...clone(row) } : null }
-  }
-
-  async set({ data }) {
-    const collection = (this.database.records[this.name] ||= {})
-    const stored = clone(data)
-    delete stored._id
-    collection[this.id] = stored
-    this.database.noteWrite(this.name, this.id)
-    return { updated: 1 }
-  }
-
-  async update({ data }) {
-    const collection = (this.database.records[this.name] ||= {})
-    if (!collection[this.id]) throw new Error('document does not exist')
-    const next = { ...collection[this.id] }
-    for (const [key, value] of Object.entries(data)) {
-      if (value?.__op === 'remove') delete next[key]
-      else next[key] = clone(value)
-    }
-    collection[this.id] = next
-    this.database.noteWrite(this.name, this.id)
-    return { updated: 1 }
-  }
-
-  async remove() {
-    delete (this.database.records[this.name] ||= {})[this.id]
-    this.database.noteWrite(this.name, this.id)
-    return { deleted: 1 }
-  }
-}
-
-class MemoryDatabase {
-  constructor(seed = {}, options = {}) {
-    this.records = clone(seed)
-    this.calls = options.calls || []
-    this.sequence = options.sequence || 0
-    this.root = options.root || this
-    this.transactional = Boolean(options.root)
-    this.readVersions = new Map()
-    this.readCollectionVersions = new Map()
-    this.writes = new Set()
-    if (!this.transactional) {
-      this.versions = new Map()
-      this.collectionVersions = new Map()
-    }
-    this.command = {
-      in: (value) => ({ __op: 'in', value }),
-      gte: (value) => ({ __op: 'gte', value }),
-      gt: (value) => ({ __op: 'gt', value }),
-      lte: (value) => ({ __op: 'lte', value }),
-      lt: (value) => ({ __op: 'lt', value }),
-      neq: (value) => ({ __op: 'neq', value }),
-      remove: () => ({ __op: 'remove' }),
-    }
-  }
-
-  collection(name) {
-    return new MemoryQuery(this, name)
-  }
-
-  serverDate() {
-    return new Date()
-  }
-
-  documentKey(name, id) {
-    return `${name}/${id}`
-  }
-
-  noteDocumentRead(name, id) {
-    if (!this.transactional) return
-    const key = this.documentKey(name, id)
-    if (!this.readVersions.has(key)) this.readVersions.set(key, this.root.versions.get(key) || 0)
-  }
-
-  noteCollectionRead(name) {
-    if (!this.transactional || this.readCollectionVersions.has(name)) return
-    this.readCollectionVersions.set(name, this.root.collectionVersions.get(name) || 0)
-  }
-
-  noteWrite(name, id) {
-    if (!this.transactional) {
-      const key = this.documentKey(name, id)
-      this.versions.set(key, (this.versions.get(key) || 0) + 1)
-      this.collectionVersions.set(name, (this.collectionVersions.get(name) || 0) + 1)
-      return
-    }
-    this.writes.add(this.documentKey(name, id))
-  }
-
-  async runTransaction(operation) {
-    const transaction = new MemoryDatabase(this.records, {
-      calls: this.calls,
-      sequence: this.sequence,
-      root: this,
-    })
-    const result = await operation(transaction)
-
-    for (const [key, version] of transaction.readVersions) {
-      if ((this.versions.get(key) || 0) !== version) {
-        throw new Error('DATABASE_TRANSACTION_FAIL: Transaction is busy')
-      }
-    }
-    for (const [name, version] of transaction.readCollectionVersions) {
-      if ((this.collectionVersions.get(name) || 0) !== version) {
-        throw new Error('DATABASE_TRANSACTION_FAIL: Transaction is busy')
-      }
-    }
-
-    for (const key of transaction.writes) {
-      const separator = key.indexOf('/')
-      const name = key.slice(0, separator)
-      const id = key.slice(separator + 1)
-      const next = transaction.records[name]?.[id]
-      const collection = (this.records[name] ||= {})
-      if (next === undefined) delete collection[id]
-      else collection[id] = clone(next)
-      this.versions.set(key, (this.versions.get(key) || 0) + 1)
-      this.collectionVersions.set(name, (this.collectionVersions.get(name) || 0) + 1)
-    }
-    this.sequence = Math.max(this.sequence, transaction.sequence)
-    return result
-  }
-}
-
-function createHarness(seed = {}, nowValue = Date.parse('2026-07-27T00:00:00.000Z'), options = {}) {
-  const { createApiHandler } = require('../cloudfunctions/api/handler')
-  const database = new MemoryDatabase(seed)
-  const context = { openid: 'user-1', now: nowValue }
-  const subscribeSend = vi.fn(async () => ({}))
-  const cloud = {
-    getWXContext: () => ({ OPENID: context.openid }),
-    database: () => database,
-    getTempFileURL: vi.fn(async ({ fileList }) => ({
-      fileList: fileList.map((item) => ({
-        fileID: item.fileID,
-        status: 0,
-        tempFileURL: `https://signed.example/${encodeURIComponent(item.fileID)}`,
-      })),
-    })),
-    uploadFile: vi.fn(async ({ cloudPath }) => ({ fileID: `cloud://test/${cloudPath}` })),
-    downloadFile: vi.fn(async () => ({ fileContent: Buffer.from([0xff, 0xd8, 0xff, 0xd9]) })),
-    deleteFile: vi.fn(async ({ fileList }) => ({ fileList: fileList.map((fileID) => ({ fileID, status: 0 })) })),
-    openapi: {
-      subscribeMessage: { send: subscribeSend },
-      security: { msgSecCheck: vi.fn(async () => ({ errCode: 0, result: { suggest: 'pass' } })) },
-    },
-  }
-  const rawHandler = createApiHandler(
-    {
-      cloud,
-      database,
-      now: () => context.now,
-      randomBytes: (length) => Buffer.alloc(length, 7),
-    },
-    options,
-  )
-  // Most fixtures represent the current client; protocol rejection tests use rawHandler.
-  const handler = (event) =>
-    rawHandler({ ...event, input: { contentSafetyConsentVersion: '2026-09-16-text-v1', ...event.input } })
-  return { cloud, context, database, handler, rawHandler, subscribeSend }
-}
+import { clone, createHarness } from './helpers/backend-api-harness.js'
 
 function identity(studentNumber, name) {
   const secret = 'test-secret-with-at-least-thirty-two-bytes'
@@ -608,7 +336,7 @@ it('queues failed-upload cleanup when rollback deletion reports per-file failure
         contentBase64: Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64'),
       },
     }),
-  ).rejects.toThrow('audit unavailable')
+  ).rejects.toThrow('图片安全审核暂时失败')
   expect(Object.values(harness.database.records.fileCleanupJobs || {})).toHaveLength(1)
 })
 
@@ -653,6 +381,43 @@ process.env.SUBSCRIPTION_TEMPLATE_ID = 'template-test'
 process.env.MINIPROGRAM_STATE = 'developer'
 
 describe('backend API handler contract', () => {
+  it('automatically checks publication and identity-scoped lookup without claiming the card', async () => {
+    // Synthetic in-memory identity only; never retain a student's supplied card number in source fixtures.
+    const studentNumber = '2023999978'
+    const name = '测试同学'
+    const harness = createHarness(
+      actorRecords({
+        publisher: { openid: 'user-1', ...identity('2023200931', '发布同学') },
+        owner: { openid: 'owner-test', ...identity(studentNumber, name) },
+        wrongName: { openid: 'wrong-name-test', ...identity(studentNumber, '其他同学') },
+        wrongNumber: { openid: 'wrong-number-test', ...identity('2023200979', name) },
+      }),
+    )
+    const location = { category: '教学楼', place: '明德楼', area: '一层', detail: '服务台' }
+    const found = await harness.handler({
+      action: 'createFoundCard',
+      input: {
+        name,
+        studentNumber,
+        category: '本科生',
+        campusId: 'zhongguancun',
+        pickupLocation: location,
+        storageLocation: location,
+        foundAt: '2026-07-26',
+        privateFeature: '',
+      },
+    })
+    expect(await harness.handler({ action: 'listMyFoundCards' })).toEqual([
+      expect.objectContaining({ id: found.id, status: 'pending_match' }),
+    ])
+    harness.context.openid = 'owner-test'
+    expect(await harness.handler({ action: 'findMatches' })).toEqual([expect.objectContaining({ id: found.id })])
+    for (const openid of ['user-1', 'wrong-name-test', 'wrong-number-test']) {
+      harness.context.openid = openid
+      expect(await harness.handler({ action: 'findMatches', input: { studentNumber } })).toEqual([])
+    }
+    expect(Object.keys(harness.database.records.claims || {})).toHaveLength(0)
+  })
   const moderatedLocation = { category: '官方交卡点', place: '保卫处', area: '一层', detail: '值班窗口' }
   const moderatedInputs = {
     saveUserProfile: { name: ' 张三 ', studentNumber: '2023200931', category: '本科生', campusId: 'zhongguancun' },
@@ -1933,6 +1698,163 @@ describe('backend API handler contract', () => {
     harness.context.openid = 'finder'
     const wall = await harness.handler({ action: 'listThanksWall', input: {} })
     expect(wall.map((item) => item.text)).toEqual(['public'])
+  })
+
+  it('preserves callable OpenAPI proxies when delivering claim notifications', async () => {
+    vi.stubEnv('SUBSCRIPTION_TEMPLATE_ID', 'test-template')
+    vi.stubEnv('MINIPROGRAM_STATE', 'developer')
+    try {
+      const digests = identity('2023200931', '张三')
+      const harness = createHarness({
+        ...actorRecords({
+          owner: { openid: 'user-1', ...digests },
+          finder: { openid: 'finder' },
+        }),
+        foundCards: {
+          card: {
+            publisherOpenid: 'finder',
+            ...digests,
+            maskedName: '张*',
+            maskedStudentNumber: '2023****31',
+            category: '本科生',
+            campusId: 'zhongguancun',
+            pickupLocation: { category: '食堂', place: '中区食堂', area: '一层', detail: '服务台' },
+            storageLocation: { category: '官方交卡点', place: '图书馆', area: '服务台', detail: '窗口' },
+            foundAt: new Date('2026-07-26'),
+            createdAt: new Date('2026-07-26'),
+            status: 'pending_match',
+          },
+        },
+      })
+      const requestedApis = []
+      // wx-server-sdk's root callable proxy treats every property, including bind, as an API path.
+      const openApiProxy = (path = []) =>
+        new Proxy(() => {}, {
+          get: (_target, key) => openApiProxy([...path, key]),
+          apply: (_target, _thisArg, args) => {
+            requestedApis.push(path.join('.'))
+            if (path.join('.') === 'subscribeMessage.send') return harness.subscribeSend(args[0])
+            return Promise.resolve({})
+          },
+        })
+      harness.cloud.openapi = openApiProxy()
+      const result = await harness.handler({ action: 'submitClaim', input: { cardId: 'card' } })
+      expect(result.status).toBe('ready_for_pickup')
+      expect(requestedApis).toEqual(['subscribeMessage.send', 'subscribeMessage.send'])
+      expect(harness.database.records.foundCards.card.status).toBe('ready_for_pickup')
+      expect(Object.values(harness.database.records.notificationOutbox).every((row) => row.status === 'sent')).toBe(
+        true,
+      )
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('verifies finder owner admin and stranger across publication review and photo handover', async () => {
+    const name = '测试同学'
+    const number = '2023000001'
+    const ownerIdentity = identity(number, name)
+    let nonce = 7
+    const harness = createHarness(
+      actorRecords({
+        finder: { openid: 'finder', ...identity('2023000002', '拾卡同学') },
+        owner: { openid: 'owner', ...ownerIdentity, category: '本科生', campusId: 'zhongguancun' },
+        stranger: { openid: 'stranger', ...identity('2023000003', '其他同学') },
+        admin: { openid: 'admin', role: 'admin' },
+      }),
+      Date.parse('2026-07-27T00:00:00Z'),
+      { randomBytes: (length) => Buffer.alloc(length, ++nonce) },
+    )
+    const run = (action, input = {}) => harness.handler({ action, input })
+    const photoInput = (kind) => ({
+      kind,
+      mimeType: 'image/jpeg',
+      contentBase64: Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64'),
+    })
+
+    harness.context.openid = 'owner'
+    const lost = await run('createLostReport', {
+      lostAt: '2026-07-26',
+      locationDescription: '食堂',
+      privateFeature: '蓝色卡套',
+    })
+    harness.context.openid = 'finder'
+    const scene = await run('uploadPrivateImage', photoInput('storage_scene'))
+    const published = await run('createFoundCard', {
+      name,
+      studentNumber: number,
+      category: '本科生',
+      campusId: 'zhongguancun',
+      foundAt: '2026-07-26',
+      pickupLocation: { category: '食堂', place: '中区食堂', area: '一层', detail: '服务台' },
+      storageLocation: { category: '官方交卡点', place: '图书馆', area: '总服务台', detail: '窗口' },
+      storagePhotoUploadToken: scene.uploadToken,
+      privateFeature: '蓝色卡套',
+    })
+    await expect(run('listMyFoundCards')).resolves.toEqual([expect.objectContaining({ id: published.id })])
+    await expect(run('submitClaim', { cardId: published.id })).rejects.toThrow()
+
+    harness.context.openid = 'stranger'
+    await expect(run('findMatches')).resolves.toEqual([])
+    await expect(run('submitClaim', { cardId: published.id })).rejects.toThrow()
+    await expect(run('getHandoverProof', { handoverId: 'unknown' })).rejects.toThrow('无管理员权限')
+
+    harness.context.openid = 'owner'
+    const matches = await run('findMatches')
+    expect(matches).toEqual([expect.objectContaining({ id: published.id })])
+    expect(matches[0].officialStoragePoint).toBeUndefined()
+    expect(matches[0].storagePhotoUrl).toBeUndefined()
+    const claim = await run('submitClaim', { cardId: published.id, privateFeature: '需要管理员核对' })
+    expect(claim.status).toBe('admin_review')
+    await expect(run('confirmClaimHandover', { claimId: claim.id })).rejects.toThrow()
+    await expect(
+      run('reviewClaim', { claimId: claim.id, decision: 'approved', reasonCode: 'manual_verification' }),
+    ).rejects.toThrow('无管理员权限')
+
+    harness.context.openid = 'admin'
+    await expect(run('listAdminClaims')).resolves.toEqual([
+      expect.objectContaining({ id: claim.id, status: 'admin_review' }),
+    ])
+    await expect(
+      run('reviewClaim', { claimId: claim.id, decision: 'approved', reasonCode: 'manual_verification' }),
+    ).resolves.toMatchObject({ status: 'ready_for_pickup' })
+    harness.context.openid = 'owner'
+    const approved = await run('listMyClaims')
+    expect(approved[0]).toMatchObject({
+      id: claim.id,
+      status: 'ready_for_pickup',
+      officialStoragePoint: '图书馆 · 总服务台 · 窗口',
+      storagePhotoUrl: expect.stringContaining('https://signed.example/'),
+    })
+    const proof = await run('uploadPrivateImage', photoInput('handover_proof'))
+
+    harness.context.openid = 'stranger'
+    await expect(
+      run('confirmClaimHandover', { claimId: claim.id, proofUploadToken: proof.uploadToken }),
+    ).rejects.toThrow('只能完成自己的认领任务')
+    expect(harness.database.records.claims[claim.id].status).toBe('ready_for_pickup')
+    harness.context.openid = 'owner'
+    await expect(
+      run('confirmClaimHandover', { claimId: claim.id, proofUploadToken: proof.uploadToken }),
+    ).resolves.toMatchObject({ status: 'returned', alreadyCompleted: false })
+    await expect(run('confirmClaimHandover', { claimId: claim.id })).resolves.toMatchObject({
+      status: 'returned',
+      alreadyCompleted: true,
+    })
+    expect(harness.database.records.foundCards[published.id].status).toBe('returned')
+    expect(harness.database.records.lostReports[lost.id].status).toBe('returned')
+    expect(Object.keys(harness.database.records.handovers)).toEqual([claim.id])
+    expect(harness.database.records.handovers[claim.id].proofFileId).toContain('handover-proofs/')
+
+    harness.context.openid = 'finder'
+    await expect(run('getHandoverProof', { handoverId: claim.id })).rejects.toThrow('无管理员权限')
+    await expect(run('listMyAchievements')).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'first_guardian', unlocked: true })]),
+    )
+    harness.context.openid = 'admin'
+    await expect(run('getHandoverProof', { handoverId: claim.id })).resolves.toMatchObject({
+      url: expect.stringContaining('https://signed.example/'),
+    })
   })
 
   it('runs claim transfer, private proof, handover, thanks and risk-review behavior', async () => {

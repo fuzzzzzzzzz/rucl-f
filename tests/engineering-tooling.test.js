@@ -1,7 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import vm from 'node:vm'
 import { describe, expect, it } from 'vitest'
+import vitestConfig from '../vitest.config.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -14,6 +16,96 @@ function readJson(relativePath) {
 }
 
 describe('engineering tooling contract', () => {
+  const mediaFiles = ['media-safety', 'media-callback-post', 'media-audit-binding', 'media-audit-service'].map(
+    (name) => `cloudfunctions/api/${name}.js`,
+  )
+  it.each(mediaFiles)('collects and enforces critical coverage for %s', (file) => {
+    expect(vitestConfig.test.coverage.include).toContain(file)
+    expect(vitestConfig.test.coverage.thresholds[file]).toEqual({
+      lines: 90,
+      functions: 90,
+      statements: 90,
+      branches: 85,
+    })
+    expect(read('scripts/check-coverage-contract.mjs')).toContain(`'${file}'`)
+  })
+  it.each(mediaFiles)('rejects an empty or below-threshold runtime suffix for %s', (file) => {
+    const files = [
+      'content-safety',
+      'recent-returns',
+      'auth',
+      'claim',
+      'deletion',
+      'handler',
+      ...mediaFiles.map((path) => path.split('/').pop().slice(0, -3)),
+    ]
+      .map((name) => `cloudfunctions/api/${name}.js`)
+      .concat(['cloudfunctions/deletionWorker/domain.js', 'cloudfunctions/deletionWorker/handler.js'])
+    const metric = { pct: 100, covered: 1, total: 1 }
+    const summary = Object.fromEntries(
+      files.map((path) => [
+        `/${path}`,
+        {
+          statements: { ...metric },
+          lines: { ...metric },
+          functions: { ...metric },
+          branches: { ...metric },
+        },
+      ]),
+    )
+    const run = () =>
+      vm.runInNewContext(read('scripts/check-coverage-contract.mjs').replace(/^import .*$/gm, ''), {
+        readFileSync: () => JSON.stringify(summary),
+        resolve: () => '',
+        root: '',
+        console: { log() {} },
+      })
+    delete summary[`/${file}`]
+    expect(run).toThrow(`Coverage did not collect required runtime file: ${file}`)
+    summary[`/${file}`] = {
+      statements: { ...metric },
+      lines: { ...metric },
+      functions: { ...metric },
+      branches: { ...metric },
+    }
+    for (const [name, threshold] of [
+      ['statements', 90],
+      ['lines', 90],
+      ['functions', 90],
+      ['branches', 85],
+    ]) {
+      summary[`/${file}`][name].pct = threshold - 1
+      expect(run).toThrow('below')
+      summary[`/${file}`][name].pct = threshold
+    }
+    expect(run).not.toThrow()
+  })
+  it('declares callback settings only as server-side API environment placeholders', () => {
+    const config = readJson('cloudbaserc.json')
+    expect(config.functions.map((entry) => entry.name)).toEqual([
+      'api',
+      'deletionWorker',
+      'processCardImage',
+      'scheduledCleanup',
+    ])
+    const api = config.functions.find((entry) => entry.name === 'api')
+    expect(api.type).toBe('Event')
+    for (const setting of ['MEDIA_CALLBACK_TOKEN', 'MEDIA_CALLBACK_AES_KEY', 'MEDIA_CALLBACK_APP_ID']) {
+      expect(api.envVariables[setting]).toBe(`{{env.${setting}}}`)
+      expect(
+        config.functions.filter((entry) => entry.name !== 'api').every((entry) => !(setting in entry.envVariables)),
+      ).toBe(true)
+    }
+    expect(api.envVariables).toMatchObject({
+      STUDENT_HMAC_SECRET: '{{env.STUDENT_HMAC_SECRET}}',
+      SUBSCRIPTION_TEMPLATE_ID: '{{env.SUBSCRIPTION_TEMPLATE_ID}}',
+      MINIPROGRAM_STATE: '{{env.MINIPROGRAM_STATE}}',
+    })
+  })
+  it('bounds default test workers for memory-constrained verification', () => {
+    expect(vitestConfig.test.maxWorkers).toBe(2)
+  })
+
   it('collects and enforces coverage for the new content safety boundary', () => {
     expect(read('vitest.config.mjs')).toContain("'cloudfunctions/api/content-safety.js'")
     expect(read('scripts/check-coverage-contract.mjs')).toContain("'cloudfunctions/api/content-safety.js'")

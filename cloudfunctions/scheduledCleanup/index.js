@@ -8,6 +8,7 @@ const {
   cleanupRetryDelayMs,
   collectCardFileIds,
   planLostReportRetention,
+  planMediaReceiptCleanup,
   planOrphanRegistry,
   timestamp,
 } = require('./domain')
@@ -242,6 +243,59 @@ async function queueExpiredAuditLogs(now, deadline = Infinity, cursor = '') {
   return phasePage({ auditLogsRemoved: removed }, expired.data, processed, lastId)
 }
 
+async function optionalMediaDocument(reference) {
+  try {
+    const result = await reference.get()
+    if (
+      !result ||
+      result.data === undefined ||
+      (result.data !== null && (typeof result.data !== 'object' || Array.isArray(result.data)))
+    ) {
+      throw new Error('invalid_media_document')
+    }
+    return result.data
+  } catch (error) {
+    const message = String(error?.message || error?.errMsg || '')
+    if (message.includes('document.get:fail') && message.includes('does not exist')) return null
+    throw error
+  }
+}
+
+async function purgeMediaAuditEvents(now, deadline = Infinity, cursor = '') {
+  let removed = 0
+  const page = await scanPage('mediaAuditEvents', cursor)
+  let processed = 0
+  let lastId = cursor
+  for (const entry of page.data) {
+    if (Date.now() >= deadline) break
+    processed += 1
+    lastId = entry._id
+    if (planMediaReceiptCleanup(entry, now) === 'keep') continue
+    try {
+      const didRemove = await db.runTransaction(async (transaction) => {
+        const reference = transaction.collection('mediaAuditEvents').doc(entry._id)
+        const current = await optionalMediaDocument(reference)
+        if (!current) return false
+        const plan = planMediaReceiptCleanup(current, now)
+        if (plan === 'keep') return false
+        if (plan === 'check_registry') {
+          const registry = await optionalMediaDocument(
+            transaction.collection('uploadedFiles').doc(current.boundUploadHash),
+          )
+          if (registry) return false
+        }
+        await reference.remove()
+        return true
+      })
+      if (didRemove) removed += 1
+    } catch {
+      // Datastore failures and optimistic conflicts must retain the receipt.
+      // Do not log callback data, refresh approval, or access storage here.
+    }
+  }
+  return phasePage({ mediaAuditEventsRemoved: removed }, page.data, processed, lastId)
+}
+
 async function expireLostReports(now, deadline = Infinity, cursor = '') {
   const scanned = await scanPage('lostReports', cursor)
   const stale = {
@@ -406,6 +460,7 @@ const PHASES = [
   'lostPurge',
   'messages',
   'auditLogs',
+  'mediaAuditEvents',
   'fileCleanup',
   'notifications',
 ]
@@ -417,6 +472,7 @@ async function runPhase(phase, now, deadline, cursor) {
   if (phase === 'lostPurge') return purgeLostReports(now, deadline, cursor)
   if (phase === 'messages') return purgeMessages(now, deadline, cursor)
   if (phase === 'auditLogs') return queueExpiredAuditLogs(now, deadline, cursor)
+  if (phase === 'mediaAuditEvents') return purgeMediaAuditEvents(now, deadline, cursor)
   if (phase === 'fileCleanup') return processCleanupJobs(now, deadline, cursor)
   if (phase === 'notifications') return retryNotifications(now, deadline, cursor)
   throw new Error('unknown cleanup phase')

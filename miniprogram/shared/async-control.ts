@@ -3,6 +3,20 @@ interface BusyHost {
   setData: (patch: { busyKey: string }) => void
 }
 
+export async function withDeadline<T>(operation: Promise<T>, milliseconds: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), milliseconds)
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
 export type ExclusiveResult<T> = { started: false } | { started: true; value: T }
 
 export async function runExclusiveAction<T>(

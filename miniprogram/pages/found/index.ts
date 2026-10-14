@@ -1,5 +1,17 @@
-import { createCloudFoundCard, extractCardIdentity, processCardPhoto } from '../../services/cloud-card-service'
-import { createLatestRequestGate, createPageLifetimeGate, runExclusiveAction } from '../../shared/async-control'
+import {
+  createCloudFoundCard,
+  discardSelectedPrivateImage,
+  extractCardIdentity,
+  PrivateImagePendingError,
+  processCardPhoto,
+} from '../../services/cloud-card-service'
+import { prepareLocalCardCrop } from '../../services/local-card-crop'
+import {
+  createLatestRequestGate,
+  createPageLifetimeGate,
+  runExclusiveAction,
+  withDeadline,
+} from '../../shared/async-control'
 import { clearedFoundCardFields } from '../../shared/client-forms'
 import type { CardCategory, DetailedLocation } from '../../shared/models'
 import { cancelPendingPrivacyAuthorization, requirePrivacyAuthorization } from '../../shared/privacy-authorization'
@@ -19,6 +31,7 @@ const initialPickup = initialLocation(campuses[0].id)
 const initialStorage = initialLocation(campuses[0].id, '官方交卡点')
 const ocrRequests = createLatestRequestGate()
 const foundLifetime = createPageLifetimeGate()
+let nativePhotoPending = false
 
 Page({
   data: {
@@ -29,6 +42,12 @@ Page({
     ...clearedFoundCardFields(),
     busyKey: '',
     photoBusy: false,
+    photoCheckStatus: '',
+    ocrStage: '',
+    ocrError: '',
+    cropPending: false,
+    originalPhotoPath: '',
+    cropNotice: '',
     submitted: false,
     pickupCategories: initialPickup.categories,
     pickupCategoryIndex: initialPickup.categoryIndex,
@@ -44,16 +63,23 @@ Page({
     storageAreaIndex: initialStorage.areaIndex,
   },
   onShow() {
-    foundLifetime.activate()
-    if (this.data.photoBusy) this.setData({ photoBusy: false })
+    // The native camera/album may hide this page without ending its photo operation.
+    if (!foundLifetime.capture()) {
+      foundLifetime.activate()
+      if (this.data.photoBusy) this.setData({ photoBusy: false })
+    }
     this.getTabBar()?.setData({ selected: 2 })
   },
   onHide() {
+    if (nativePhotoPending) return
+    this.setData({ cropPending: false, originalPhotoPath: '' })
     foundLifetime.deactivate()
     ocrRequests.invalidate()
     cancelPendingPrivacyAuthorization()
   },
   onUnload() {
+    void discardSelectedPrivateImage(this.data.storagePhotoPath, 'storage_scene').catch(() => undefined)
+    nativePhotoPending = false
     foundLifetime.deactivate()
     ocrRequests.invalidate()
     cancelPendingPrivacyAuthorization()
@@ -75,28 +101,115 @@ Page({
     if (!(await this.authorizePhotoUse())) return
     const lifetime = foundLifetime.capture()
     if (!lifetime) return
-    wx.chooseMedia({
-      count: 1,
-      mediaType: ['image'],
-      sourceType: ['camera', 'album'],
-      success: ({ tempFiles }) => {
-        if (!foundLifetime.isActive(lifetime)) return
-        const photoPath = tempFiles[0]?.tempFilePath
-        if (!photoPath) return this.setData({ photoBusy: false })
-        void this.recognizePhoto(photoPath)
-      },
-      fail: () => {
-        if (foundLifetime.isActive(lifetime)) this.setData({ photoBusy: false })
-      },
+    nativePhotoPending = true
+    try {
+      wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['camera', 'album'],
+        success: ({ tempFiles }) => {
+          if (!foundLifetime.isActive(lifetime)) return
+          nativePhotoPending = false
+          const photoPath = tempFiles[0]?.tempFilePath
+          if (!photoPath) return this.setData({ photoBusy: false })
+          void this.preparePhoto(photoPath)
+        },
+        fail: () => {
+          if (foundLifetime.isActive(lifetime)) {
+            nativePhotoPending = false
+            this.setData({ photoBusy: false })
+          }
+        },
+      })
+    } catch {
+      nativePhotoPending = false
+      if (foundLifetime.isActive(lifetime)) {
+        this.setData({ photoBusy: false })
+        wx.showToast({ title: '照片选择未能打开，请重试', icon: 'none' })
+      }
+    }
+  },
+  async preparePhoto(photoPath: string) {
+    const lifetime = foundLifetime.capture()
+    if (!lifetime) return
+    const generation = ocrRequests.begin()
+    const isCurrent = () => foundLifetime.isActive(lifetime) && ocrRequests.isCurrent(generation)
+    this.setData({
+      photoPath,
+      photoBusy: true,
+      cropPending: false,
+      originalPhotoPath: '',
+      cropNotice: '',
+      ocrError: '',
+      ocrStage: '本地定位卡片',
+      name: '',
+      studentNumber: '',
+    })
+    const cropped = await prepareLocalCardCrop(
+      photoPath,
+      () =>
+        new Promise<WechatMiniprogram.Canvas>((resolve, reject) => {
+          wx.createSelectorQuery()
+            .in(this)
+            .select('#card-crop-canvas')
+            .fields({ node: true }, (result) => {
+              const canvas = (result as { node?: WechatMiniprogram.Canvas }).node
+              if (canvas) resolve(canvas)
+              else reject(new Error('Canvas unavailable'))
+            })
+            .exec()
+        }),
+      isCurrent,
+    )
+    if (!isCurrent()) return
+    if (cropped) {
+      this.setData({ photoPath: cropped, originalPhotoPath: photoPath, cropPending: true, ocrStage: '' })
+    } else {
+      this.setData({ cropNotice: '未自动裁剪，使用原图识别。' })
+      await this.recognizePhoto(photoPath)
+    }
+  },
+  confirmCrop() {
+    if (!this.data.cropPending || !foundLifetime.capture()) return
+    const path = this.data.photoPath
+    this.setData({ cropPending: false, originalPhotoPath: '', cropNotice: '已使用确认后的裁剪图。' })
+    void this.recognizePhoto(path)
+  },
+  useOriginalPhoto() {
+    if (!this.data.cropPending || !foundLifetime.capture()) return
+    const path = this.data.originalPhotoPath
+    this.setData({ cropPending: false, originalPhotoPath: '', cropNotice: '已保留原图识别。' })
+    void this.recognizePhoto(path)
+  },
+  cancelCrop() {
+    if (!this.data.cropPending) return
+    ocrRequests.invalidate()
+    this.setData({
+      cropPending: false,
+      originalPhotoPath: '',
+      photoPath: '',
+      photoBusy: false,
+      ocrStage: '',
+      cropNotice: '',
     })
   },
   async recognizePhoto(photoPath: string) {
     const lifetime = foundLifetime.capture()
     if (!lifetime) return
     const generation = ocrRequests.begin()
-    this.setData({ photoPath, name: '', studentNumber: '' })
+    let active = true
+    let stage = '连接云服务'
+    this.setData({ photoPath, name: '', studentNumber: '', ocrError: '', ocrStage: stage, photoBusy: true })
     try {
-      const processed = await processCardPhoto(photoPath)
+      const processed = await withDeadline(
+        processCardPhoto(photoPath, (nextStage) => {
+          if (!active || !foundLifetime.isActive(lifetime) || !ocrRequests.isCurrent(generation)) return
+          stage = nextStage
+          this.setData({ ocrStage: stage })
+        }),
+        45000,
+        '照片识别超时，请手动填写；后台请求可能仍在结束，请勿连续重试',
+      )
       if (!foundLifetime.isActive(lifetime) || !ocrRequests.isCurrent(generation)) return
       const identity = extractCardIdentity(processed.ocrLines || [])
       this.setData({
@@ -108,9 +221,12 @@ Page({
       }
     } catch (error) {
       if (foundLifetime.isActive(lifetime) && ocrRequests.isCurrent(generation)) {
-        wx.showToast({ title: error instanceof Error ? error.message : '识别失败，请手动填写', icon: 'none' })
+        const message = error instanceof Error ? error.message : '识别失败，请手动填写'
+        this.setData({ ocrError: `${message}（阶段：${stage}）` })
+        wx.showToast({ title: message, icon: 'none' })
       }
     } finally {
+      active = false
       if (foundLifetime.isActive(lifetime) && ocrRequests.isCurrent(generation)) {
         this.setData({ photoBusy: false })
       }
@@ -120,21 +236,39 @@ Page({
     if (!(await this.authorizePhotoUse())) return
     const lifetime = foundLifetime.capture()
     if (!lifetime) return
-    wx.chooseMedia({
-      count: 1,
-      mediaType: ['image'],
-      sourceType: ['camera', 'album'],
-      success: ({ tempFiles }) => {
-        if (!foundLifetime.isActive(lifetime)) return
-        this.setData({
-          storagePhotoPath: tempFiles[0]?.tempFilePath || '',
-          photoBusy: false,
-        })
-      },
-      fail: () => {
-        if (foundLifetime.isActive(lifetime)) this.setData({ photoBusy: false })
-      },
-    })
+    nativePhotoPending = true
+    try {
+      wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['camera', 'album'],
+        success: ({ tempFiles }) => {
+          if (!foundLifetime.isActive(lifetime)) return
+          nativePhotoPending = false
+          const nextPath = tempFiles[0]?.tempFilePath || ''
+          if (!nextPath) return this.setData({ photoBusy: false })
+          if (nextPath !== this.data.storagePhotoPath)
+            void discardSelectedPrivateImage(this.data.storagePhotoPath, 'storage_scene').catch(() => undefined)
+          this.setData({
+            storagePhotoPath: nextPath,
+            photoCheckStatus: '',
+            photoBusy: false,
+          })
+        },
+        fail: () => {
+          if (foundLifetime.isActive(lifetime)) {
+            nativePhotoPending = false
+            this.setData({ photoBusy: false })
+          }
+        },
+      })
+    } catch {
+      nativePhotoPending = false
+      if (foundLifetime.isActive(lifetime)) {
+        this.setData({ photoBusy: false })
+        wx.showToast({ title: '照片选择未能打开，请重试', icon: 'none' })
+      }
+    }
   },
   onCampusChange(e: WechatMiniprogram.PickerChange) {
     if (this.data.busyKey || this.data.photoBusy) return
@@ -275,6 +409,7 @@ Page({
     const storage = initialLocation(campuses[0].id, '官方交卡点')
     this.setData({
       ...clearedFoundCardFields(),
+      photoCheckStatus: '',
       campusIndex: 0,
       categoryIndex: 0,
       pickupCategories: pickup.categories,
@@ -293,28 +428,41 @@ Page({
   },
   async submit() {
     if (this.data.busyKey || this.data.photoBusy) return
+    const lifetime = foundLifetime.capture()
+    if (!lifetime) return
     const numberResult = validateRucStudentNumber(this.data.studentNumber)
     if (!numberResult.valid) return wx.showToast({ title: numberResult.message || '请检查学号', icon: 'none' })
     if (!this.data.name.trim()) return wx.showToast({ title: '请填写卡片上的姓名', icon: 'none' })
     try {
       await runExclusiveAction(this, 'submit', async () => {
-        await createCloudFoundCard({
-          name: this.data.name.trim(),
-          studentNumber: this.data.studentNumber,
-          category: cardCategories[this.data.categoryIndex] as CardCategory,
-          campusId: campuses[this.data.campusIndex].id,
-          pickupLocation: this.buildPickupLocation(),
-          storageLocation: this.buildStorageLocation(),
-          storagePhotoPath: this.data.storagePhotoPath,
-          foundDate: this.data.foundDate,
-          feature: this.data.feature,
-          photoPath: this.data.photoPath,
-        })
+        this.setData({ photoCheckStatus: this.data.storagePhotoPath ? '正在确认照片安全检查结果，请稍候…' : '' })
+        await createCloudFoundCard(
+          {
+            name: this.data.name.trim(),
+            studentNumber: this.data.studentNumber,
+            category: cardCategories[this.data.categoryIndex] as CardCategory,
+            campusId: campuses[this.data.campusIndex].id,
+            pickupLocation: this.buildPickupLocation(),
+            storageLocation: this.buildStorageLocation(),
+            storagePhotoPath: this.data.storagePhotoPath,
+            foundDate: this.data.foundDate,
+            feature: this.data.feature,
+            photoPath: this.data.photoPath,
+          },
+          () => foundLifetime.isActive(lifetime),
+        )
+        if (!foundLifetime.isActive(lifetime)) return
         this.resetFoundForm()
         this.setData({ submitted: true })
         wx.showToast({ title: '发布成功' })
       })
     } catch (error) {
+      if (!foundLifetime.isActive(lifetime)) return
+      if (error instanceof PrivateImagePendingError) {
+        this.setData({ photoCheckStatus: error.message })
+        return
+      }
+      this.setData({ photoCheckStatus: '' })
       wx.showToast({ title: error instanceof Error ? error.message : '发布失败', icon: 'none' })
     }
   },

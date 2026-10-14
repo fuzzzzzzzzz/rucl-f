@@ -24,6 +24,7 @@
       <view class="proof-help">感谢默认仅通过站内消息发送给拾卡者。请勿填写姓名、学号或联系方式。</view>
       <view class="proof-help"><switch data-id="{{item.id}}" checked="{{thanksPublic[item.id] === true}}" disabled="{{!!busyKey || !!photoBusyId}}" bindchange="onThanksPublic" />同意将感谢文字展示在感谢墙，供其他使用者查看（可选）</view>
       <button class="complete-button" data-id="{{item.id}}" loading="{{busyKey === 'confirm:' + item.id}}" disabled="{{!!busyKey || !!photoBusyId}}" bindtap="confirmReceived">我已取到卡，完成任务</button>
+      <view wx:if="{{photoCheckStatuses[item.id]}}" class="proof-help">{{photoCheckStatuses[item.id]}}</view>
     </view>
     <button wx:if="{{item.status !== 'closed'}}" class="report-button" data-id="{{item.id}}" loading="{{busyKey === 'report:' + item.id}}" disabled="{{!!busyKey || !!photoBusyId}}" bindtap="reportClaim">举报认领流程问题</button>
   </view>

@@ -12,6 +12,7 @@ App<IAppOption>({
     isAdmin: false,
     profileBindingStatus: 'unbound',
     accountSummary: null,
+    accountId: '',
   },
   onLaunch() {
     clearLegacyClientStorage()

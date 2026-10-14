@@ -166,6 +166,51 @@ function harness(seed, openid = '', now = Date.parse('2026-07-27T00:00:00Z')) {
 }
 
 describe('deletion worker', () => {
+  it('removes the owner upload registry including its embedded media-task identifier and queues the file', async () => {
+    const now = Date.parse('2026-07-27T00:00:00Z')
+    const openid = 'media-owner-subject'
+    const fileId = 'cloud://env/handover-proofs/media.jpg'
+    const test = harness({
+      users: { subject: { openid } },
+      dataDeletionRequests: {
+        request: { applicantOpenid: openid, status: 'approved', nextAttemptAt: new Date(now - 1) },
+      },
+      uploadedFiles: { media: { ownerOpenid: openid, fileId, mediaTask: { ownerOpenid: openid, status: 'passed' } } },
+    })
+    expect((await test.worker()).counts.completed).toBe(1)
+    expect(test.database.records.uploadedFiles.media).toBeUndefined()
+    expect(Object.values(test.database.records.fileCleanupJobs)).toContainEqual(
+      expect.objectContaining({ fileId, status: 'pending' }),
+    )
+    const request = test.database.records.dataDeletionRequests.request
+    expect(test.database.records.deletionReceipts[request.receiptId].queuedFileCount).toBe(1)
+    expect(JSON.stringify(test.database.records)).not.toContain(openid)
+  })
+
+  it('withholds deletion completion for a malformed other-owner registry with a nested subject media task', async () => {
+    const now = Date.parse('2026-07-27T00:00:00Z')
+    const openid = 'nested-media-subject'
+    const registry = {
+      ownerOpenid: 'different-owner',
+      fileId: 'cloud://env/handover-proofs/shared.jpg',
+      mediaTask: { ownerOpenid: openid, status: 'passed' },
+    }
+    const test = harness({
+      users: { subject: { openid } },
+      dataDeletionRequests: {
+        request: { applicantOpenid: openid, status: 'approved', nextAttemptAt: new Date(now - 1) },
+      },
+      uploadedFiles: { malformed: registry },
+    })
+    expect((await test.worker()).counts.processing).toBe(1)
+    expect(test.database.records.uploadedFiles.malformed).toEqual(registry)
+    expect(test.database.records.deletionReceipts).toBeUndefined()
+    expect(test.database.records.dataDeletionRequests.request.deletionCheckpoint).toMatchObject({
+      phase: 'residual_scan',
+      residualCount: 1,
+      scanTruncated: false,
+    })
+  })
   it('scrubs previous deletion requests while retaining unrelated non-personal nested data', async () => {
     const now = Date.parse('2026-07-27T00:00:00Z')
     const test = harness({

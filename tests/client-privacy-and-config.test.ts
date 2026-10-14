@@ -7,6 +7,17 @@ const root = path.resolve(__dirname, '..')
 const source = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), 'utf8')
 
 describe('client privacy authorization', () => {
+  it('describes separate environment and handover checks without changing the base notice version', () => {
+    const privacy = source('miniprogram/pages/privacy/index.wxml')
+    expect(privacy).not.toContain('本版本未实现图片内容安全检查')
+    expect(privacy).toContain('2026-10-14-image-v1')
+    expect(privacy).toContain('存放环境照片和取卡证明照片')
+    expect(privacy).toContain('连同你的微信 OpenID 发送至微信内容安全接口')
+    expect(privacy).toContain('最终通过')
+    expect(privacy).toContain('上传满1天后安排删除')
+    expect(privacy).toContain('生效日期为2026-07-19，规则版本1.0')
+    expect(privacy).toContain('不代表微信平台隐私声明已经更新')
+  })
   it('holds the private API until the reusable consent UI explicitly agrees', () => {
     const coordinator = createPrivacyAuthorizationCoordinator()
     const resolve = vi.fn()

@@ -13,6 +13,58 @@ const RETENTION = Object.freeze({
 
 const DAY_MS = 86400000
 
+function planMediaReceiptCleanup(receipt, now) {
+  const fields = new Set([
+    '_id',
+    'version',
+    'appId',
+    'traceId',
+    'boundUploadHash',
+    'status',
+    'firstReceivedAt',
+    'lastReceivedAt',
+    'expiresAt',
+    'mac',
+  ])
+  const hash = (value) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
+  const clock = (value) => Number.isSafeInteger(value) && value > 0
+  if (
+    !receipt ||
+    typeof receipt !== 'object' ||
+    Array.isArray(receipt) ||
+    Object.keys(receipt).some((field) => !fields.has(field)) ||
+    receipt.version !== 1 ||
+    typeof receipt.appId !== 'string' ||
+    !/^wx[0-9a-f]{16}$/.test(receipt.appId) ||
+    typeof receipt.traceId !== 'string' ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(receipt.traceId) ||
+    !hash(receipt.mac) ||
+    !clock(receipt.expiresAt) ||
+    !clock(now) ||
+    receipt._id !== require('crypto').createHash('sha256').update(receipt.traceId).digest('hex') ||
+    (receipt.boundUploadHash !== '' && !hash(receipt.boundUploadHash))
+  )
+    return 'keep'
+  const indexOnly =
+    receipt.status === 'pending' &&
+    hash(receipt.boundUploadHash) &&
+    receipt.firstReceivedAt === 0 &&
+    receipt.lastReceivedAt === 0
+  const terminal =
+    ['passed', 'review', 'rejected', 'error'].includes(receipt.status) &&
+    clock(receipt.firstReceivedAt) &&
+    clock(receipt.lastReceivedAt) &&
+    receipt.firstReceivedAt <= receipt.lastReceivedAt
+  if (!indexOnly && !terminal) return 'keep'
+  // A bound index protects against later contradictory callbacks even after
+  // task expiry. Its lifetime is the registry's, not the 35-minute task window.
+  if (receipt.boundUploadHash !== '') return 'check_registry'
+  if (receipt.expiresAt !== receipt.firstReceivedAt + DAY_MS || receipt.lastReceivedAt >= receipt.expiresAt) {
+    return 'keep'
+  }
+  return receipt.expiresAt <= now ? 'remove_unbound' : 'keep'
+}
+
 function timestamp(value) {
   if (!value) return 0
   if (value instanceof Date) return value.getTime()
@@ -86,6 +138,7 @@ module.exports = {
   cleanupRetryDelayMs,
   collectCardFileIds,
   planLostReportRetention,
+  planMediaReceiptCleanup,
   planOrphanRegistry,
   selectDueCleanupJobs,
   shouldBackfillThanksMessage,

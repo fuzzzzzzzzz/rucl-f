@@ -50,7 +50,7 @@ export async function requestReturnRecognitionConsent(
   const descriptions = {
     anonymous: '改为“一位热心同学”，不展示姓名或学号。后续读取立即匿名；撤回不能删除他人已保存的截图。',
     masked:
-      '自愿向其他使用者展示你已绑定的脱敏姓名和部分学号，仅适用于本次同意后完成的交还。可随时改回匿名，但无法删除他人截图。',
+      '自愿向其他使用者展示你的部分姓名和部分学号，仅适用于本次同意后完成的交还。可随时改回匿名，但无法删除他人截图。',
     full: '自愿向其他使用者展示你的完整姓名和部分学号，仅适用于本次同意后完成的交还。可随时改回匿名，但无法删除他人截图。下一步需要单独确认完整姓名。',
   }
   if (!(await recognitionModal('归还展示设置', descriptions[mode]))) return null

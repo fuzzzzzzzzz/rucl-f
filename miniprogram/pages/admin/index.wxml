@@ -16,14 +16,16 @@
       </view>
     </view>
 
-    <view class="section-title queue-title">认领与交接<text class="en">[ CLAIMS · {{claims.length}} ]</text></view>
-    <view wx:if="{{claims.length === 0}}" class="neo-card empty-state">没有待处理认领。</view>
-    <view wx:for="{{claims}}" wx:key="id" class="neo-card review-card">
+    <view class="section-title queue-title">待审核认领<text class="en">[ CLAIM REVIEW · {{pendingClaims.length}} ]</text></view>
+    <view class="queue-help">核对申请人是否为卡主，再选择一种批准或拒绝原因。批准后移至下方交接进度。</view>
+    <view wx:if="{{pendingClaims.length === 0}}" class="neo-card empty-state">没有待审核认领。</view>
+    <view wx:for="{{pendingClaims}}" wx:key="id" class="neo-card review-card">
       <view class="review-title">卡片：{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
+      <view class="record-label">招领编号 {{item.recordLabel}} · 申请日期 {{item.createdAt}}</view>
       <view class="applicant">申请人：{{item.applicantMaskedName}} · {{item.applicantMaskedStudentNumber}}</view>
       <view class="review-meta"><text>{{item.category}}</text><text>{{item.campusName}}</text><text>私有特征{{item.featureMatch ? '相符' : '未确认'}}</text></view>
       <view class="storage-detail"><b>当前存放</b><text>{{item.storageSummary}}</text></view>
-      <block wx:if="{{item.status === 'admin_review'}}">
+      <block>
         <view class="storage-detail"><b>批准原因</b></view>
         <view class="review-actions reason-actions">
           <button class="approve" data-id="{{item.id}}" data-decision="approved" data-reason-code="identity_verified" disabled="{{!!busyKey}}" bindtap="decideClaim">身份已核验</button>
@@ -40,15 +42,22 @@
           <button data-id="{{item.id}}" data-decision="rejected" data-reason-code="other" disabled="{{!!busyKey}}" bindtap="decideClaim">其他原因</button>
         </view>
       </block>
-      <button wx:elif="{{item.status === 'ready_for_pickup'}}" class="handover-button" data-id="{{item.id}}" loading="{{busyKey === 'handover:' + item.id}}" disabled="{{!!busyKey}}" bindtap="finishHandover">管理员代为确认归还</button>
-      <view wx:else class="safety-note">尚未满足现场交接条件。</view>
+    </view>
+
+    <view wx:if="{{handoverClaims.length}}" class="section-title queue-title">已通过 · 交接进度<text class="en">[ HANDOVER · {{handoverClaims.length}} ]</text></view>
+    <view wx:for="{{handoverClaims}}" wx:key="id" class="neo-card review-card">
+      <view class="review-title">{{item.maskedName}} · {{item.maskedStudentNumber}}</view>
+      <view class="record-label">招领编号 {{item.recordLabel}}</view>
+      <view class="storage-detail"><text>{{item.status === 'ready_for_pickup' ? '已通过审核，等待卡主取卡' : '已通过审核，等待拾卡者补充可领取地点'}}</text><text>{{item.storageSummary}}</text></view>
+      <button wx:if="{{item.status === 'ready_for_pickup'}}" class="handover-button" data-id="{{item.id}}" loading="{{busyKey === 'handover:' + item.id}}" disabled="{{!!busyKey}}" bindtap="finishHandover">已实际交还 · 代为确认</button>
     </view>
 
     <view class="section-title queue-title">交接与奖励复核<text class="en">[ HANDOVER REVIEW · {{operations.risks.length}} ]</text></view>
     <view wx:for="{{operations.risks}}" wx:key="id" class="neo-card review-card">
-      <view class="review-title">交接记录 {{item.id}}</view>
+      <view class="review-title">交接记录 {{item.recordLabel}}</view>
       <view class="review-meta"><text>{{item.riskStatus === 'review' ? '出现异常频率，奖励待复核' : '待确认是否在官方地点交接'}}</text></view>
-      <button data-id="{{item.id}}" loading="{{busyKey === 'proof:' + item.id}}" disabled="{{!!busyKey}}" bindtap="viewProof">仅为处理争议查看交接照片</button>
+      <view wx:if="{{item.proofUnavailable}}" class="proof-warning">此记录没有可查看的交接照片。管理员代为确认交还时不会生成照片，请按实际交还情况核对。</view>
+      <button wx:else class="proof-button" data-id="{{item.id}}" loading="{{busyKey === 'proof:' + item.id}}" disabled="{{!!busyKey}}" bindtap="viewProof">查看交接照片</button>
       <view class="review-actions">
         <button data-id="{{item.id}}" data-decision="invalid" disabled="{{!!busyKey}}" bindtap="reviewRisk">撤销记录</button>
         <button class="approve" data-id="{{item.id}}" data-decision="valid" disabled="{{!!busyKey}}" bindtap="reviewRisk">确认有效和官方交接</button>
@@ -62,7 +71,7 @@
       <view>举报事实：{{item.reason}}</view>
       <view wx:if="{{item.targetAvailable}}" class="report-evidence">
         <view>目标类型：{{item.targetEvidence.kind}} · 状态：{{item.targetEvidence.status || '不适用'}}</view>
-        <view wx:if="{{item.targetEvidence.maskedName || item.targetEvidence.maskedStudentNumber}}">脱敏身份：{{item.targetEvidence.maskedName}} {{item.targetEvidence.maskedStudentNumber}}</view>
+        <view wx:if="{{item.targetEvidence.maskedName || item.targetEvidence.maskedStudentNumber}}">姓名与学号（部分隐藏）：{{item.targetEvidence.maskedName}} {{item.targetEvidence.maskedStudentNumber}}</view>
         <view wx:if="{{item.targetEvidence.category || item.targetEvidence.campusId}}">类别/校区：{{item.targetEvidence.category}} {{item.targetEvidence.campusId}}</view>
         <view wx:if="{{item.targetEvidence.date || item.targetEvidence.locationCategory}}">日期/地点类别：{{item.targetEvidence.date}} {{item.targetEvidence.locationCategory}}</view>
         <view wx:if="{{item.targetEvidence.cardId}}">关联记录：{{item.targetEvidence.cardId}}</view>

@@ -22,9 +22,10 @@ import type {
   UserProfileInput,
 } from '../shared/models'
 import { updateCurrentAccountSummary, waitForCloudReady } from '../shared/startup-session'
-import { requestContentSafetyConsent } from '../shared/content-safety-consent'
+import { IMAGE_SAFETY_CONSENT_VERSION, requestContentSafetyConsent } from '../shared/content-safety-consent'
 import { selectApiFunction } from '../shared/api-routing'
 import type { CardStatus } from '../shared/workflow'
+import { withDeadline } from '../shared/async-control'
 
 interface CloudAssetTokens {
   storagePhotoUploadToken?: string
@@ -71,6 +72,8 @@ export function updateCloudReturnRecognitionPreference(
 
 interface PrivateUploadResult {
   uploadToken: string
+  status: 'pending' | 'passed' | 'review' | 'rejected' | 'error' | 'expired'
+  expiresAt: number
 }
 
 interface OcrUploadAuthorization {
@@ -167,7 +170,7 @@ export function extractCardIdentity(lines: string[] = []): { name: string; stude
   studentNumber ||= normalized.map(numberFromText).find(Boolean) || ''
 
   const ignored =
-    /中国人民大学|校园卡|学生卡|本科生|硕士生|博士生|教职工|学号|学生号|证号|编号|姓名|名字|类别|照片|无法识别/
+    /中[国國]人民大[学學]|校[园園]卡|[学學]生卡|本科生|[硕碩]士生|博士生|教[职職]工|[学學][号號]|[学學]生[号號]|[证證][号號]|[编編][号號]|姓名|名字|[类類][别別]|照片|[无無]法[识識][别別]/
   const normalizedName = (line: string) => line.replace(/\s+/g, '').replace(/^(?:姓名|名字)[:：]?/, '')
   let name = ''
   for (let index = 0; index < normalized.length && !name; index += 1) {
@@ -207,6 +210,13 @@ export function normalizeCloudPublicCard(card: CloudPublicCard): PublicCard {
 
 export function friendlyCloudErrorMessage(error: unknown): string {
   const message = readErrorMessage(error)
+  const knownPhotoMessage = [
+    '图片安全审核暂不可用，请使用无照片的官方交卡点流程',
+    '今天的照片上传次数已达上限，请稍后再试',
+    '图片安全审核暂时失败，请稍后重新上传',
+    '照片上传凭证无效、已使用或不属于当前账号',
+  ].find((safeMessage) => message.includes(safeMessage))
+  if (knownPhotoMessage) return knownPhotoMessage
   if (/EXCEED_MAX_PAYLOAD_SIZE|request data size|payload too large|request entity too large/i.test(message)) {
     return '照片数据过大，请重新拍摄并减少画面细节'
   }
@@ -216,19 +226,39 @@ export function friendlyCloudErrorMessage(error: unknown): string {
   return '云端服务暂不可用，请稍后重试'
 }
 
-export async function callCloudApi<T>(action: string, input: Record<string, unknown> = {}): Promise<T> {
-  await waitForCloudReady()
-  const consentVersion = await requestContentSafetyConsent(action)
-  const requestInput = consentVersion ? { ...input, contentSafetyConsentVersion: consentVersion } : input
+export async function callCloudApi<T>(
+  action: string,
+  input: Record<string, unknown> = {},
+  beforeSend?: () => void,
+): Promise<T> {
+  await waitForCloudControlReady()
+  beforeSend?.()
+  const consentVersion = await requestContentSafetyConsent(action, input.kind)
+  beforeSend?.()
+  const requestInput = consentVersion
+    ? {
+        ...input,
+        [action === 'uploadPrivateImage' ? 'imageSafetyConsentVersion' : 'contentSafetyConsentVersion']: consentVersion,
+      }
+    : input
+  return sendCloudApi<T>(action, requestInput)
+}
+
+/** Internal dispatch; public requests must pass the request-scoped consent gate above. */
+async function sendCloudApi<T>(action: string, input: Record<string, unknown>): Promise<T> {
   try {
     const response = await wx.cloud.callFunction({
       name: selectApiFunction(action),
-      data: { action, input: requestInput },
+      data: { action, input },
     })
     return response.result as T
   } catch (error) {
     throw new Error(friendlyCloudErrorMessage(error))
   }
+}
+
+function waitForCloudControlReady(): Promise<void> {
+  return withDeadline(waitForCloudReady(), 5000, '连接服务超时，请检查网络后再次提交')
 }
 
 const MAX_PRIVATE_IMAGE_BYTES = 384 * 1024
@@ -326,44 +356,308 @@ function readFileAsBase64(filePath: string): Promise<string> {
   })
 }
 
-async function uploadPrivateImage(filePath: string, kind: 'storage_scene' | 'handover_proof'): Promise<string> {
-  if (!filePath) return ''
-  await waitForCloudReady()
-  const compressedPath = await compressPrivateImage(filePath)
+type PrivateImageKind = 'storage_scene' | 'handover_proof'
+const PHOTO_WAIT_MESSAGE = '照片还在安全检查中，请稍后再次提交，无需重新上传'
+const PHOTO_UNKNOWN_MESSAGE = '照片检查结果暂时无法确认，请稍后再次提交，无需重新上传'
+const PHOTO_UPLOAD_UNKNOWN_MESSAGE = '照片上传结果暂时无法确认，请稍后再次提交；若仍无法确认，请重新选择照片'
+const PHOTO_WAIT_MS = 20_000
+const PRIVATE_IMAGE_CACHE_LIMIT = 8
+const privateImages = new Map<string, PrivateImageEntry>()
+
+export class PrivateImagePendingError extends Error {
+  constructor(message = PHOTO_WAIT_MESSAGE) {
+    super(message)
+    this.name = 'PrivateImagePendingError'
+  }
+}
+
+class PrivateImageBusinessDeferredError extends Error {}
+
+interface PrivateImageEntry {
+  accountId: string
+  environment: string
+  kind: PrivateImageKind
+  path: string
+  expiresAt: number
+  token: string
+  upload?: Promise<PrivateUploadResult>
+  wait?: Promise<string>
+  cancelled: boolean
+  networkStarted: boolean
+}
+
+function currentPhotoAccount(): { accountId: string; environment: string } {
+  const { accountId, cloudEnvId } = getApp<IAppOption>().globalData
+  if (!accountId || !/^[A-Za-z0-9_-]{1,128}$/.test(accountId)) throw new Error('请重新登录后再提交照片')
+  return { accountId, environment: cloudEnvId || '' }
+}
+
+function ownsPhoto(entry: PrivateImageEntry): boolean {
+  const { accountId, cloudEnvId } = getApp<IAppOption>().globalData
+  return Boolean(accountId) && accountId === entry.accountId && (cloudEnvId || '') === entry.environment
+}
+
+function photoKey(accountId: string, environment: string, kind: PrivateImageKind, path: string): string {
+  return JSON.stringify([accountId, environment, kind, path])
+}
+
+function checkPhotoAccount(entry: PrivateImageEntry): void {
+  if (entry.cancelled || !ownsPhoto(entry)) throw new Error('本次照片操作已取消，请重新提交')
+}
+
+function forgetPhoto(entry: PrivateImageEntry): void {
+  const key = photoKey(entry.accountId, entry.environment, entry.kind, entry.path)
+  if (privateImages.get(key) === entry) privateImages.delete(key)
+  entry.cancelled = true
+}
+
+async function discardPhoto(entry: PrivateImageEntry): Promise<void> {
+  forgetPhoto(entry)
+  if (!entry.token || !ownsPhoto(entry)) return
+  await withDeadline(
+    callCloudApi('discardPrivateUpload', { uploadToken: entry.token }, () => {
+      if (!ownsPhoto(entry)) throw new Error('账号已变更')
+    }),
+    5000,
+    '照片清理稍后重试',
+  ).catch(() => undefined)
+}
+
+/** Photo replacement/cancellation releases only this account's unconsumed upload. */
+export async function discardSelectedPrivateImage(filePath: string, kind: PrivateImageKind): Promise<void> {
+  if (!filePath) return
+  const { accountId, environment } = currentPhotoAccount()
+  const entry = privateImages.get(photoKey(accountId, environment, kind, filePath))
+  if (entry) await discardPhoto(entry)
+}
+
+function validatePhotoReceipt(value: unknown, upload: boolean): PrivateUploadResult {
+  const result = value as PrivateUploadResult | null
+  if (
+    !result ||
+    typeof result !== 'object' ||
+    !['pending', 'passed', 'review', 'rejected', 'error', 'expired'].includes(result.status) ||
+    !Number.isSafeInteger(result.expiresAt) ||
+    result.expiresAt <= 0 ||
+    (upload && (typeof result.uploadToken !== 'string' || !/^[a-f0-9]{48}$/.test(result.uploadToken))) ||
+    Object.keys(result).some((key) => !['status', 'expiresAt', ...(upload ? ['uploadToken'] : [])].includes(key))
+  )
+    throw new Error('照片检查结果无效，请重新选择照片')
+  return result
+}
+
+async function beginPrivateUpload(
+  entry: PrivateImageEntry,
+  deadline: number,
+  consentVersion: string,
+): Promise<PrivateUploadResult> {
+  const guard = () => {
+    checkPhotoAccount(entry)
+    if (Date.now() >= deadline) throw new PrivateImagePendingError(PHOTO_UNKNOWN_MESSAGE)
+  }
+  await waitForCloudControlReady()
+  guard()
+  const compressedPath = await compressPrivateImage(entry.path)
+  guard()
   const contentBase64 = await readFileAsBase64(compressedPath)
+  guard()
   const estimatedBytes = Math.floor((contentBase64.replace(/=+$/, '').length * 3) / 4)
   if (!contentBase64 || estimatedBytes > MAX_PRIVATE_IMAGE_BYTES) {
     throw new Error('照片压缩后仍然过大，请重新拍摄并减少画面细节')
   }
-  const result = await callCloudApi<PrivateUploadResult>('uploadPrivateImage', {
-    kind,
+  await waitForCloudControlReady()
+  guard()
+  entry.networkStarted = true
+  const receipt = await sendCloudApi<unknown>('uploadPrivateImage', {
+    kind: entry.kind,
     mimeType: 'image/jpeg',
     contentBase64,
+    imageSafetyConsentVersion: consentVersion,
   })
-  return result.uploadToken
+  // Keep a late receipt for a later click, but never resume the timed-out business operation.
+  const result = validatePhotoReceipt(receipt, true)
+  if (entry.cancelled) {
+    if (ownsPhoto(entry)) await discardPhoto({ ...entry, token: result.uploadToken })
+    throw new Error('本次照片操作已取消')
+  }
+  checkPhotoAccount(entry)
+  entry.token = result.uploadToken
+  entry.expiresAt = Math.min(entry.expiresAt, result.expiresAt)
+  return result
+}
+
+async function waitForPrivateImage(entry: PrivateImageEntry, fresh: boolean): Promise<string> {
+  try {
+    // Reading and deciding on consent is the student's time, not server processing time.
+    const consentVersion = fresh ? await requestContentSafetyConsent('uploadPrivateImage', entry.kind) : undefined
+    checkPhotoAccount(entry)
+    const deadline = Date.now() + PHOTO_WAIT_MS
+    let receipt: PrivateUploadResult
+    if (fresh) {
+      if (consentVersion !== IMAGE_SAFETY_CONSENT_VERSION) throw new Error('需明确同意本次照片安全检查后才能上传')
+      entry.upload = beginPrivateUpload(entry, deadline, consentVersion)
+      // Promise.race observes both late resolutions and late rejections.
+      receipt = await withDeadline(entry.upload, PHOTO_WAIT_MS, PHOTO_UPLOAD_UNKNOWN_MESSAGE)
+    } else {
+      if (!entry.token && entry.upload) await withDeadline(entry.upload, 5000, PHOTO_UPLOAD_UNKNOWN_MESSAGE)
+      checkPhotoAccount(entry)
+      if (!entry.token) throw new PrivateImagePendingError(PHOTO_UPLOAD_UNKNOWN_MESSAGE)
+      receipt = await queryPrivateImage(entry, deadline)
+    }
+    for (;;) {
+      checkPhotoAccount(entry)
+      entry.expiresAt = Math.min(entry.expiresAt, receipt.expiresAt)
+      if (Date.now() >= entry.expiresAt || receipt.status === 'expired') {
+        void discardPhoto(entry).catch(() => undefined)
+        throw new Error('照片检查已过期，请重新选择照片')
+      }
+      if (Date.now() >= deadline) throw new PrivateImagePendingError()
+      if (receipt.status === 'passed') return entry.token
+      if (receipt.status !== 'pending') {
+        void discardPhoto(entry).catch(() => undefined)
+        throw new Error(
+          receipt.status === 'rejected'
+            ? '照片未通过安全检查，请重新选择照片'
+            : '照片暂不能用于提交，请重新选择照片或使用无照片的官方交卡点流程',
+        )
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, Math.min(1000, deadline - Date.now())))
+      if (Date.now() >= deadline) throw new PrivateImagePendingError()
+      receipt = await queryPrivateImage(entry, deadline)
+    }
+  } catch (error) {
+    // A timed-out local preparation must not later send a request; only a definitely unsent attempt is cleared.
+    if (!entry.networkStarted && !entry.token) forgetPhoto(entry)
+    if (error instanceof PrivateImagePendingError) throw error
+    if (
+      error instanceof Error &&
+      [PHOTO_WAIT_MESSAGE, PHOTO_UNKNOWN_MESSAGE, PHOTO_UPLOAD_UNKNOWN_MESSAGE].includes(error.message)
+    ) {
+      throw new PrivateImagePendingError(error.message)
+    }
+    if (!entry.token && error instanceof Error && error.message === '云端服务暂不可用，请稍后重试') {
+      throw new PrivateImagePendingError(PHOTO_UPLOAD_UNKNOWN_MESSAGE)
+    }
+    if (error instanceof Error && error.message.includes('照片检查结果无效')) {
+      throw new PrivateImagePendingError(entry.token ? PHOTO_UNKNOWN_MESSAGE : PHOTO_UPLOAD_UNKNOWN_MESSAGE)
+    }
+    if (!entry.token && error instanceof Error && error.message.includes('需明确同意')) forgetPhoto(entry)
+    if (
+      !entry.token &&
+      error instanceof Error &&
+      [
+        '图片安全审核暂不可用，请使用无照片的官方交卡点流程',
+        '今天的照片上传次数已达上限，请稍后再试',
+        '图片安全审核暂时失败，请稍后重新上传',
+      ].includes(error.message)
+    )
+      forgetPhoto(entry)
+    throw error
+  }
+}
+
+async function queryPrivateImage(entry: PrivateImageEntry, deadline: number): Promise<PrivateUploadResult> {
+  checkPhotoAccount(entry)
+  if (Date.now() >= entry.expiresAt) {
+    void discardPhoto(entry).catch(() => undefined)
+    throw new Error('照片检查已过期，请重新选择照片')
+  }
+  try {
+    const result = await withDeadline(
+      callCloudApi('getPrivateImageStatus', { uploadToken: entry.token }, () => {
+        checkPhotoAccount(entry)
+        if (Date.now() >= deadline) throw new PrivateImagePendingError()
+      }),
+      Math.max(1, Math.min(5000, deadline - Date.now())),
+      PHOTO_UNKNOWN_MESSAGE,
+    )
+    return validatePhotoReceipt(result, false)
+  } catch (error) {
+    if (!ownsPhoto(entry) || entry.cancelled) throw error
+    throw new PrivateImagePendingError(PHOTO_UNKNOWN_MESSAGE)
+  }
+}
+
+async function uploadPrivateImage(filePath: string, kind: PrivateImageKind): Promise<string> {
+  if (!filePath) return ''
+  await waitForCloudControlReady()
+  const { accountId, environment } = currentPhotoAccount()
+  for (const entry of privateImages.values()) {
+    if (Date.now() >= entry.expiresAt) void discardPhoto(entry)
+  }
+  const key = photoKey(accountId, environment, kind, filePath)
+  let entry = privateImages.get(key)
+  const fresh = !entry
+  if (!entry) {
+    while (privateImages.size >= PRIVATE_IMAGE_CACHE_LIMIT) {
+      const oldest = privateImages.values().next().value as PrivateImageEntry
+      void discardPhoto(oldest)
+    }
+    entry = {
+      accountId,
+      environment,
+      kind,
+      path: filePath,
+      token: '',
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      cancelled: false,
+      networkStarted: false,
+    }
+    privateImages.set(key, entry)
+  }
+  if (entry.wait) return entry.wait
+  const activeEntry = entry
+  const waiting = waitForPrivateImage(activeEntry, fresh)
+  activeEntry.wait = waiting
+  try {
+    return await waiting
+  } finally {
+    if (activeEntry.wait === waiting) activeEntry.wait = undefined
+  }
+}
+
+function findPhotoByToken(uploadToken: string): PrivateImageEntry | undefined {
+  return Array.from(privateImages.values()).find((entry) => entry.token === uploadToken && ownsPhoto(entry))
 }
 
 async function discardPrivateUpload(uploadToken: string): Promise<void> {
-  if (uploadToken) await callCloudApi('discardPrivateUpload', { uploadToken })
+  if (!uploadToken) return
+  const entry = findPhotoByToken(uploadToken)
+  if (entry) await discardPhoto(entry)
+}
+
+function completePrivateUpload(uploadToken: string): void {
+  if (!uploadToken) return
+  const entry = findPhotoByToken(uploadToken)
+  if (entry) forgetPhoto(entry)
 }
 
 export async function uploadStoragePhoto(filePath: string): Promise<string> {
   return uploadPrivateImage(filePath, 'storage_scene')
 }
 
-export async function processCardPhoto(filePath: string): Promise<ImageProcessingResult> {
+export async function processCardPhoto(
+  filePath: string,
+  onStage?: (stage: string) => void,
+): Promise<ImageProcessingResult> {
   if (!filePath) return {}
+  onStage?.('连接云服务')
   await waitForCloudReady()
+  onStage?.('处理照片')
   const preparedPath = await prepareOcrImage(filePath)
+  onStage?.('读取照片')
   const contentBase64 = await readFileAsBase64(preparedPath)
   const rawBytes = Math.floor((contentBase64.replace(/=+$/, '').length * 3) / 4)
   if (!contentBase64 || rawBytes > 2 * 1024 * 1024) throw new Error('照片超过2MiB，请重新拍摄或手动填写')
+  onStage?.('获取识别授权')
   const authorization = await callCloudApi<OcrUploadAuthorization>('prepareOcrUpload', { transport: 'inline' })
   try {
+    onStage?.('发送照片并等待识别')
     const response = await wx.cloud.callFunction({
       name: 'processCardImage',
       data: { contentBase64, uploadToken: authorization.uploadToken },
     })
+    onStage?.('识别完成')
     return (response.result || {}) as ImageProcessingResult
   } catch (error) {
     throw new Error(friendlyOcrErrorMessage(error))
@@ -388,16 +682,44 @@ export async function updateCloudProfileDetails(
   return summary
 }
 
-export async function createCloudFoundCard(input: FoundCardInput): Promise<{ id: string }> {
+function privateBusinessGuard(hasPhoto: boolean, shouldContinue?: () => boolean, getToken?: () => string): () => void {
+  const account = hasPhoto ? currentPhotoAccount() : undefined
+  return () => {
+    if (shouldContinue && !shouldContinue()) throw new PrivateImageBusinessDeferredError('本次操作已取消，请重新提交')
+    if (account) {
+      const current = currentPhotoAccount()
+      if (current.accountId !== account.accountId || current.environment !== account.environment) {
+        throw new Error('本次照片操作已取消，请重新提交')
+      }
+      const token = getToken?.()
+      const entry = token ? findPhotoByToken(token) : undefined
+      if (token && (!entry || entry.cancelled || Date.now() >= entry.expiresAt)) {
+        throw new Error('照片检查已过期或已取消，请重新选择照片')
+      }
+    }
+  }
+}
+
+export async function createCloudFoundCard(
+  input: FoundCardInput,
+  shouldContinue?: () => boolean,
+): Promise<{ id: string }> {
+  await waitForCloudControlReady()
+  const guard = privateBusinessGuard(Boolean(input.storagePhotoPath), shouldContinue, () => storagePhotoUploadToken)
   let storagePhotoUploadToken = ''
   try {
     if (input.storagePhotoPath) storagePhotoUploadToken = await uploadStoragePhoto(input.storagePhotoPath)
-    return await callCloudApi<{ id: string }>(
+    guard()
+    const result = await callCloudApi<{ id: string }>(
       'createFoundCard',
       buildCloudFoundCardInput(input, { storagePhotoUploadToken }),
+      guard,
     )
+    completePrivateUpload(storagePhotoUploadToken)
+    return result
   } catch (error) {
-    await discardPrivateUpload(storagePhotoUploadToken).catch(() => undefined)
+    if (!(error instanceof PrivateImageBusinessDeferredError))
+      await discardPrivateUpload(storagePhotoUploadToken).catch(() => undefined)
     throw error
   }
 }
@@ -538,13 +860,19 @@ export async function transferCloudFoundCardToOfficial(
   cardId: string,
   storageLocation: FoundCardInput['storageLocation'],
   storagePhotoPath = '',
+  shouldContinue?: () => boolean,
 ): Promise<void> {
+  await waitForCloudControlReady()
+  const guard = privateBusinessGuard(Boolean(storagePhotoPath), shouldContinue, () => storagePhotoUploadToken)
   let storagePhotoUploadToken = ''
   try {
     if (storagePhotoPath) storagePhotoUploadToken = await uploadStoragePhoto(storagePhotoPath)
-    await callCloudApi('transferFoundCardToOfficial', { cardId, storageLocation, storagePhotoUploadToken })
+    guard()
+    await callCloudApi('transferFoundCardToOfficial', { cardId, storageLocation, storagePhotoUploadToken }, guard)
+    completePrivateUpload(storagePhotoUploadToken)
   } catch (error) {
-    await discardPrivateUpload(storagePhotoUploadToken).catch(() => undefined)
+    if (!(error instanceof PrivateImageBusinessDeferredError))
+      await discardPrivateUpload(storagePhotoUploadToken).catch(() => undefined)
     throw error
   }
 }
@@ -554,12 +882,23 @@ export async function confirmCloudClaimHandover(
   proofPath: string,
   thanksText = '',
   thanksPublic = false,
+  shouldContinue?: () => boolean,
 ): Promise<{ status: 'returned'; thanksAccepted: boolean }> {
+  await waitForCloudControlReady()
+  const guard = privateBusinessGuard(Boolean(proofPath), shouldContinue, () => proofUploadToken)
   const proofUploadToken = await uploadPrivateImage(proofPath, 'handover_proof')
   try {
-    return await callCloudApi('confirmClaimHandover', { claimId, proofUploadToken, thanksText, thanksPublic })
+    guard()
+    const result = await callCloudApi<{ status: 'returned'; thanksAccepted: boolean }>(
+      'confirmClaimHandover',
+      { claimId, proofUploadToken, thanksText, thanksPublic },
+      guard,
+    )
+    completePrivateUpload(proofUploadToken)
+    return result
   } catch (error) {
-    await discardPrivateUpload(proofUploadToken).catch(() => undefined)
+    if (!(error instanceof PrivateImageBusinessDeferredError))
+      await discardPrivateUpload(proofUploadToken).catch(() => undefined)
     throw error
   }
 }

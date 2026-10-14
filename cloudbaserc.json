@@ -15,7 +15,10 @@
       "envVariables": {
         "STUDENT_HMAC_SECRET": "{{env.STUDENT_HMAC_SECRET}}",
         "SUBSCRIPTION_TEMPLATE_ID": "{{env.SUBSCRIPTION_TEMPLATE_ID}}",
-        "MINIPROGRAM_STATE": "{{env.MINIPROGRAM_STATE}}"
+        "MINIPROGRAM_STATE": "{{env.MINIPROGRAM_STATE}}",
+        "MEDIA_CALLBACK_TOKEN": "{{env.MEDIA_CALLBACK_TOKEN}}",
+        "MEDIA_CALLBACK_AES_KEY": "{{env.MEDIA_CALLBACK_AES_KEY}}",
+        "MEDIA_CALLBACK_APP_ID": "{{env.MEDIA_CALLBACK_APP_ID}}"
       }
     },
     {

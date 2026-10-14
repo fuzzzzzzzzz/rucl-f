@@ -5,7 +5,7 @@
   "overrides": {
     "lodash.set": "$lodash.set",
     "@cloudbase/node-sdk@3.17.2": {
-      "axios": "0.33.0"
+      "axios": "0.34.0"
     },
     "@cloudbase/database@1.4.3": {
       "lodash.unset": "4.18.0"

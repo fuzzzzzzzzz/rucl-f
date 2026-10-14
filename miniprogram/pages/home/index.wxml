@@ -13,7 +13,7 @@
   <view class="neo-card guide">
     <view class="section-heading"><image class="section-icon" src="/assets/icons/info.png" mode="aspectFit" /><view class="section-title">使用说明<text class="en">[ HOW IT WORKS ]</text></view></view><view class="rule" />
     <view class="guide-row"><text class="guide-number number">1</text><text>系统会核对你填写的姓名和学号；</text></view>
-    <view class="guide-row"><text class="guide-number number">2</text><text>失物信息中的姓名和学号会脱敏显示；</text></view>
+    <view class="guide-row"><text class="guide-number number">2</text><text>失物信息中的姓名和学号会隐藏部分内容；</text></view>
     <view class="guide-row"><text class="guide-number number">3</text><text>姓名学号一致，且有存放照片或卡片已在官方地点后，才会显示存放地点。</text></view>
     <view class="profile-status" bindtap="goProfileEdit">
       <view class="profile-status-copy">

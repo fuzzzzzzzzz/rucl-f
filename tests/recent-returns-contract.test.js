@@ -3,6 +3,16 @@ import { describe, expect, it } from 'vitest'
 
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
 describe('recent returns page and deployment contract', () => {
+  it.each([
+    'miniprogram/pages/home/index.wxml',
+    'miniprogram/pages/profile-edit/index.wxml',
+    'miniprogram/pages/privacy/index.wxml',
+    'miniprogram/pages/admin/index.wxml',
+    'miniprogram/shared/recent-returns.ts',
+  ])('uses plain privacy wording instead of technical jargon in %s', (file) => {
+    expect(read(file)).not.toContain('脱敏')
+  })
+
   it('places real recent returns between guide and poster while keeping notice last', () => {
     const home = read('miniprogram/pages/home/index.wxml')
     expect(home).toContain('近期暖心归还')

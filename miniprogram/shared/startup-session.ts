@@ -11,6 +11,7 @@ export interface StartupGlobalData {
   isAdmin: boolean
   profileBindingStatus: ProfileBindingStatus
   accountSummary: AccountProfileSummary | null
+  accountId?: string
 }
 
 interface StartupApp {
@@ -18,6 +19,7 @@ interface StartupApp {
 }
 
 interface LoginAccount {
+  id?: unknown
   role?: string
   profileBindingStatus?: ProfileBindingStatus
   maskedName?: string
@@ -82,6 +84,8 @@ export function applyAccountSummary(app: StartupApp, account: LoginAccount): voi
   app.globalData.isAdmin = account.role === 'admin'
   app.globalData.profileBindingStatus = profileBindingStatus
   app.globalData.accountSummary = toAccountSummary(account)
+  app.globalData.accountId =
+    typeof account.id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(account.id) ? account.id : ''
 }
 
 export function updateCurrentAccountSummary(summary: AccountProfileSummary): void {
@@ -128,6 +132,7 @@ export function startCloudSession(app: StartupApp, dependencies?: StartupDepende
         app.globalData.startupState = 'ready'
         app.globalData.cloudError = ''
       } catch {
+        app.globalData.accountId = ''
         app.globalData.cloudEnabled = false
         app.globalData.startupState = 'error'
         app.globalData.cloudError = '云端服务暂不可用，请检查网络后重试'

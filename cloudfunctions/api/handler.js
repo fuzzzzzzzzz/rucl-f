@@ -11,6 +11,7 @@ const {
 } = require('./claim')
 const { deletionRequestSummary, planDeletionReview } = require('./deletion')
 const { requireSafeText } = require('./content-safety')
+const { createMediaAuditService } = require('./media-audit-service')
 const {
   RETURN_CONSENT_VERSION,
   RETURN_WINDOW_MS,
@@ -54,11 +55,25 @@ const runtimeContext = new AsyncLocalStorage()
 function configureRuntime(dependencies) {
   if (!dependencies || !dependencies.cloud) throw new Error('API运行时未配置')
   const database = dependencies.database || dependencies.cloud.database()
+  const clock = typeof dependencies.now === 'function' ? dependencies.now : () => Date.now()
   return {
     cloud: dependencies.cloud,
     db: database,
     command: database.command,
-    now: typeof dependencies.now === 'function' ? dependencies.now : () => Date.now(),
+    now: clock,
+    mediaAudit: createMediaAuditService({
+      cloud: dependencies.cloud,
+      database,
+      now: clock,
+      config:
+        dependencies.mediaAuditConfig === undefined
+          ? {
+              token: process.env.MEDIA_CALLBACK_TOKEN,
+              encodingAESKey: process.env.MEDIA_CALLBACK_AES_KEY,
+              appId: process.env.MEDIA_CALLBACK_APP_ID,
+            }
+          : dependencies.mediaAuditConfig,
+    }),
     randomBytes: typeof dependencies.randomBytes === 'function' ? dependencies.randomBytes : crypto.randomBytes,
   }
 }
@@ -81,6 +96,8 @@ function runtimeProxy(select) {
       get(_target, property) {
         const target = select(activeRuntime())
         const value = target[property]
+        // SDK OpenAPI is a callable proxy: reading .bind creates an API request.
+        if (property === 'openapi') return value
         return typeof value === 'function' ? value.bind(target) : value
       },
     },
@@ -268,11 +285,26 @@ function isOfficialStorage(location = {}) {
   return location.category === '官方交卡点' && Boolean(location.place)
 }
 
-async function temporaryFileUrl(fileId) {
-  if (!fileId) return ''
-  const result = await cloud.getTempFileURL({ fileList: [{ fileID: fileId, maxAge: 600 }] })
-  const file = result.fileList && result.fileList[0]
-  return file && (file.status === 0 || file.status === undefined) ? file.tempFileURL || '' : ''
+function privateFileUrl(file, expectedFileId) {
+  if (file?.fileID !== expectedFileId || file?.status !== 0 || typeof file?.tempFileURL !== 'string') return ''
+  try {
+    const url = new URL(file.tempFileURL)
+    return url.protocol === 'https:' && url.hostname && !url.username && !url.password ? file.tempFileURL : ''
+  } catch {
+    return ''
+  }
+}
+
+async function temporaryFileUrl(fileId, kind) {
+  if (!fileId || !(await activeRuntime().mediaAudit.isFileApproved(db, fileId, kind))) return ''
+  try {
+    const result = await cloud.getTempFileURL({ fileList: [{ fileID: fileId, maxAge: 600 }] })
+    if (!Array.isArray(result?.fileList) || result.fileList.length !== 1) return ''
+    if (!(await activeRuntime().mediaAudit.isFileApproved(db, fileId, kind))) return ''
+    return privateFileUrl(result.fileList[0], fileId)
+  } catch {
+    return ''
+  }
 }
 
 function chunks(values, size = 20) {
@@ -325,25 +357,78 @@ async function recordDataIntegrityEvent(collection, recordId, errorCode) {
     })
 }
 
-async function temporaryFileUrls(fileIds) {
-  const uniqueFileIds = [...new Set(fileIds.filter(Boolean))]
+async function temporaryFileUrls(fileIds, kind) {
+  const candidates = [...new Set(fileIds.filter(Boolean))]
+  const approvals = await Promise.all(candidates.map((id) => activeRuntime().mediaAudit.isFileApproved(db, id, kind)))
+  const uniqueFileIds = candidates.filter((_id, index) => approvals[index])
   const pages = await Promise.all(
-    chunks(uniqueFileIds, 50).map((page) =>
-      cloud.getTempFileURL({ fileList: page.map((fileID) => ({ fileID, maxAge: 600 })) }),
-    ),
+    chunks(uniqueFileIds, 50).map(async (page) => {
+      try {
+        const result = await cloud.getTempFileURL({ fileList: page.map((fileID) => ({ fileID, maxAge: 600 })) })
+        return Array.isArray(result?.fileList) ? result.fileList : []
+      } catch {
+        return []
+      }
+    }),
   )
+  const stillApproved = await Promise.all(
+    uniqueFileIds.map((id) => activeRuntime().mediaAudit.isFileApproved(db, id, kind)),
+  )
+  const allowed = new Set(uniqueFileIds.filter((_id, index) => stillApproved[index]))
   return new Map(
     pages
-      .flatMap((page) => page.fileList || [])
-      .filter((file) => file.status === 0 || file.status === undefined)
-      .map((file) => [file.fileID, file.tempFileURL || '']),
+      .flat()
+      .filter((file) => allowed.has(file?.fileID) && privateFileUrl(file, file.fileID))
+      .map((file) => [file.fileID, file.tempFileURL]),
   )
 }
 
 async function authorizedCardProjection(card, disclose) {
-  const canDisclose = disclose === true && hasPickupReadyStorage(card)
-  const storagePhotoUrl = canDisclose ? await temporaryFileUrl(card.storagePhotoFileId) : ''
-  return matchedCardProjection(card, { discloseOfficialStoragePoint: canDisclose, storagePhotoUrl })
+  let safeCard = await approvedStorageCard(db, card)
+  const canDisclose = disclose === true && hasPickupReadyStorage(safeCard)
+  const storagePhotoUrl = canDisclose ? await temporaryFileUrl(safeCard.storagePhotoFileId, 'storage_scene') : ''
+  // The URL boundary rechecks approval after the SDK await. A revoked or
+  // unavailable scene must not independently unlock a nonofficial location.
+  if (canDisclose && !storagePhotoUrl) safeCard = { ...safeCard, storagePhotoFileId: '' }
+  return matchedCardProjection(safeCard, { discloseOfficialStoragePoint: canDisclose, storagePhotoUrl })
+}
+
+async function approvedStorageCard(database, card = {}) {
+  const approved =
+    card.storagePhotoFileId &&
+    (await activeRuntime().mediaAudit.isFileApproved(database, card.storagePhotoFileId, 'storage_scene'))
+  return approved ? card : { ...card, storagePhotoFileId: '' }
+}
+
+async function hasApprovedPickupStorage(database, card = {}) {
+  return hasPickupReadyStorage(await approvedStorageCard(database, card))
+}
+
+function privateClaimStatus(status, storageReady) {
+  if (status === 'ready_for_pickup' && !storageReady) return 'awaiting_official_transfer'
+  return normalizeClaimWorkflowStatus(status, storageReady)
+}
+
+const MEDIA_MESSAGES = {
+  invalid_upload: '照片上传凭证无效、已使用或不属于当前账号',
+  media_unconfigured: '图片安全审核暂不可用，请使用无照片的官方交卡点流程',
+  media_pending: '照片正在安全审核，请稍后重试',
+  media_review: '照片需要进一步安全审核，请重新选择照片',
+  media_rejected: '照片未通过安全审核，请重新选择照片',
+  media_expired: '照片审核凭证已过期，请重新上传',
+  media_error: '图片安全审核暂时失败，请稍后重新上传',
+}
+
+function mediaError(error) {
+  return new Error(MEDIA_MESSAGES[error?.message] || MEDIA_MESSAGES.media_error)
+}
+
+async function getPrivateImageStatus(openid, input) {
+  try {
+    return await activeRuntime().mediaAudit.status(openid, privateUploadTokenHash(input.uploadToken))
+  } catch (error) {
+    throw mediaError(error)
+  }
 }
 
 const PRIVATE_IMAGE_DIRECTORIES = { storage_scene: 'storage-scenes', handover_proof: 'handover-proofs' }
@@ -381,6 +466,10 @@ async function prepareOcrUpload(openid, input = {}) {
 
 async function uploadPrivateImage(openid, input) {
   await requireActiveUser(openid)
+  if (input.imageSafetyConsentVersion !== '2026-10-14-image-v1') {
+    throw new Error('请明确同意本次图片内容安全检查后重试')
+  }
+  if (!activeRuntime().mediaAudit.configured) throw mediaError(new Error('media_unconfigured'))
   const since = new Date(now() - 24 * 60 * 60 * 1000)
   const recentUploads = await db
     .collection('auditLogs')
@@ -424,7 +513,8 @@ async function uploadPrivateImage(openid, input) {
         createdAt: db.serverDate(),
       },
     })
-    return { uploadToken }
+    const summary = await activeRuntime().mediaAudit.begin(uploadTokenHash)
+    return { uploadToken, ...summary }
   } catch (error) {
     if (registryCreated) {
       await db
@@ -448,7 +538,7 @@ async function uploadPrivateImage(openid, input) {
           )
       }
     }
-    throw error
+    throw mediaError(error)
   }
 }
 
@@ -459,8 +549,12 @@ function privateUploadReference(uploadToken, kind, optional = false) {
 
 async function requirePrivateUpload(database, openid, reference) {
   if (!reference) return null
-  const result = await database.collection('uploadedFiles').doc(reference.id).get()
-  const record = result.data
+  let record
+  try {
+    record = await activeRuntime().mediaAudit.requireConsumable(database, openid, reference.id, reference.kind)
+  } catch (error) {
+    throw mediaError(error)
+  }
   if (
     !record ||
     record.ownerOpenid !== openid ||
@@ -814,7 +908,7 @@ async function findMatches(openid) {
     await recordDataIntegrityEvent('foundCards', latestCard._id, 'invalid_match_projection')
     return []
   }
-  return [matchedCardProjection(latestCard)]
+  return [await authorizedCardProjection(latestCard, false)]
 }
 
 async function createLostReport(openid, input) {
@@ -1050,18 +1144,23 @@ async function listMyFoundCards(openid) {
     .orderBy('createdAt', 'desc')
     .limit(50)
     .get()
-  return result.data.map((card) => ({
-    id: card._id,
-    maskedName: card.maskedName,
-    maskedStudentNumber: card.maskedStudentNumber,
-    category: card.category,
-    campusId: card.campusId,
-    foundAt: card.foundAt,
-    pickupSummary: locationSummary(card.pickupLocation),
-    storageSummary: locationSummary(card.storageLocation),
-    status: normalizeClaimWorkflowStatus(card.status, hasPickupReadyStorage(card)),
-    needsOfficialTransfer: !hasPickupReadyStorage(card) && !['returned', 'closed'].includes(card.status),
-  }))
+  return Promise.all(
+    result.data.map(async (card) => {
+      const storageReady = await hasApprovedPickupStorage(db, card)
+      return {
+        id: card._id,
+        maskedName: card.maskedName,
+        maskedStudentNumber: card.maskedStudentNumber,
+        category: card.category,
+        campusId: card.campusId,
+        foundAt: card.foundAt,
+        pickupSummary: locationSummary(card.pickupLocation),
+        storageSummary: locationSummary(card.storageLocation),
+        status: privateClaimStatus(card.status, storageReady),
+        needsOfficialTransfer: !storageReady && !['returned', 'closed'].includes(card.status),
+      }
+    }),
+  )
 }
 
 async function listMyLostReports(openid) {
@@ -1210,20 +1309,20 @@ async function submitClaim(openid, input) {
     [...ACTIVE_CLAIM_STATUSES, 'returned'].includes(normalizeClaimWorkflowStatus(existingBefore.data.status))
   ) {
     const card = await getOptionalDocument(db.collection('foundCards').doc(existingBefore.data.cardId))
+    const storageReady = Boolean(card.data && (await hasApprovedPickupStorage(db, card.data)))
+    const status = privateClaimStatus(existingBefore.data.status, storageReady)
+    const projection = card.data
+      ? await authorizedCardProjection(
+          { _id: existingBefore.data.cardId, ...card.data },
+          ['ready_for_pickup', 'returned'].includes(status),
+        )
+      : null
     return {
       id: claimId,
-      status: normalizeClaimWorkflowStatus(
-        existingBefore.data.status,
-        Boolean(card.data && hasPickupReadyStorage(card.data)),
-      ),
+      status: privateClaimStatus(status, Boolean(projection && !projection.awaitingOfficialTransfer)),
       attemptNumber: Number(existingBefore.data.attemptCount || 1),
       idempotent: true,
-      card: card.data
-        ? await authorizedCardProjection(
-            { _id: existingBefore.data.cardId, ...card.data },
-            normalizeClaimWorkflowStatus(existingBefore.data.status) === 'ready_for_pickup',
-          )
-        : null,
+      card: projection,
     }
   }
   const possibleMatches = await db
@@ -1257,7 +1356,10 @@ async function submitClaim(openid, input) {
           existing.data &&
           [...ACTIVE_CLAIM_STATUSES, 'returned'].includes(normalizeClaimWorkflowStatus(existing.data.status))
         ) {
-          claimStatus = normalizeClaimWorkflowStatus(existing.data.status, hasPickupReadyStorage(card.data || {}))
+          claimStatus = privateClaimStatus(
+            existing.data.status,
+            await hasApprovedPickupStorage(transaction, card.data || {}),
+          )
           attemptNumber = Number(existing.data.attemptCount || 1)
           selectedCardData = card.data ? { _id: cardId, ...card.data } : null
           publisherOpenid = existing.data.publisherOpenid
@@ -1306,7 +1408,7 @@ async function submitClaim(openid, input) {
         claimStatus =
           decision === 'review'
             ? 'admin_review'
-            : hasPickupReadyStorage(card.data)
+            : (await hasApprovedPickupStorage(transaction, card.data))
               ? 'ready_for_pickup'
               : 'awaiting_official_transfer'
         publisherOpenid = card.data.publisherOpenid
@@ -1396,7 +1498,12 @@ async function submitClaim(openid, input) {
   const card = selectedCardData
     ? await authorizedCardProjection(selectedCardData, claimStatus === 'ready_for_pickup')
     : null
-  return { id: claimId, status: claimStatus, attemptNumber, card }
+  return {
+    id: claimId,
+    status: privateClaimStatus(claimStatus, Boolean(card && !card.awaitingOfficialTransfer)),
+    attemptNumber,
+    card,
+  }
 }
 
 async function listMyClaims(openid) {
@@ -1407,18 +1514,21 @@ async function listMyClaims(openid) {
     'foundCards',
     result.data.map((claim) => claim.cardId),
   )
+  await Promise.all([...cards].map(async ([id, card]) => cards.set(id, await approvedStorageCard(db, card))))
   const disclosureFileIds = result.data.flatMap((claim) => {
     const card = cards.get(claim.cardId)
     if (!card) return []
-    const status = normalizeClaimWorkflowStatus(claim.status, hasPickupReadyStorage(card))
+    const status = privateClaimStatus(claim.status, hasPickupReadyStorage(card))
     return ['ready_for_pickup', 'returned'].includes(status) ? [card.storagePhotoFileId] : []
   })
-  const urls = await temporaryFileUrls(disclosureFileIds)
+  const urls = await temporaryFileUrls(disclosureFileIds, 'storage_scene')
   const records = result.data.map((claim) => {
-    const card = cards.get(claim.cardId)
+    let card = cards.get(claim.cardId)
     if (!card || !tryPublicCardProjection(card)) return null
-    const status = normalizeClaimWorkflowStatus(claim.status, hasPickupReadyStorage(card))
-    const disclose = ['ready_for_pickup', 'returned'].includes(status)
+    const initialStatus = privateClaimStatus(claim.status, hasPickupReadyStorage(card))
+    const disclose = ['ready_for_pickup', 'returned'].includes(initialStatus)
+    if (disclose && !urls.get(card.storagePhotoFileId)) card = { ...card, storagePhotoFileId: '' }
+    const status = privateClaimStatus(claim.status, hasPickupReadyStorage(card))
     const projection = matchedCardProjection(card, {
       discloseOfficialStoragePoint: disclose && hasPickupReadyStorage(card),
       storagePhotoUrl: disclose ? urls.get(card.storagePhotoFileId) || '' : '',
@@ -1463,26 +1573,28 @@ async function listAdminClaims(openid) {
     ),
     usersByOpenid(result.data.map((claim) => claim.applicantOpenid)),
   ])
-  const records = result.data.map((claim) => {
-    const card = cards.get(claim.cardId)
-    const applicant = applicants.get(claim.applicantOpenid)
-    if (!card || !applicant || !tryPublicCardProjection(card)) return null
-    const status = normalizeClaimWorkflowStatus(claim.status, hasPickupReadyStorage(card))
-    return {
-      id: claim._id,
-      cardId: claim.cardId,
-      status,
-      maskedName: card.maskedName,
-      maskedStudentNumber: card.maskedStudentNumber,
-      category: card.category,
-      campusId: card.campusId,
-      createdAt: claim.createdAt,
-      applicantMaskedName: applicant.maskedName,
-      applicantMaskedStudentNumber: applicant.maskedStudentNumber,
-      featureMatch: Boolean(claim.featureMatch),
-      storageSummary: locationSummary(card.storageLocation),
-    }
-  })
+  const records = await Promise.all(
+    result.data.map(async (claim) => {
+      const card = cards.get(claim.cardId)
+      const applicant = applicants.get(claim.applicantOpenid)
+      if (!card || !applicant || !tryPublicCardProjection(card)) return null
+      const status = privateClaimStatus(claim.status, await hasApprovedPickupStorage(db, card))
+      return {
+        id: claim._id,
+        cardId: claim.cardId,
+        status,
+        maskedName: card.maskedName,
+        maskedStudentNumber: card.maskedStudentNumber,
+        category: card.category,
+        campusId: card.campusId,
+        createdAt: claim.createdAt,
+        applicantMaskedName: applicant.maskedName,
+        applicantMaskedStudentNumber: applicant.maskedStudentNumber,
+        featureMatch: Boolean(claim.featureMatch),
+        storageSummary: locationSummary(card.storageLocation),
+      }
+    }),
+  )
   return records.filter(Boolean)
 }
 
@@ -1501,7 +1613,11 @@ async function reviewClaim(openid, input) {
       if (!claim.data) throw new Error('该申请不存在')
       if (!['review', 'admin_review'].includes(claim.data.status)) {
         if (claim.data.reviewDecision === decision && claim.data.reviewReasonCode === reasonCode) {
-          resultStatus = claim.data.status
+          const card = await transaction.collection('foundCards').doc(claim.data.cardId).get()
+          resultStatus = privateClaimStatus(
+            claim.data.status,
+            Boolean(card.data && (await hasApprovedPickupStorage(transaction, card.data))),
+          )
           retryAllowed = Boolean(claim.data.retryAllowed)
           idempotent = true
           return
@@ -1512,7 +1628,9 @@ async function reviewClaim(openid, input) {
       if (!card.data || card.data.activeClaimId !== claimId || !['review', 'admin_review'].includes(card.data.status)) {
         throw new Error('该校园卡状态已变化，请刷新后重试')
       }
-      const approvedStatus = hasPickupReadyStorage(card.data) ? 'ready_for_pickup' : 'awaiting_official_transfer'
+      const approvedStatus = (await hasApprovedPickupStorage(transaction, card.data))
+        ? 'ready_for_pickup'
+        : 'awaiting_official_transfer'
       resultStatus = decision === 'approved' ? approvedStatus : 'rejected'
       retryAllowed = retryAllowedForReason(decision, reasonCode)
       await transaction
@@ -1673,9 +1791,9 @@ async function confirmClaimHandover(openid, input) {
   const preliminary = await db.collection('claims').doc(claimId).get()
   if (!preliminary.data || preliminary.data.applicantOpenid !== openid) throw new Error('只能完成自己的认领任务')
   const preliminaryCard = await db.collection('foundCards').doc(preliminary.data.cardId).get()
-  const effectiveStatus = normalizeClaimWorkflowStatus(
+  const effectiveStatus = privateClaimStatus(
     preliminary.data.status,
-    Boolean(preliminaryCard.data && hasPickupReadyStorage(preliminaryCard.data)),
+    Boolean(preliminaryCard.data && (await hasApprovedPickupStorage(db, preliminaryCard.data))),
   )
   if (!['ready_for_pickup', 'returned'].includes(effectiveStatus)) {
     throw new Error('校园卡尚未登记可领取的存放地点和环境照片')
@@ -1727,6 +1845,19 @@ async function confirmClaimHandover(openid, input) {
   let completion
   const messageIds = []
   await db.runTransaction(async (transaction) => {
+    const currentClaim = await transaction.collection('claims').doc(claimId).get()
+    // An overlapping completion has already cleared the scene. Keep the
+    // original completion helper responsible for returned-state integrity and
+    // authorization, while enforcing approved storage on every first return.
+    if (currentClaim.data?.status !== 'returned') {
+      const currentCard = await transaction
+        .collection('foundCards')
+        .doc(currentClaim.data?.cardId || preliminary.data.cardId)
+        .get()
+      if (!currentCard.data || !(await hasApprovedPickupStorage(transaction, currentCard.data))) {
+        throw new Error('校园卡尚未登记可领取的存放地点和环境照片')
+      }
+    }
     completion = await completeHandoverRecords({
       transaction,
       claimId,
@@ -2286,7 +2417,7 @@ function claimReportEvidence(claim, card) {
     kind: 'claim',
     maskedName: cardProjection.maskedName,
     maskedStudentNumber: cardProjection.maskedStudentNumber,
-    status: normalizeClaimWorkflowStatus(claim.status, hasPickupReadyStorage(card)),
+    status: privateClaimStatus(claim.status, hasPickupReadyStorage(card)),
     cardId: claim.cardId,
   }
 }
@@ -2332,6 +2463,7 @@ async function loadAdminReportEvidence(reports) {
     'foundCards',
     [...claims.values()].map((claim) => claim.cardId),
   )
+  await Promise.all([...claimCards].map(async ([id, card]) => claimCards.set(id, await approvedStorageCard(db, card))))
   const lostOwners = await usersByOpenid(
     reports
       .filter((report) => report.type === 'lost')
@@ -2443,7 +2575,25 @@ async function getHandoverProof(openid, input) {
   const handoverId = requireText(input.handoverId, '交接记录', 64)
   const handover = await db.collection('handovers').doc(handoverId).get()
   if (!handover.data || !handover.data.proofFileId) return { url: '' }
-  return { url: await temporaryFileUrl(handover.data.proofFileId) }
+  let completedAt
+  let retentionUntil
+  try {
+    completedAt = timestamp(handover.data.completedAt)
+    retentionUntil = timestamp(handover.data.proofRetentionUntil)
+  } catch {
+    return { url: '' }
+  }
+  if (
+    !Number.isSafeInteger(completedAt) ||
+    completedAt <= 0 ||
+    !Number.isSafeInteger(retentionUntil) ||
+    retentionUntil <= 0
+  )
+    return { url: '' }
+  const deadline = Math.min(retentionUntil, completedAt + 7 * 86400000)
+  if (completedAt > now() || now() >= deadline) return { url: '' }
+  const url = await temporaryFileUrl(handover.data.proofFileId, 'handover_proof')
+  return { url: now() < completedAt || now() >= deadline ? '' : url }
 }
 
 async function findDeletionBlockers(openid) {
@@ -2841,6 +2991,7 @@ const ACTION_HANDLERS = Object.freeze({
   requestIdentityCorrection,
   prepareOcrUpload,
   uploadPrivateImage,
+  getPrivateImageStatus,
   discardPrivateUpload,
   createFoundCard,
   listPublicCards: (openid) => listPublicCards(openid),
@@ -2889,6 +3040,7 @@ const ACTION_POLICIES = Object.freeze({
   requestIdentityCorrection: { actor: 'active' },
   prepareOcrUpload: { actor: 'active' },
   uploadPrivateImage: { actor: 'active' },
+  getPrivateImageStatus: { actor: 'active' },
   discardPrivateUpload: { actor: 'active' },
   createFoundCard: { actor: 'active' },
   listPublicCards: { actor: 'active' },

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   LEGACY_STORAGE_KEYS,
+  applyAccountSummary,
   clearLegacyClientStorage,
   getReadyAccountSummary,
   isVerifiedAccountSummary,
@@ -34,6 +35,38 @@ function appFixture() {
 }
 
 describe('client startup session', () => {
+  it('uses only the validated server account id and clears it on an unknown login', () => {
+    const app = { ...appFixture(), globalData: { ...appFixture().globalData, accountId: '' } }
+    applyAccountSummary(app, { id: 'server-account_1', maskedName: '张*', maskedStudentNumber: '2023****01' })
+    expect(app.globalData.accountId).toBe('server-account_1')
+    applyAccountSummary(app, { maskedName: '张*', maskedStudentNumber: '2023****01' })
+    expect(app.globalData.accountId).toBe('')
+    for (const id of [null, 1, '', 'fake\n', 'x'.repeat(129)]) {
+      applyAccountSummary(app, { id })
+      expect(app.globalData.accountId).toBe('')
+    }
+  })
+  it('keeps the same server account id during refresh but clears it after failed login', async () => {
+    const app = { ...appFixture(), globalData: { ...appFixture().globalData, accountId: 'same-account' } }
+    const account = deferred<{ id: string }>()
+    const refreshed = startCloudSession(app, {
+      cloudAvailable: true,
+      init: () => undefined,
+      login: () => account.promise,
+    })
+    expect(app.globalData.accountId).toBe('same-account')
+    account.resolve({ id: 'same-account' })
+    await refreshed
+    expect(app.globalData.accountId).toBe('same-account')
+    await startCloudSession(app, {
+      cloudAvailable: true,
+      init: () => undefined,
+      login: async () => {
+        throw new Error('unavailable')
+      },
+    })
+    expect(app.globalData.accountId).toBe('')
+  })
   it('refreshes a pending identity from the cloud when a page reopens', async () => {
     const app = appFixture()
     vi.stubGlobal('getApp', () => app)

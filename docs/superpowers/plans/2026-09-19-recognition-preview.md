@@ -23,10 +23,12 @@ Files: add `cloudfunctions/api/preview.js`, `miniprogram/shared/api-routing.ts`,
 - [x] Create only the non-unique `handovers_recent_returns` index, with `valid` ascending and `completedAt` descending, after checking for an equivalent index. Use `UpdateTable` with `CreateIndexes` only; never use the full permissions deployment script.
 - [x] Prepare a local ignored configuration containing only `recentReturnsPreview`, source directory `cloudfunctions/api`, handler `preview.main`, Nodejs20.19, timeout 15, memory 256, and no triggers or HTTP gateway. Preserve the existing API secret internally without printing it or writing it into tracked files.
 - [x] Deploy only the new function. Preserve existing function access rules and add authenticated invocation for this function; its server entry additionally requires administrator status. Read back handler, runtime, state, rules and original four function modification times.
-- [ ] Reload the existing developer-tools project and inspect homepage/settings without authorizing publication or writing sample data. Record real success/empty/error states, not assumed success.
+- [x] Reload the existing developer-tools project and inspect homepage/settings without authorizing publication or writing sample data. Record real success/empty/error states, not assumed success.
 - [x] Run the full local verification suite and record remaining limits. Do not upload/release the mini-program or claim real-device acceptance.
 
 2026-09-20 execution: full verification 462 tests passed; preview Active and old function timestamps unchanged; unauthenticated spoofed invocation rejected. Desktop DNS/TLS failure blocks positive simulator readback. No actual consent writes or synthetic production rows were made. See `docs/RECENT-RETURNS.md` for receipts and deployment boundaries.
+
+2026-09-20 22:12 follow-up: after preserving the unsaved editor settings as a separate local backup, restarting the IDE and recompiling restored the simulator. The administrator homepage loaded the bound masked identity and a successful empty recent-return list; settings loaded the current anonymous recognition preference and reported cloud connected. This completes positive read-only preview acceptance, not real consent write/withdrawal, populated-record or formal-release acceptance. No privacy settings or production records were changed.
 
 ## Stop conditions and rollback
 

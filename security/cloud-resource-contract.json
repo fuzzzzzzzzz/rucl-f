@@ -22,6 +22,7 @@
       "locations": "ADMINONLY",
       "maintenanceState": "ADMINONLY",
       "matches": "ADMINONLY",
+      "mediaAuditEvents": "ADMINONLY",
       "messages": "ADMINONLY",
       "notificationOutbox": "ADMINONLY",
       "operationalMigrations": "ADMINONLY",

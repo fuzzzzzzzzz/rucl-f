@@ -116,6 +116,12 @@ for (const [name, configuration] of Object.entries(contract.functions)) {
 }
 
 const cloudbaseSource = readFileSync(resolve(root, 'cloudbaserc.json'), 'utf8')
+const apiEnvironment = cloudbaseConfig.functions.find((entry) => entry.name === 'api')?.envVariables
+for (const setting of ['MEDIA_CALLBACK_TOKEN', 'MEDIA_CALLBACK_AES_KEY', 'MEDIA_CALLBACK_APP_ID']) {
+  if (apiEnvironment?.[setting] !== `{{env.${setting}}}`) {
+    throw new Error(`api must declare server-only ${setting} as a deployment environment placeholder`)
+  }
+}
 if (!cloudbaseSource.includes('{{env.MINIPROGRAM_STATE}}')) {
   throw new Error('cloudbaserc must require MINIPROGRAM_STATE from the deployment environment')
 }

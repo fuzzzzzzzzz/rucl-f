@@ -36,6 +36,10 @@ const rejectionReasons: ClaimRejectionReasonCode[] = [
   'other',
 ]
 
+function recordLabel(id: string): string {
+  return id.length > 18 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id
+}
+
 function confirmAction(content: string): Promise<boolean> {
   return new Promise((resolve) => {
     wx.showModal({
@@ -54,6 +58,9 @@ Page({
     busyKey: '',
     identities: [] as AdminIdentityReviewItem[],
     claims: [] as AdminClaimReviewItem[],
+    pendingClaims: [] as Array<AdminClaimReviewItem & { recordLabel: string }>,
+    handoverClaims: [] as Array<AdminClaimReviewItem & { recordLabel: string }>,
+    unavailableProofIds: [] as string[],
     operations: { reports: [], risks: [], deletionRequests: [], feedback: [] } as AdminOperationSummary,
     canonicalId: '',
     duplicateId: '',
@@ -95,7 +102,21 @@ Page({
         listCloudAdminOperations(),
       ])
       if (adminLifetime.isActive(lifetime) && adminRequests.isCurrent(generation)) {
-        this.setData({ identities, claims, operations })
+        const displayedClaims = claims.map((item) => ({ ...item, recordLabel: recordLabel(item.cardId) }))
+        this.setData({
+          identities,
+          claims,
+          pendingClaims: displayedClaims.filter((item) => ['admin_review', 'review'].includes(item.status)),
+          handoverClaims: displayedClaims.filter((item) => !['admin_review', 'review'].includes(item.status)),
+          operations: {
+            ...operations,
+            risks: operations.risks.map((item) => ({
+              ...item,
+              recordLabel: recordLabel(item.id),
+              proofUnavailable: this.data.unavailableProofIds.includes(item.id),
+            })),
+          },
+        })
       }
     } catch (error) {
       if (adminLifetime.isActive(lifetime) && adminRequests.isCurrent(generation)) {
@@ -164,7 +185,18 @@ Page({
         const url = await getCloudHandoverProof(handoverId)
         if (!adminLifetime.isActive(lifetime)) return
         if (!url) {
-          wx.showToast({ title: '没有可查看的交接照片', icon: 'none' })
+          const unavailableProofIds = [...new Set([...this.data.unavailableProofIds, handoverId])]
+          this.setData({
+            unavailableProofIds,
+            operations: {
+              ...this.data.operations,
+              risks: this.data.operations.risks.map((item) => ({
+                ...item,
+                proofUnavailable: unavailableProofIds.includes(item.id),
+              })),
+            },
+          })
+          wx.showToast({ title: '该记录未保存交接照片', icon: 'none' })
           return
         }
         wx.previewImage({ urls: [url], current: url })

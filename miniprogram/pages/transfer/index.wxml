@@ -9,5 +9,6 @@
   <input class="field" maxlength="160" value="{{detail}}" disabled="{{!!busyKey || photoBusy}}" placeholder="例如：已交给当班工作人员" bindinput="onDetail" />
   <view class="photo" bindtap="choosePhoto"><image wx:if="{{photoPath}}" src="{{photoPath}}" mode="aspectFill" /><block wx:else><image src="/assets/icons/add-a-photo.png" mode="aspectFit" /><text>{{photoBusy ? '正在打开照片选择…' : '拍摄存放地点周围环境（选填）'}}</text></block></view>
   <button class="neo-button" loading="{{busyKey === 'submit'}}" disabled="{{!!busyKey || photoBusy}}" bindtap="submit">确认已经转交<text class="en">[ CONFIRM ]</text></button>
+  <view wx:if="{{photoCheckStatus}}" class="notice">{{photoCheckStatus}}</view>
   <privacy-consent />
 </view>

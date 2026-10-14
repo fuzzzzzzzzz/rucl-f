@@ -5,6 +5,7 @@ interface IAppOption {
     startupState: 'initializing' | 'ready' | 'error'
     readyPromise: Promise<void>
     cloudError: string
+    accountId?: string
     isAdmin: boolean
     profileBindingStatus: 'unbound' | 'locked' | 'correction_pending'
     accountSummary: import('../shared/models').AccountProfileSummary | null

@@ -1,4 +1,5 @@
 <view class="page post-page">
+  <canvas type="2d" id="card-crop-canvas" class="crop-canvas" />
   <view class="topbar">拾卡安全发布<text class="en">FOUND CARD POST</text></view>
 
   <view wx:if="{{submitted}}" class="neo-card">
@@ -21,7 +22,17 @@
         </block>
       </view>
     </view>
-    <view class="privacy-alert">{{photoBusy ? '正在处理照片，请稍候。' : '原图仅用于识别，处理后立即删除，不会公开。'}}</view>
+    <view wx:if="{{cropPending}}" class="crop-confirm">
+      <view class="crop-title">请确认卡片是否完整</view>
+      <view class="photo-help">姓名、学号不能被裁掉。裁剪尚未发送识别。</view>
+      <button class="neo-button" bindtap="confirmCrop">卡片完整，识别此图</button>
+      <button class="crop-secondary" bindtap="useOriginalPhoto">裁剪不准，使用原图</button>
+      <button class="crop-secondary" bindtap="cancelCrop">取消并重新选择</button>
+    </view>
+    <view wx:else class="privacy-alert">{{photoBusy ? '正在处理照片，请稍候。' : '原图仅用于识别，处理后立即删除，不会公开。'}}</view>
+    <view wx:if="{{cropNotice}}" class="photo-help">{{cropNotice}}</view>
+    <view wx:if="{{photoBusy && ocrStage}}" class="privacy-alert">{{ocrStage}}</view>
+    <view wx:if="{{ocrError}}" class="privacy-alert">{{ocrError}}</view>
 
     <text class="label">姓名 <text class="en">[ NAME ON CARD ]</text></text>
     <input class="field" value="{{name}}" disabled="{{!!busyKey || photoBusy}}" placeholder="识别后请核对" bindinput="onName" />
@@ -68,6 +79,7 @@
     <button class="neo-button neo-button--orange submit-button" loading="{{busyKey === 'submit'}}" disabled="{{!!busyKey || photoBusy}}" bindtap="submit">
       <view class="submit-main"><image src="/assets/icons/verified-user-white.png" mode="aspectFit" />确认安全发布</view><text class="en">[ SUBMIT ]</text>
     </button>
+    <view wx:if="{{photoCheckStatus}}" class="privacy-alert">{{photoCheckStatus}}</view>
   </block>
 
   <privacy-consent />

@@ -3,7 +3,7 @@
   <view class="notice">
     <view>{{identityStatusText}}</view>
     <view>完整身份信息只在首次填写时短暂保留于本页内存，并发送到云端完成绑定。</view>
-    <view>其他人只能看到云端返回的脱敏信息；领取地点仅按安全规则展示。</view>
+    <view>失物信息只显示部分姓名和学号；领取地点仅在符合领取条件时展示。</view>
   </view>
 
   <view wx:if="{{loading}}" class="notice">正在加载云端账号信息…</view>

@@ -2,6 +2,33 @@
   max-width: 650rpx;
   margin: 0 auto;
 }
+.crop-canvas {
+  position: fixed;
+  left: -2000px;
+  top: 0;
+  width: 480px;
+  height: 480px;
+  pointer-events: none;
+}
+.crop-confirm {
+  border: 3rpx solid #191919;
+  background: #fff9c8;
+  padding: 24rpx;
+  margin-top: 20rpx;
+  text-align: center;
+}
+.crop-title {
+  font-size: 28rpx;
+  font-weight: 900;
+}
+.crop-confirm button {
+  margin-top: 18rpx;
+}
+.crop-secondary {
+  background: #fff;
+  border: 2rpx solid #191919;
+  font-size: 25rpx;
+}
 .scan-box {
   box-sizing: border-box;
   width: 100%;

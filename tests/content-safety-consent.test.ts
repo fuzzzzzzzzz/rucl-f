@@ -107,17 +107,38 @@ describe('request-scoped content safety consent through the real cloud service',
     expect(callFunction).not.toHaveBeenCalled()
   })
 
-  it.each([
-    'listPublicCards',
-    'submitAccountRequest',
-    'reportRecord',
-    'reviewDataDeletion',
-    'confirmClaimHandover',
-    'uploadPrivateImage',
-  ])('leaves %s unchanged', async (action) => {
-    const input = { content: 'request' }
-    await callCloudApi(action, input)
-    expect(showModal).not.toHaveBeenCalled()
-    expect(callFunction).toHaveBeenCalledExactlyOnceWith({ name: 'api', data: { action, input } })
+  it.each(['listPublicCards', 'submitAccountRequest', 'reportRecord', 'reviewDataDeletion', 'confirmClaimHandover'])(
+    'leaves %s unchanged',
+    async (action) => {
+      const input = { content: 'request' }
+      await callCloudApi(action, input)
+      expect(showModal).not.toHaveBeenCalled()
+      expect(callFunction).toHaveBeenCalledExactlyOnceWith({ name: 'api', data: { action, input } })
+    },
+  )
+  it.each(['storage_scene', 'handover_proof'])(
+    'asks separately for %s photo and replaces supplied image consent',
+    async (kind) => {
+      await callCloudApi('uploadPrivateImage', { kind, imageSafetyConsentVersion: 'forged' })
+      expect(showModal).toHaveBeenCalledOnce()
+      const modal = showModal.mock.calls[0][0]
+      expect(modal.content).toContain(kind === 'storage_scene' ? '存放环境照片' : '取卡证明照片')
+      expect(modal.content).toContain('OpenID')
+      expect(modal.content).toContain('微信内容安全接口')
+      expect(modal.content).not.toContain('不包含学号')
+      expect(modal.confirmText.length).toBeLessThanOrEqual(4)
+      expect(modal.cancelText.length).toBeLessThanOrEqual(4)
+      expect(callFunction).toHaveBeenCalledExactlyOnceWith({
+        name: 'api',
+        data: { action: 'uploadPrivateImage', input: { kind, imageSafetyConsentVersion: '2026-10-14-image-v1' } },
+      })
+    },
+  )
+  it('cannot use a supplied photo marker to skip a rejected prompt', async () => {
+    showModal.mockImplementation((options) => options.success({ confirm: false }))
+    await expect(
+      callCloudApi('uploadPrivateImage', { kind: 'handover_proof', imageSafetyConsentVersion: '2026-10-14-image-v1' }),
+    ).rejects.toThrow('照片')
+    expect(callFunction).not.toHaveBeenCalled()
   })
 })

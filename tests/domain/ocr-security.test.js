@@ -362,7 +362,11 @@ describe('OCR cloud function limits', () => {
       cloud: { callFunction, deleteFile, uploadFile },
     })
 
-    await expect(processCardPhoto('success.jpg')).resolves.toEqual({ ocrLines: ['recognized'] })
+    const stages = []
+    await expect(processCardPhoto('success.jpg', (stage) => stages.push(stage))).resolves.toEqual({
+      ocrLines: ['recognized'],
+    })
+    expect(stages).toEqual(['连接云服务', '处理照片', '读取照片', '获取识别授权', '发送照片并等待识别', '识别完成'])
     await expect(processCardPhoto('failure.jpg')).rejects.toBeInstanceOf(Error)
 
     expect(uploadFile).not.toHaveBeenCalled()

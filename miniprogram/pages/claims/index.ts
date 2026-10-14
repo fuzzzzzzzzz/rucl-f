@@ -2,6 +2,8 @@ import {
   confirmCloudClaimHandover as confirmMyClaimHandover,
   listCloudClaims as listMyClaims,
   reportCloudRecord,
+  discardSelectedPrivateImage,
+  PrivateImagePendingError,
 } from '../../services/cloud-card-service'
 import { createLatestRequestGate, createPageLifetimeGate, runExclusiveAction } from '../../shared/async-control'
 import { cancelPendingPrivacyAuthorization, requirePrivacyAuthorization } from '../../shared/privacy-authorization'
@@ -22,6 +24,7 @@ interface ClaimView extends ClaimSummary {
 
 const claimRequests = createLatestRequestGate()
 const claimsLifetime = createPageLifetimeGate()
+let nativeProofPending = false
 
 function requestClaimReportReason(): Promise<string | null> {
   return new Promise((resolve) => {
@@ -46,8 +49,10 @@ Page({
     thanksPublic: {} as Record<string, boolean>,
     busyKey: '',
     photoBusyId: '',
+    photoCheckStatuses: {} as Record<string, string>,
   },
   onShow() {
+    if (nativeProofPending) return
     claimsLifetime.activate()
     void this.loadClaims()
   },
@@ -88,21 +93,40 @@ Page({
       wx.showToast({ title: '需要同意照片用途后才能拍摄交接证明', icon: 'none' })
       return
     }
-    wx.chooseMedia({
-      count: 1,
-      mediaType: ['image'],
-      sourceType: ['camera'],
-      success: ({ tempFiles }) => {
-        if (!claimsLifetime.isActive(lifetime)) return
-        this.setData({
-          [`proofPaths.${claimId}`]: tempFiles[0]?.tempFilePath || '',
-          photoBusyId: '',
-        })
-      },
-      fail: () => {
-        if (claimsLifetime.isActive(lifetime)) this.setData({ photoBusyId: '' })
-      },
-    })
+    if (!claimsLifetime.isActive(lifetime)) return
+    nativeProofPending = true
+    try {
+      wx.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['camera'],
+        success: ({ tempFiles }) => {
+          if (!claimsLifetime.isActive(lifetime)) return
+          nativeProofPending = false
+          const nextPath = tempFiles[0]?.tempFilePath || ''
+          if (!nextPath) return this.setData({ photoBusyId: '' })
+          if (nextPath !== this.data.proofPaths[claimId])
+            void discardSelectedPrivateImage(this.data.proofPaths[claimId], 'handover_proof').catch(() => undefined)
+          this.setData({
+            [`proofPaths.${claimId}`]: nextPath,
+            [`photoCheckStatuses.${claimId}`]: '',
+            photoBusyId: '',
+          })
+        },
+        fail: () => {
+          if (claimsLifetime.isActive(lifetime)) {
+            nativeProofPending = false
+            this.setData({ photoBusyId: '' })
+          }
+        },
+      })
+    } catch {
+      nativeProofPending = false
+      if (claimsLifetime.isActive(lifetime)) {
+        this.setData({ photoBusyId: '' })
+        wx.showToast({ title: '相机未能打开，请重试', icon: 'none' })
+      }
+    }
   },
   onThanks(e: WechatMiniprogram.Input) {
     if (this.data.busyKey || this.data.photoBusyId) return
@@ -133,25 +157,34 @@ Page({
         })
         if (!confirmed) return
         if (!claimsLifetime.isActive(lifetime)) return
+        this.setData({ [`photoCheckStatuses.${claimId}`]: '正在确认照片安全检查结果，请稍候…' })
         const result = await confirmMyClaimHandover(
           claimId,
           proofPath,
           this.data.thanksTexts[claimId] || '',
           this.data.thanksPublic[claimId] === true,
+          () => claimsLifetime.isActive(lifetime),
         )
         if (!claimsLifetime.isActive(lifetime)) return
         const proofPaths = { ...this.data.proofPaths }
         const thanksTexts = { ...this.data.thanksTexts }
         const thanksPublic = { ...this.data.thanksPublic }
+        const photoCheckStatuses = { ...this.data.photoCheckStatuses }
         delete proofPaths[claimId]
         delete thanksTexts[claimId]
         delete thanksPublic[claimId]
-        this.setData({ proofPaths, thanksTexts, thanksPublic })
+        delete photoCheckStatuses[claimId]
+        this.setData({ proofPaths, thanksTexts, thanksPublic, photoCheckStatuses })
         wx.showToast({ title: result.thanksAccepted ? '交接完成，感谢已送出' : '交接任务已完成', icon: 'none' })
         await this.loadClaims()
       })
     } catch (error) {
       if (claimsLifetime.isActive(lifetime)) {
+        if (error instanceof PrivateImagePendingError) {
+          this.setData({ [`photoCheckStatuses.${claimId}`]: error.message })
+          return
+        }
+        this.setData({ [`photoCheckStatuses.${claimId}`]: '' })
         wx.showToast({ title: error instanceof Error ? error.message : '提交失败，请稍后重试', icon: 'none' })
       }
     }
@@ -177,12 +210,16 @@ Page({
     }
   },
   onHide() {
+    if (nativeProofPending) return
     claimRequests.invalidate()
     claimsLifetime.deactivate()
     this.setData({ photoBusyId: '', claims: [] })
     cancelPendingPrivacyAuthorization()
   },
   onUnload() {
+    for (const path of Object.values(this.data.proofPaths))
+      void discardSelectedPrivateImage(path, 'handover_proof').catch(() => undefined)
+    nativeProofPending = false
     claimRequests.invalidate()
     claimsLifetime.deactivate()
     cancelPendingPrivacyAuthorization()
