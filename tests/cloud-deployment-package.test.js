@@ -1,10 +1,18 @@
-import { readFileSync, lstatSync } from 'node:fs'
+import { existsSync, readFileSync, lstatSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { gunzipSync } from 'node:zlib'
 import { expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const config = require('../cloudbaserc.json')
+
+it('scheduledCleanup declares only the subscription API used by notification retries', () => {
+  const configuration = new URL('../cloudfunctions/scheduledCleanup/config.json', import.meta.url)
+  expect(existsSync(configuration)).toBe(true)
+  expect(JSON.parse(readFileSync(configuration, 'utf8'))).toEqual({
+    permissions: { openapi: ['subscribeMessage.send'] },
+  })
+})
 
 it.each(config.functions)(
   '$name ships installed dependencies without cloud-side installation',
