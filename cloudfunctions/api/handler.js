@@ -12,6 +12,7 @@ const {
 const { deletionRequestSummary, planDeletionReview } = require('./deletion')
 const { requireSafeText } = require('./content-safety')
 const { createMediaAuditService } = require('./media-audit-service')
+const { mediaAuditConfigFromEnvironment } = require('./media-runtime-config')
 const {
   RETURN_CONSENT_VERSION,
   RETURN_WINDOW_MS,
@@ -67,11 +68,7 @@ function configureRuntime(dependencies) {
       now: clock,
       config:
         dependencies.mediaAuditConfig === undefined
-          ? {
-              token: process.env.MEDIA_CALLBACK_TOKEN,
-              encodingAESKey: process.env.MEDIA_CALLBACK_AES_KEY,
-              appId: process.env.MEDIA_CALLBACK_APP_ID,
-            }
+          ? mediaAuditConfigFromEnvironment(process.env)
           : dependencies.mediaAuditConfig,
     }),
     randomBytes: typeof dependencies.randomBytes === 'function' ? dependencies.randomBytes : crypto.randomBytes,

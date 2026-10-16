@@ -22,19 +22,54 @@ const fail = (code) => {
 }
 const eventId = (traceId) => createHash('sha256').update(traceId).digest('hex')
 
-function configuredKey(config) {
-  if (
-    !record(config) ||
-    typeof config.token !== 'string' ||
-    !/^[A-Za-z0-9]{3,32}$/.test(config.token) ||
-    typeof config.encodingAESKey !== 'string' ||
-    !/^[A-Za-z0-9+/]{43}$/.test(config.encodingAESKey) ||
-    typeof config.appId !== 'string' ||
-    !/^wx[0-9a-f]{16}$/.test(config.appId)
-  )
+function configuredSettings(config) {
+  try {
+    if (!record(config) || types.isProxy(config)) return null
+    const prototype = Object.getPrototypeOf(config)
+    if (prototype !== Object.prototype && prototype !== null) return null
+    const descriptors = Object.getOwnPropertyDescriptors(config)
+    const values = Object.create(null)
+    for (const name of ['mode', 'token', 'encodingAESKey', 'appId', 'integrityKey']) {
+      const descriptor = descriptors[name]
+      if (descriptor === undefined) continue
+      if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) return null
+      values[name] = descriptor.value
+    }
+    const has = (name) => Object.prototype.hasOwnProperty.call(values, name)
+    const mode = has('mode') ? values.mode : 'signed'
+    if (typeof values.appId !== 'string' || values.appId.length !== 18 || !/^wx[0-9a-f]{16}$/.test(values.appId))
+      return null
+    let encoded
+    if (mode === 'native') {
+      if (
+        has('token') ||
+        has('encodingAESKey') ||
+        typeof values.integrityKey !== 'string' ||
+        values.integrityKey.length !== 44
+      )
+        return null
+      encoded = values.integrityKey
+    } else if (mode === 'signed') {
+      if (
+        has('integrityKey') ||
+        typeof values.token !== 'string' ||
+        values.token.length < 3 ||
+        values.token.length > 32 ||
+        /[^A-Za-z0-9]/.test(values.token) ||
+        typeof values.encodingAESKey !== 'string' ||
+        values.encodingAESKey.length !== 43
+      )
+        return null
+      encoded = `${values.encodingAESKey}=`
+    } else {
+      return null
+    }
+    const key = Buffer.from(encoded, 'base64')
+    if (key.length !== 32 || key.toString('base64') !== encoded) return null
+    return { key, mode, appId: values.appId }
+  } catch {
     return null
-  const key = Buffer.from(`${config.encodingAESKey}=`, 'base64')
-  return key.length === 32 && key.toString('base64') === `${config.encodingAESKey}=` ? key : null
+  }
 }
 
 function equalMac(actual, expected) {
@@ -66,9 +101,11 @@ async function boundedNetwork(operation) {
  * @param {{cloud?:any,database?:any,config?:any,now?:()=>any}} options
  */
 function createMediaAuditService({ cloud, database, config, now = Date.now } = {}) {
-  const key = configuredKey(config)
-  const configured = Boolean(key)
-  const appId = configured ? config.appId : ''
+  const settings = configuredSettings(config)
+  const configured = Boolean(settings)
+  const key = settings?.key
+  const appId = settings?.appId || ''
+  const mode = settings?.mode
   const mac = (parts) => createHmac('sha256', key).update(JSON.stringify(parts)).digest('hex')
   const transaction = (operation) => withTransactionRetry(() => database.runTransaction(operation))
   const document = async (db, name, id) => (await getOptionalDocument(db.collection(name).doc(id))).data
@@ -137,7 +174,7 @@ function createMediaAuditService({ cloud, database, config, now = Date.now } = {
     )
   }
   const proofParts = (task) => [
-    'media-approval-v1',
+    mode === 'native' ? 'media-approval-native-v1' : 'media-approval-v1',
     appId,
     task.uploadTokenHash,
     task.ownerOpenid,
@@ -177,7 +214,7 @@ function createMediaAuditService({ cloud, database, config, now = Date.now } = {
     return result
   }
   const receiptParts = (receipt) => [
-    'media-receipt-v1',
+    mode === 'native' ? 'media-receipt-native-v1' : 'media-receipt-v1',
     receipt.appId,
     receipt.traceId,
     receipt.boundUploadHash,
@@ -392,7 +429,7 @@ function createMediaAuditService({ cloud, database, config, now = Date.now } = {
   }
 
   async function acceptCallback(decoded) {
-    if (!configured || !isAuthenticatedMediaCallbackForApp(decoded, appId)) return false
+    if (!configured || !isAuthenticatedMediaCallbackForApp(decoded, appId, mode)) return false
     try {
       const at = clock()
       const traceId = decoded?.event?.traceId

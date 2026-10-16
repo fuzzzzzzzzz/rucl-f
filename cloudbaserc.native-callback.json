@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "version": "2.0",
+  "envId": "cloud1-d4g2ccxaq372d5eb6",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "api",
+      "dir": "./cloudfunctions/api",
+      "type": "Event",
+      "handler": "index.main",
+      "timeout": 15,
+      "runtime": "Nodejs20.19",
+      "memorySize": 256,
+      "installDependency": false,
+      "envVariables": {
+        "STUDENT_HMAC_SECRET": "{{env.STUDENT_HMAC_SECRET}}",
+        "SUBSCRIPTION_TEMPLATE_ID": "{{env.SUBSCRIPTION_TEMPLATE_ID}}",
+        "MINIPROGRAM_STATE": "{{env.MINIPROGRAM_STATE}}",
+        "MEDIA_AUDIT_MODE": "native",
+        "MEDIA_CALLBACK_APP_ID": "wxaf8c67db176fe3fe",
+        "MEDIA_CALLBACK_ENV_ID": "cloud1-d4g2ccxaq372d5eb6",
+        "MEDIA_INTEGRITY_KEY": "{{env.MEDIA_INTEGRITY_KEY}}"
+      }
+    },
+    {
+      "name": "mediaSafetyCallback",
+      "dir": "./cloudfunctions/api",
+      "type": "Event",
+      "handler": "media-native-entry.main",
+      "timeout": 15,
+      "runtime": "Nodejs20.19",
+      "memorySize": 256,
+      "installDependency": false,
+      "envVariables": {
+        "MEDIA_AUDIT_MODE": "native",
+        "MEDIA_CALLBACK_APP_ID": "wxaf8c67db176fe3fe",
+        "MEDIA_CALLBACK_ENV_ID": "cloud1-d4g2ccxaq372d5eb6",
+        "MEDIA_INTEGRITY_KEY": "{{env.MEDIA_INTEGRITY_KEY}}"
+      }
+    }
+  ]
+}

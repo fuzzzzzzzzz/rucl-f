@@ -16,9 +16,15 @@ function readJson(relativePath) {
 }
 
 describe('engineering tooling contract', () => {
-  const mediaFiles = ['media-safety', 'media-callback-post', 'media-audit-binding', 'media-audit-service'].map(
-    (name) => `cloudfunctions/api/${name}.js`,
-  )
+  const mediaFiles = [
+    'media-safety',
+    'media-native-source',
+    'media-native-handler',
+    'media-runtime-config',
+    'media-callback-post',
+    'media-audit-binding',
+    'media-audit-service',
+  ].map((name) => `cloudfunctions/api/${name}.js`)
   it.each(mediaFiles)('collects and enforces critical coverage for %s', (file) => {
     expect(vitestConfig.test.coverage.include).toContain(file)
     expect(vitestConfig.test.coverage.thresholds[file]).toEqual({
@@ -104,6 +110,12 @@ describe('engineering tooling contract', () => {
   })
   it('bounds default test workers for memory-constrained verification', () => {
     expect(vitestConfig.test.maxWorkers).toBe(2)
+  })
+
+  it('keeps private node:test diagnostics outside the application Vitest suite', () => {
+    expect(vitestConfig.test.exclude).toContain('.release-evidence/**')
+    expect(vitestConfig.test.exclude).toContain('.worktrees/**')
+    expect(vitestConfig.test.exclude.some((pattern) => pattern.includes('node_modules'))).toBe(true)
   })
 
   it('collects and enforces coverage for the new content safety boundary', () => {

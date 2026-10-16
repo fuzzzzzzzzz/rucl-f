@@ -1,5 +1,6 @@
 const { createDecipheriv, createHash, timingSafeEqual } = require('node:crypto')
-const { TextDecoder } = require('node:util')
+const { TextDecoder, types } = require('node:util')
+const { createNativeMediaSourceVerifier } = require('./media-native-source')
 
 // Preparatory primitives only: no cloud SDK, receiver, persistence, or logging.
 // JSON SAFE MODE protocol references (not evidence of runtime connectivity):
@@ -9,6 +10,7 @@ const MAX_BODY_BYTES = 65_536
 const MAX_FRAME_BYTES = 32_768
 const FRESHNESS_MS = 300_000
 const authenticatedCallbacks = new WeakMap()
+const authenticatedNativeCallbacks = new WeakMap()
 const utf8 = new TextDecoder('utf-8', { fatal: true })
 const TASK_STATUSES = new Set(['pending', 'passed', 'review', 'rejected', 'error', 'expired'])
 
@@ -173,14 +175,119 @@ function decodeSafeModeMediaCallback(request, config, options = {}) {
   return result
 }
 
-/** Keep application scope on the original capability; serialization never restores it. */
-function isAuthenticatedMediaCallbackForApp(decoded, appId) {
+function nativeFields(value, names, maximumKeys) {
+  if (!isRecord(value) || Array.isArray(value)) return null
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) return null
+  const keys = Reflect.ownKeys(value)
+  if (keys.length > maximumKeys || keys.some((key) => typeof key !== 'string')) return null
+  const descriptors = Object.getOwnPropertyDescriptors(value)
+  const result = Object.create(null)
+  for (const name of names) {
+    const descriptor = descriptors[name]
+    if (descriptor === undefined) continue
+    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) return null
+    result[name] = descriptor.value
+  }
+  return result
+}
+
+function nativeDecision(value, detail = false) {
+  const result = nativeFields(value, detail ? ['errcode', 'suggest'] : ['suggest'], 8)
+  if (!result) return null
+  if (result.suggest !== undefined && (typeof result.suggest !== 'string' || result.suggest.length > 32)) return null
+  if (
+    detail &&
+    result.errcode !== undefined &&
+    (!Number.isInteger(result.errcode) || result.errcode < -2147483648 || result.errcode > 2147483647)
+  )
+    return null
+  return result
+}
+
+/**
+ * Native mode is opt-in and not wired to a deployed entry. Only trusted handler
+ * context plus the captured server SDK can authenticate an event. The resulting
+ * capability is separate from signed HTTP capabilities and cannot be cloned.
+ * @param {*} options
+ * @returns {(event:*, context:*) => DecodeResult}
+ */
+function createNativeMediaCallbackDecoder(options) {
+  let settings
+  try {
+    settings = nativeFields(options, ['getWXContext', 'expectedAppId', 'expectedEnvironmentId'], 3)
+  } catch {
+    // The verifier below rejects the absent configuration with a fixed error.
+  }
+  const verifySource = createNativeMediaSourceVerifier(settings)
+  const appId = settings.expectedAppId
+  return (event, context) => {
+    if (!verifySource(context)) return failure('invalid_source')
+    try {
+      const message = nativeFields(
+        event,
+        ['MsgType', 'Event', 'version', 'appid', 'trace_id', 'errcode', 'result', 'detail'],
+        32,
+      )
+      if (
+        !message ||
+        message.MsgType !== 'event' ||
+        message.Event !== 'wxa_media_check' ||
+        message.version !== 2 ||
+        message.appid !== appId ||
+        !validTrace(message.trace_id) ||
+        !Number.isInteger(message.errcode) ||
+        message.errcode < -2147483648 ||
+        message.errcode > 2147483647
+      )
+        return failure('invalid_event')
+      if (message.result !== undefined) {
+        message.result = nativeDecision(message.result)
+        if (!message.result) return failure('invalid_event')
+      }
+      if (message.detail !== undefined) {
+        if (!Array.isArray(message.detail) || types.isProxy(message.detail)) return failure('invalid_event')
+        const descriptors = Object.getOwnPropertyDescriptors(message.detail)
+        const length = descriptors.length?.value
+        if (!Number.isSafeInteger(length) || length < 0 || length > 20) return failure('invalid_event')
+        if (
+          Reflect.ownKeys(descriptors).some(
+            (key) => typeof key !== 'string' || (key !== 'length' && !/^(0|[1-9][0-9]*)$/.test(key)),
+          )
+        )
+          return failure('invalid_event')
+        const normalized = []
+        for (let index = 0; index < length; index++) {
+          const descriptor = descriptors[String(index)]
+          if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) return failure('invalid_event')
+          const item = nativeDecision(descriptor.value, true)
+          if (!item) return failure('invalid_event')
+          normalized.push(item)
+        }
+        message.detail = normalized
+      }
+      const capability = Object.freeze({
+        ok: true,
+        event: Object.freeze({ traceId: message.trace_id, status: classify(message) }),
+      })
+      authenticatedNativeCallbacks.set(capability, appId)
+      return capability
+    } catch {
+      return failure('invalid_event')
+    }
+  }
+}
+
+/** Signed remains the default; native capabilities require an explicit mode. */
+function isAuthenticatedMediaCallbackForApp(decoded, appId, mode = 'signed') {
+  const registry = mode === 'signed' ? authenticatedCallbacks : mode === 'native' ? authenticatedNativeCallbacks : null
   return (
     typeof appId === 'string' &&
     appId.length === 18 &&
     /^wx[0-9a-f]{16}$/.test(appId) &&
     isRecord(decoded) &&
-    authenticatedCallbacks.get(decoded) === appId
+    registry !== null &&
+    registry.get(decoded) === appId
   )
 }
 
@@ -202,7 +309,8 @@ function isAuthenticatedMediaCallbackForApp(decoded, appId) {
  */
 function transitionMediaTask(task, decoded, options = {}) {
   const unchanged = (reason) => ({ ok: false, changed: false, task, reason })
-  if (!isRecord(decoded) || !authenticatedCallbacks.has(decoded)) return unchanged('unauthenticated_callback')
+  if (!isRecord(decoded) || (!authenticatedCallbacks.has(decoded) && !authenticatedNativeCallbacks.has(decoded)))
+    return unchanged('unauthenticated_callback')
   if (!isRecord(options) || !validClock(options.now)) return unchanged('invalid_clock')
   if (!isRecord(task) || !validTrace(task.traceId) || !TASK_STATUSES.has(task.status) || !validClock(task.expiresAt)) {
     return unchanged('invalid_task')
@@ -223,4 +331,9 @@ function transitionMediaTask(task, decoded, options = {}) {
   return { ok: true, changed: true, task: { ...task, status } }
 }
 
-module.exports = { decodeSafeModeMediaCallback, transitionMediaTask, isAuthenticatedMediaCallbackForApp }
+module.exports = {
+  decodeSafeModeMediaCallback,
+  createNativeMediaCallbackDecoder,
+  transitionMediaTask,
+  isAuthenticatedMediaCallbackForApp,
+}

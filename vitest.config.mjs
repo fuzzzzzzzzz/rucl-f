@@ -1,7 +1,8 @@
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    exclude: [...configDefaults.exclude, '.release-evidence/**', '.worktrees/**'],
     // Keep worker memory bounded on resource-constrained verification hosts.
     maxWorkers: 2,
     coverage: {
@@ -17,6 +18,9 @@ export default defineConfig({
         'cloudfunctions/api/{auth,claim,deletion,handler}.js',
         'cloudfunctions/api/content-safety.js',
         'cloudfunctions/api/media-safety.js',
+        'cloudfunctions/api/media-native-source.js',
+        'cloudfunctions/api/media-native-handler.js',
+        'cloudfunctions/api/media-runtime-config.js',
         'cloudfunctions/api/media-callback-post.js',
         'cloudfunctions/api/media-audit-binding.js',
         'cloudfunctions/api/media-audit-service.js',
@@ -26,6 +30,9 @@ export default defineConfig({
       exclude: ['miniprogram/shared/models.ts', 'cloudfunctions/**/node_modules/**'],
       thresholds: {
         'cloudfunctions/api/media-safety.js': { lines: 90, functions: 90, statements: 90, branches: 85 },
+        'cloudfunctions/api/media-native-source.js': { lines: 90, functions: 90, statements: 90, branches: 85 },
+        'cloudfunctions/api/media-native-handler.js': { lines: 90, functions: 90, statements: 90, branches: 85 },
+        'cloudfunctions/api/media-runtime-config.js': { lines: 90, functions: 90, statements: 90, branches: 85 },
         'cloudfunctions/api/media-callback-post.js': { lines: 90, functions: 90, statements: 90, branches: 85 },
         'cloudfunctions/api/media-audit-binding.js': { lines: 90, functions: 90, statements: 90, branches: 85 },
         'cloudfunctions/api/media-audit-service.js': { lines: 90, functions: 90, statements: 90, branches: 85 },
