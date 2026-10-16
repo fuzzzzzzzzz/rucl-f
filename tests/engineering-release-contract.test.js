@@ -103,6 +103,7 @@ describe('engineering release contract', () => {
     expect(Object.keys(contract.functions).sort()).toEqual([
       'api',
       'deletionWorker',
+      'mediaSafetyCallback',
       'processCardImage',
       'scheduledCleanup',
     ])

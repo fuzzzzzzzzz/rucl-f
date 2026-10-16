@@ -86,27 +86,41 @@ describe('engineering tooling contract', () => {
     }
     expect(run).not.toThrow()
   })
-  it('declares callback settings only as server-side API environment placeholders', () => {
+  it('declares native callback settings only on the two server-side targets', () => {
     const config = readJson('cloudbaserc.json')
     expect(config.functions.map((entry) => entry.name)).toEqual([
       'api',
       'deletionWorker',
       'processCardImage',
       'scheduledCleanup',
+      'mediaSafetyCallback',
     ])
     const api = config.functions.find((entry) => entry.name === 'api')
     expect(api.type).toBe('Event')
-    for (const setting of ['MEDIA_CALLBACK_TOKEN', 'MEDIA_CALLBACK_AES_KEY', 'MEDIA_CALLBACK_APP_ID']) {
-      expect(api.envVariables[setting]).toBe(`{{env.${setting}}}`)
+    for (const setting of [
+      'MEDIA_AUDIT_MODE',
+      'MEDIA_CALLBACK_APP_ID',
+      'MEDIA_CALLBACK_ENV_ID',
+      'MEDIA_INTEGRITY_KEY',
+    ]) {
+      expect(config.functions.find((entry) => entry.name === 'mediaSafetyCallback').envVariables[setting]).toBe(
+        api.envVariables[setting],
+      )
       expect(
-        config.functions.filter((entry) => entry.name !== 'api').every((entry) => !(setting in entry.envVariables)),
+        config.functions
+          .filter((entry) => !['api', 'mediaSafetyCallback'].includes(entry.name))
+          .every((entry) => !(setting in entry.envVariables)),
       ).toBe(true)
     }
     expect(api.envVariables).toMatchObject({
       STUDENT_HMAC_SECRET: '{{env.STUDENT_HMAC_SECRET}}',
       SUBSCRIPTION_TEMPLATE_ID: '{{env.SUBSCRIPTION_TEMPLATE_ID}}',
       MINIPROGRAM_STATE: '{{env.MINIPROGRAM_STATE}}',
+      MEDIA_AUDIT_MODE: 'native',
+      MEDIA_INTEGRITY_KEY: '{{env.MEDIA_INTEGRITY_KEY}}',
     })
+    expect(api.envVariables).not.toHaveProperty('MEDIA_CALLBACK_TOKEN')
+    expect(api.envVariables).not.toHaveProperty('MEDIA_CALLBACK_AES_KEY')
   })
   it('bounds default test workers for memory-constrained verification', () => {
     expect(vitestConfig.test.maxWorkers).toBe(2)

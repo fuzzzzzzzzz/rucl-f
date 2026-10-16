@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+export { validateNativeDeployment } from './native-deployment-contract.mjs'
+
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const contract = JSON.parse(readFileSync(resolve(root, 'security/cloud-resource-contract.json'), 'utf8'))
 export const cloudbaseConfig = JSON.parse(readFileSync(resolve(root, 'cloudbaserc.json'), 'utf8'))

@@ -14,7 +14,7 @@
 
 私有回执：.release-evidence/authorized-native-rollout-20261016/中的binding-current.png、receiver-rule-summary.json、preflight-summary.json、api-update-summary.json、developer-upload-info.json、synthetic-media-summary.json。最初关闭部署的失败/恢复回执未被覆盖。
 
-此次证明原生图片审核业务链路可用，不证明所有发布门禁已通过。存储仍PRIVATE；旧预览规则、scheduledCleanup部署和既有失败通知队列另行处理。默认资源合同/部署模板仍须与现已启用的独立接收器对齐，不能运行旧全量权限部署把接收器重新关闭。共享目录的OpenAPI声明尚未独立最小化。最终手机验收仍由用户单独完成。
+此次证明原生图片审核业务链路可用，不证明所有发布门禁已通过。存储仍PRIVATE；旧预览规则、scheduledCleanup部署和既有失败通知队列另行处理。2026-10-17本地默认配置已与原生接收器对齐，静态合同覆盖五个部署目标；这次配置修正没有执行线上部署或权限变更，不能据此执行全量资源切换。共享目录的OpenAPI声明尚未独立最小化。最终手机验收仍由用户单独完成。
 
 隐私更新、UGC声明与AppSecret重置已由用户完成并再次确认，不要求重做。历史截图未保留完整用途正文，不等于用户未填写；目标版本最终展示核对单列，不再以重复索要旧状态截图阻塞准备工作。
 
@@ -38,13 +38,13 @@
 
 ## 部署模板的准确边界
 
-`cloudbaserc.native-callback.json`是需要显式选择的替代模板，只描述api与新mediaSafetyCallback。两者使用同一完整API代码目录，但处理入口分别为index.main和media-native-entry.main，避免复制模块造成版本漂移。
+默认`cloudbaserc.json`已统一为已验证的native方案，包含原四个函数及mediaSafetyCallback；物理代码包仍为四个。`cloudbaserc.native-callback.json`只保留api与mediaSafetyCallback的定点部署视图，两者必须与默认配置逐项相同。它们共用完整API代码目录，处理入口分别为index.main和media-native-entry.main，避免复制模块造成版本漂移。
 
 CloudBase[官方函数配置](https://docs.cloudbase.net/cli-v1/functions/configs)支持dir指定代码目录、handler指定处理入口；独立复核也检查了本地已安装CLI的目录解析。模板没有执行，不证明云端包、环境变量或微信接口声明已更新。
 
-模板不修改默认cloudbaserc.json或资源权限契约，没有自动开放回调函数、添加定时任务或切换消息绑定。本次实际使用私有单函数配置，只创建关闭接收函数，没有执行双函数模板。默认资源门禁仍只覆盖原四个函数，不能用它的通过替代新接收器的线上资源验收。共享代码目录还包含原API的config.json权限声明；上线前需要核对新接收函数实际声明和调用能力，不能声称它已具有独立最小OpenAPI权限。
+本地合同现在只对固定mediaSafetyCallback声明平台事件例外，其传输调用规则为true、业务客户端可调用标记为false；现有运行时来源校验仍拒绝客户端伪造事件。其他函数和通配规则保持原有边界。此处只是默认配置及校验的修正，不重复执行已完成的线上切换，也不改变存储或定时任务。共享目录包含原API的config.json权限声明，不能声称新接收器已经具有独立最小OpenAPI权限。
 
-native模板只引用服务端MEDIA_INTEGRITY_KEY占位项；实际密钥已配置到关闭的新函数，不在模板中，也尚未配置到现有API。原模式变量即使仍留在运行环境，也不参与native认证或证明。新旧模式切换不自动迁移历史MAC。
+native配置只引用服务端MEDIA_INTEGRITY_KEY占位项；实际密钥已在上述授权切换中配置到接收器和API，不在模板中。本地对齐不会生成或轮换该密钥。旧模式变量即使仍留在运行环境，也不参与native认证或证明。新旧模式切换不自动迁移历史MAC。
 
 ## 原切换计划（已有上述实际回执，剩余门禁不得自动勾选）
 

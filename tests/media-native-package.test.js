@@ -13,7 +13,7 @@ const readManifest = () => {
   expect(existsSync(manifestPath)).toBe(true)
   return JSON.parse(readFileSync(manifestPath, 'utf8'))
 }
-describe('opt-in native callback package contract', () => {
+describe('native callback deployment package contract', () => {
   it('keeps both targets self-contained with distinct handlers and one common key reference', () => {
     const manifest = readManifest()
     const base = require('../cloudbaserc.json')
@@ -58,13 +58,18 @@ describe('opt-in native callback package contract', () => {
       'MEDIA_INTEGRITY_KEY',
     ])
   })
-  it('does not enable the receiver in the default deployment or security rules', () => {
+  it('keeps the default deployment aligned with the verified native targets and exact callback exception', () => {
     const base = require('../cloudbaserc.json')
     const rules = require('../security/cloud-resource-contract.json')
-    expect(base.functions.some((item) => item.name === 'mediaSafetyCallback')).toBe(false)
-    expect(rules.functions.mediaSafetyCallback).toBeUndefined()
-    expect(rules.functionDefaults['*'].invoke).toBe(false)
-    expect(base.functions.find((item) => item.name === 'api').envVariables.MEDIA_AUDIT_MODE).toBeUndefined()
+    for (const target of readManifest().functions) {
+      expect(base.functions.find((item) => item.name === target.name)).toEqual(target)
+    }
+    expect(rules.functions.mediaSafetyCallback).toEqual({
+      invoke: true,
+      clientCallable: false,
+      callbackEvent: 'wxa_media_check',
+    })
+    expect(rules.functionDefaults).toEqual({ '*': { invoke: false } })
   })
   it.each([true, false])('loads the actual entry with only the SDK transport replaced; configured=%s', (configured) => {
     expect(existsSync(entry)).toBe(true)

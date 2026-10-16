@@ -25,6 +25,11 @@ describe('cloud deployment contract', () => {
     expect(resources.functions.processCardImage.clientCallable).toBe(true)
     expect(resources.functions.scheduledCleanup.clientCallable).toBe(false)
     expect(resources.functions.deletionWorker.clientCallable).toBe(false)
+    expect(resources.functions.mediaSafetyCallback).toEqual({
+      invoke: true,
+      clientCallable: false,
+      callbackEvent: 'wxa_media_check',
+    })
   })
 
   it('keeps every business collection ADMINONLY', () => {

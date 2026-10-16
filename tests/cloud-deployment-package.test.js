@@ -16,9 +16,9 @@ it('scheduledCleanup declares only the subscription API used by notification ret
 
 it.each(config.functions)(
   '$name ships installed dependencies without cloud-side installation',
-  ({ name, installDependency }) => {
+  ({ name, dir, installDependency }) => {
     expect(installDependency).toBe(false)
-    const base = new URL(`../cloudfunctions/${name}/`, import.meta.url)
+    const base = new URL(`${dir || `${config.functionRoot}/${name}`}/`, new URL('../', import.meta.url))
     const manifest = JSON.parse(readFileSync(new URL('package.json', base), 'utf8'))
     const archivePath = manifest.dependencies['lodash.set'].replace(/^file:/, '')
     expect(archivePath.endsWith('.tgz')).toBe(true)

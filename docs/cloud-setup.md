@@ -63,14 +63,19 @@
 
 ## 4. 云函数与环境变量
 
-四个函数均使用 Node.js 20：
+五个部署目标均使用 Node.js 20，复用四个物理代码包：
 
-- `api`：`STUDENT_HMAC_SECRET`（至少32字节）、可选 `SUBSCRIPTION_TEMPLATE_ID`；
+- `api`：`STUDENT_HMAC_SECRET`（至少32字节）、可选 `SUBSCRIPTION_TEMPLATE_ID`，以及下述原生审核变量；
+- `mediaSafetyCallback`：与 `api` 共享 `cloudfunctions/api` 代码目录，入口为 `media-native-entry.main`，只接收平台审核事件；
 - `processCardImage`：`TENCENT_SECRET_ID`、`TENCENT_SECRET_KEY`、`TENCENT_OCR_REGION`、`OCR_DAILY_GLOBAL_LIMIT`；
 - `scheduledCleanup`：每天凌晨3点运行，不允许客户端调用。
   - 分页删除超过60天的 `auditLogs`；安全审计日志最多保存60天。
   - 继续处理照片删除队列；账号删除产生的照片任务使用 `account_deleted` 原因。
 - `deletionWorker`：定时处理已审批的数据删除任务，不允许客户端调用；运维迁移额外要求临时的 `OPERATIONAL_MIGRATION_TOKEN`，迁移入口默认只做 `inventory` 或 `dryRun`。
+
+默认 `cloudbaserc.json` 已统一为原生图片审核；`cloudbaserc.native-callback.json` 只是同一方案的双目标部署视图，不是另一种默认模式。两个审核目标必须使用相同的 `MEDIA_AUDIT_MODE=native`、应用和环境标识，以及服务端 `MEDIA_INTEGRITY_KEY` 占位引用。接收器不配置学生摘要密钥或通知变量；不在部署时生成新完整性密钥，不通过聊天传递现有密钥。旧 HTTP 签名实现保留，但默认配置不再要求 Token/AES 变量。
+
+资源合同仅对固定 `mediaSafetyCallback` 声明 `invoke=true`，以便平台投递；这不是允许学生批准审核。其现有入口仍核对真实运行来源、应用和环境，客户端伪造事件被拒绝。通配规则保持拒绝，两个后台任务保持关闭，API 与识别函数要求非匿名身份。`resources:check` 会校验此精确例外及两个配置的相同性；本地校验不等于已经执行云端权限切换。
 
 管理员批准数据删除申请时，服务端会先检查进行中的认领、待处理争议和7天取卡照片保留期。满足条件后解除用户与 OpenID、姓名和学号绑定，删除或匿名化业务数据，将照片写入 `fileCleanupJobs`，并仅在 `deletionReceipts` 中保留不含姓名、学号和 OpenID 的幂等处理凭证。
 
@@ -92,7 +97,7 @@
 6. 迁移结束后立即轮换或移除远端 `OPERATIONAL_MIGRATION_TOKEN`，并从当前进程清除；
 7. 运行 `npm run resources:readback -- --phase=post-migration`，逐项比对数据库、存储、函数规则和索引；存储规则部署后等待 1–3 分钟再复核。
 
-使用 `cloudbaserc.json` 部署 `api`、`processCardImage`、`scheduledCleanup` 和 `deletionWorker` 后，确认每个定时触发器只存在一份。开发部署显式设置 `MINIPROGRAM_STATE=developer`；本轮不使用 `formal`，也不提交微信审核。
+在获准的维护范围内使用 `cloudbaserc.json` 部署上述五个目标后，确认每个定时触发器只存在一份；不要因为本地配置对齐就自动执行全量部署。已有失败通知时，更新清理任务前必须明确重试范围，避免未经许可补发。开发部署显式设置 `MINIPROGRAM_STATE=developer`；本轮不使用 `formal`，也不提交微信审核。
 
 管理员账号只能由受控人员在 `users` 集合把 `role` 设置为 `admin`。客户端没有提升管理员权限的接口。
 

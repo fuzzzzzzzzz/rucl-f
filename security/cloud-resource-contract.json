@@ -522,6 +522,11 @@
       "invoke": false,
       "clientCallable": false,
       "trigger": "timer"
+    },
+    "mediaSafetyCallback": {
+      "invoke": true,
+      "clientCallable": false,
+      "callbackEvent": "wxa_media_check"
     }
   },
   "migrationGuard": {

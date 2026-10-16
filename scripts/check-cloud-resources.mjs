@@ -1,7 +1,13 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
-import { cloudbaseConfig, contract, functionSecurityRule, root } from './cloud-resource-lib.mjs'
+import {
+  cloudbaseConfig,
+  contract,
+  functionSecurityRule,
+  root,
+  validateNativeDeployment,
+} from './cloud-resource-lib.mjs'
 
 const require = createRequire(import.meta.url)
 const { PII_FIELD_REGISTRY } = require('../cloudfunctions/deletionWorker/domain')
@@ -105,23 +111,14 @@ if (JSON.stringify(expectedFunctionNames) !== JSON.stringify(configuredFunctionN
 }
 if (functionSecurityRule()['*']?.invoke !== false)
   throw new Error('Unknown cloud functions must default to invoke=false')
-for (const [name, configuration] of Object.entries(contract.functions)) {
-  if (configuration.clientCallable) {
-    if (!String(configuration.invoke).includes("auth.loginType != 'ANONYMOUS'")) {
-      throw new Error(`${name} must reject anonymous callers`)
-    }
-  } else if (configuration.invoke !== false) {
-    throw new Error(`${name} must not be client-callable`)
-  }
-}
+validateNativeDeployment({
+  cloudbaseConfig,
+  contract,
+  nativeConfig: JSON.parse(readFileSync(resolve(root, 'cloudbaserc.native-callback.json'), 'utf8')),
+  appId: JSON.parse(readFileSync(resolve(root, 'project.config.json'), 'utf8')).appid,
+})
 
 const cloudbaseSource = readFileSync(resolve(root, 'cloudbaserc.json'), 'utf8')
-const apiEnvironment = cloudbaseConfig.functions.find((entry) => entry.name === 'api')?.envVariables
-for (const setting of ['MEDIA_CALLBACK_TOKEN', 'MEDIA_CALLBACK_AES_KEY', 'MEDIA_CALLBACK_APP_ID']) {
-  if (apiEnvironment?.[setting] !== `{{env.${setting}}}`) {
-    throw new Error(`api must declare server-only ${setting} as a deployment environment placeholder`)
-  }
-}
 if (!cloudbaseSource.includes('{{env.MINIPROGRAM_STATE}}')) {
   throw new Error('cloudbaserc must require MINIPROGRAM_STATE from the deployment environment')
 }
