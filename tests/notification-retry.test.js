@@ -110,6 +110,23 @@ describe('scheduled notification retries through the real handler', () => {
     )
   })
 
+  it.each(['immediate', 'scheduled'])('uses the active lost-card template fields for %s delivery', async (path) => {
+    vi.stubEnv('MINIPROGRAM_STATE', 'developer')
+    vi.stubEnv('SUBSCRIPTION_TEMPLATE_ID', 'template')
+    const test = harness()
+    test.records.messages.job.title = '校园卡已找到，请查看领取信息并核对身份后认领'
+    const message = structuredClone(test.records.messages.job)
+    if (path === 'immediate') await deliverNotification({ db: test.database, cloud: test.cloud }, 'job')
+    else await test.run()
+    expect(test.send).toHaveBeenCalledTimes(1)
+    expect(test.send.mock.calls[0][0].data).toEqual({
+      thing4: { value: '校园卡' },
+      thing1: { value: message.title.slice(0, 20) },
+    })
+    expect(test.records.messages.job).toEqual(message)
+    expect(test.records.notificationOutbox.job.status).toBe('sent')
+  })
+
   it('retries a transient provider failure without changing the business message', async () => {
     vi.stubEnv('MINIPROGRAM_STATE', 'developer')
     vi.stubEnv('SUBSCRIPTION_TEMPLATE_ID', 'template')

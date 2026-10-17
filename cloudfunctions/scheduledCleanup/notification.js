@@ -135,7 +135,7 @@ async function deliverNotification({ db, cloud, now = Date.now }, messageId) {
       templateId,
       miniprogramState,
       lang: 'zh_CN',
-      data: { thing1: { value: '校园卡' }, thing2: { value: String(message.title).slice(0, 20) } },
+      data: { thing4: { value: '校园卡' }, thing1: { value: String(message.title).slice(0, 20) } },
     })
     if (result?.errCode) throw new Error('notification_provider_rejected')
     await finish({ status: 'sent', sentAt: db.serverDate(), lastError: '' })

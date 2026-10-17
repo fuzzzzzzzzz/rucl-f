@@ -11,11 +11,11 @@ afterEach(() => vi.unstubAllGlobals())
 
 const actions = ['listRecentReturns', 'getReturnRecognitionPreference', 'updateReturnRecognitionPreference']
 
-describe('recognition preview routing', () => {
-  it.each(actions)('routes %s to preview only in develop', (action) => {
+describe('unified API routing', () => {
+  it.each(actions)('routes %s to api in every environment', (action) => {
     for (const envVersion of ['develop', 'trial', 'release', '', 'unknown', undefined]) {
       vi.stubGlobal('wx', { getAccountInfoSync: () => ({ miniProgram: { envVersion } }) })
-      expect(selectApiFunction(action)).toBe(envVersion === 'develop' ? 'recentReturnsPreview' : 'api')
+      expect(selectApiFunction(action)).toBe('api')
     }
   })
 
@@ -53,7 +53,7 @@ describe('recognition preview routing', () => {
     for (const action of [...actions, 'listPublicCards']) {
       await expect(callCloudApi(action, { mode: 'anonymous' })).resolves.toEqual([])
       expect(callFunction).toHaveBeenLastCalledWith({
-        name: actions.includes(action) ? 'recentReturnsPreview' : 'api',
+        name: 'api',
         data: { action, input: { mode: 'anonymous' } },
       })
     }
