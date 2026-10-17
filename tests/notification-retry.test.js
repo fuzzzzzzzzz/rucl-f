@@ -142,6 +142,24 @@ describe('scheduled notification retries through the real handler', () => {
     expect(test.records.notificationOutbox.job.status).toBe('sent')
   })
 
+  it('never restarts a stopped historical retry and retains its original business message', async () => {
+    vi.stubEnv('MINIPROGRAM_STATE', 'developer')
+    vi.stubEnv('SUBSCRIPTION_TEMPLATE_ID', 'template')
+    const test = harness()
+    Object.assign(test.records.notificationOutbox.job, {
+      status: 'skipped',
+      attempts: 8,
+      lastError: 'historical_retry_stopped',
+    })
+    const job = structuredClone(test.records.notificationOutbox.job)
+    const message = structuredClone(test.records.messages.job)
+    await Promise.all([deliverNotification({ db: test.database, cloud: test.cloud }, 'job'), test.run()])
+    await test.run()
+    expect(test.send).not.toHaveBeenCalled()
+    expect(test.records.notificationOutbox.job).toEqual(job)
+    expect(test.records.messages.job).toEqual(message)
+  })
+
   it.each(['blocked', 'deleting', 'preference', 'expired', 'missing', 'wrong_recipient'])(
     'skips ineligible %s notifications',
     async (reason) => {
