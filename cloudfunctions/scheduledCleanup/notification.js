@@ -34,6 +34,7 @@ const MESSAGE_KINDS = Object.freeze({
     templateEnv: 'SUBSCRIPTION_TEMPLATE_ID',
   },
   thanks: { route: 'pages/messages/index', preference: null, templateEnv: null },
+  pickup_issue: { route: 'pages/history/index?type=found', preference: null, templateEnv: null },
   system: { route: 'pages/messages/index', preference: null, templateEnv: null },
 })
 

@@ -1,8 +1,10 @@
 import {
+  confirmCloudClaimHandover,
   listCloudClaims,
   listCloudLostHistory,
   registerCloudLostCard,
   reportCloudRecord,
+  reportCloudPickupIssue,
   renewCloudLostReport,
   searchCloudCards,
   submitCloudClaim,
@@ -109,6 +111,8 @@ Page({
         ...(readyClaim
           ? {
               claimedCardId: readyClaim.cardId,
+              activeClaimId: readyClaim.id,
+              pickupIssueStatus: readyClaim.pickupIssueStatus || '',
               informationRevealed: true,
               revealedStoragePhotoUrl: readyClaim.storagePhotoUrl || '',
               revealedStoragePoint: readyClaim.officialStoragePoint || '',
@@ -271,6 +275,8 @@ Page({
           : this.data.results
         this.setData({
           claimedCardId: selectedCardId,
+          activeClaimId: claim.id,
+          pickupIssueStatus: '',
           selectedClaimCardId: '',
           claimFeature: '',
           results,
@@ -314,6 +320,63 @@ Page({
       if (lostLifetime.isActive(lifetime)) {
         wx.showToast({ title: error instanceof Error ? error.message : '举报提交失败', icon: 'none' })
       }
+    }
+  },
+  goToMyClaims() {
+    if (!this.data.busyKey) wx.navigateTo({ url: '/pages/claims/index' })
+  },
+  async confirmPickup() {
+    if (!this.data.activeClaimId || !this.data.informationRevealed || this.data.busyKey) return
+    const lifetime = lostLifetime.capture()
+    if (!lostLifetime.isActive(lifetime)) return
+    try {
+      await runExclusiveAction(this, 'pickup', async () => {
+        const confirmed = await new Promise<boolean>((resolve) => {
+          wx.showModal({
+            title: '确认已实际取到卡',
+            content:
+              '请拿到本人校园卡后再确认。确认后本次招领结束；未取到请点“未取到/位置有误”。取卡照片可在“我的认领”选填。',
+            confirmText: '已取到卡',
+            cancelText: '还没取到',
+            success: (result) => resolve(result.confirm === true),
+            fail: () => resolve(false),
+          })
+        })
+        if (!confirmed || !lostLifetime.isActive(lifetime)) return
+        await confirmCloudClaimHandover(this.data.activeClaimId, '', '', false, () => lostLifetime.isActive(lifetime))
+        if (!lostLifetime.isActive(lifetime)) return
+        this.setData({ ...clearedClaimDisclosure(), results: [], searched: false })
+        await this.onShow()
+        wx.showToast({ title: '已确认取卡，本次招领完成', icon: 'none' })
+      })
+    } catch (error) {
+      if (lostLifetime.isActive(lifetime))
+        wx.showToast({ title: error instanceof Error ? error.message : '确认失败，请重试', icon: 'none' })
+    }
+  },
+  async reportPickupIssue() {
+    if (!this.data.activeClaimId || this.data.busyKey) return
+    const lifetime = lostLifetime.capture()
+    if (!lostLifetime.isActive(lifetime)) return
+    try {
+      await runExclusiveAction(this, 'pickup-issue', async () => {
+        const reasonCode = await new Promise<'not_found' | 'wrong_location' | 'unavailable' | undefined>((resolve) => {
+          const choices = ['not_found', 'wrong_location', 'unavailable'] as const
+          wx.showActionSheet({
+            itemList: ['到了但没有找到卡', '存放位置不准确', '服务点暂时无法领取'],
+            success: (result) => resolve(choices[result.tapIndex]),
+            fail: () => resolve(undefined),
+          })
+        })
+        if (!reasonCode || !lostLifetime.isActive(lifetime)) return
+        await reportCloudPickupIssue(this.data.activeClaimId, reasonCode)
+        if (!lostLifetime.isActive(lifetime)) return
+        this.setData({ pickupIssueStatus: 'reported' })
+        wx.showToast({ title: '已提醒拾卡者核实，尚未标记归还', icon: 'none', duration: 2500 })
+      })
+    } catch (error) {
+      if (lostLifetime.isActive(lifetime))
+        wx.showToast({ title: error instanceof Error ? error.message : '反馈失败，请重试', icon: 'none' })
     }
   },
   async enableWechatNotifications() {

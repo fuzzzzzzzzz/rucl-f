@@ -215,7 +215,7 @@ describe('cloud API security boundary', () => {
     expect(() => requireVerifiedIdentity({ identityVerified: true })).toThrow('请先填写姓名和学号')
   })
 
-  it('approves one exact match and sends ambiguous matches to manual review', () => {
+  it('approves a bound student match independently of OCR names and retains explicit risk review', () => {
     expect(
       resolveBasicClaimDecision({
         studentMatch: false,
@@ -233,7 +233,7 @@ describe('cloud API security boundary', () => {
         identityConfirmed: true,
         ambiguousMatch: false,
       }),
-    ).toBe('rejected')
+    ).toBe('approved')
     expect(
       resolveBasicClaimDecision({
         studentMatch: true,

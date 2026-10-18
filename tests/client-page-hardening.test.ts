@@ -123,6 +123,8 @@ describe('client page hardening behavior', () => {
     })
     expect(clearedClaimDisclosure()).toEqual({
       claimedCardId: '',
+      activeClaimId: '',
+      pickupIssueStatus: '',
       informationRevealed: false,
       revealedStoragePhotoUrl: '',
       revealedStoragePoint: '',

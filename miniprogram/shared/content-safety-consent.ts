@@ -8,6 +8,17 @@ const actionFields: Record<string, string> = {
   transferFoundCardToOfficial: '本次选择或填写的存放地点（类别、地点、区域、详情）',
 }
 
+/** One explicit acknowledgment for the text and selected photo of this submission only. */
+export async function requestFoundSubmissionSafetyConsent(
+  action: 'createFoundCard' | 'transferFoundCardToOfficial',
+): Promise<void> {
+  await requestExplicitConsent(
+    '本次文字与照片安全检查',
+    `为识别违法违规内容，${actionFields[action]}及本次选择的存放环境照片将连同你的微信 OpenID 分别发送至微信内容安全接口进行文字和图片检查。文字检查不包含学号；照片可能包含卡片上的个人信息，请确认画面内容。两项检查均通过后才能提交；已检查照片会复用有效结果。本次同意仅用于本次提交及这张照片，拒绝将取消本次操作，不上传照片或提交文字。`,
+    '需明确同意本次文字与照片安全检查后才能提交',
+  )
+}
+
 /** A fresh protocol acknowledgment per request, not persisted consent or cryptographic proof. */
 export async function requestContentSafetyConsent(action: string, kind?: unknown): Promise<string | undefined> {
   if (action === 'uploadPrivateImage') {

@@ -88,7 +88,25 @@ function signedOcrRequest(buffer) {
 async function recognize(buffer) {
   assertConfigured()
   const response = await signedOcrRequest(buffer)
-  return (response.TextDetections || []).map((item) => item.DetectedText).filter(Boolean)
+  return (response.TextDetections || [])
+    .filter((item) => typeof item.DetectedText === 'string' && item.DetectedText.trim())
+    .map((item) => {
+      const box = item.ItemPolygon
+      return {
+        text: item.DetectedText,
+        ...(Number.isFinite(item.Confidence) && item.Confidence >= 0 && item.Confidence <= 100
+          ? { confidence: item.Confidence }
+          : {}),
+        ...(box &&
+        [box.X, box.Y, box.Width, box.Height].every(Number.isFinite) &&
+        box.X >= 0 &&
+        box.Y >= 0 &&
+        box.Width > 0 &&
+        box.Height > 0
+          ? { box: { x: box.X, y: box.Y, width: box.Width, height: box.Height } }
+          : {}),
+      }
+    })
 }
 
 async function reserveOcrRequest(openid) {
@@ -213,8 +231,8 @@ exports.main = async (event) => {
       throw new Error('图片编码后不能超过10MB，请重新拍摄')
     }
     await reserveOcrRequest(OPENID)
-    const ocrLines = await recognize(fileContent)
-    result = { ocrLines, requiresPublisherConfirmation: true }
+    const ocrDetections = await recognize(fileContent)
+    result = { ocrLines: ocrDetections.map((item) => item.text), ocrDetections, requiresPublisherConfirmation: true }
   } catch (error) {
     primaryError = error
   }

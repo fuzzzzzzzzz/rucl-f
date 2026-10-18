@@ -43,11 +43,18 @@
     <view class="revealed-title">身份核对完成，领取信息已显示</view>
     <view wx:if="{{revealedStoragePoint}}" class="revealed-point">领取地点：{{revealedStoragePoint}}</view>
     <view class="revealed-help">请根据照片确认周围环境并前往领取。</view>
+    <view wx:if="{{pickupIssueStatus === 'reported'}}" class="revealed-help">已提醒拾卡者核实位置，尚未标记归还。仍有争议可进入认领详情举报。</view>
+    <view wx:elif="{{pickupIssueStatus === 'resolved'}}" class="revealed-help">拾卡者已更新存放地点，请重新核对后领取。</view>
+    <view class="claim-actions">
+      <button class="claim-submit" loading="{{busyKey === 'pickup'}}" disabled="{{!!busyKey}}" bindtap="confirmPickup">我已取到卡</button>
+      <button loading="{{busyKey === 'pickup-issue'}}" disabled="{{!!busyKey || pickupIssueStatus === 'reported'}}" bindtap="reportPickupIssue">未取到/位置有误</button>
+    </view>
+    <button class="register-entry" disabled="{{!!busyKey}}" bindtap="goToMyClaims">认领详情 / 选填取卡照片 / 争议反馈</button>
   </view>
 
   <view wx:if="{{searched}}" class="results">
     <view class="section-title result-heading">查询结果<text class="en">[ SEARCH RESULT ]</text></view>
-    <view wx:if="{{results.length === 0}}" class="neo-card empty-result">
+    <view wx:if="{{results.length === 0 && !informationRevealed}}" class="neo-card empty-result">
       <view>暂未找到校园卡。你可以登记丢失信息，后续匹配由云端完成。</view>
       <button wx:if="{{!registered}}" class="register-entry" disabled="{{!!busyKey}}" bindtap="showLostRegistration"><image src="/assets/icons/add-box.png" mode="aspectFit" /><view><text>登记我的失卡信息</text><text class="en">[ GET MATCHED LATER ]</text></view></button>
       <view wx:else class="registered-tip">失卡信息已登记，无需重复提交。</view>

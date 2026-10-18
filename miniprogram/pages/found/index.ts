@@ -211,7 +211,7 @@ Page({
         '照片识别超时，请手动填写；后台请求可能仍在结束，请勿连续重试',
       )
       if (!foundLifetime.isActive(lifetime) || !ocrRequests.isCurrent(generation)) return
-      const identity = extractCardIdentity(processed.ocrLines || [])
+      const identity = extractCardIdentity(processed.ocrLines || [], processed.ocrDetections)
       this.setData({
         ...(identity.name ? { name: identity.name } : {}),
         ...(identity.studentNumber ? { studentNumber: identity.studentNumber } : {}),

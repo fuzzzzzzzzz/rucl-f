@@ -412,7 +412,9 @@ describe('backend API handler contract', () => {
     ])
     harness.context.openid = 'owner-test'
     expect(await harness.handler({ action: 'findMatches' })).toEqual([expect.objectContaining({ id: found.id })])
-    for (const openid of ['user-1', 'wrong-name-test', 'wrong-number-test']) {
+    harness.context.openid = 'wrong-name-test'
+    expect(await harness.handler({ action: 'findMatches' })).toEqual([expect.objectContaining({ id: found.id })])
+    for (const openid of ['user-1', 'wrong-number-test']) {
       harness.context.openid = openid
       expect(await harness.handler({ action: 'findMatches', input: { studentNumber } })).toEqual([])
     }
@@ -846,7 +848,11 @@ describe('backend API handler contract', () => {
       action: 'submitClaim',
       input: { cardId: 'latest', privateFeature: '蓝色卡套' },
     })
-    expect(submitted.status).toBe('admin_review')
+    expect(submitted.status).toBe('awaiting_official_transfer')
+    // Legacy pending reviews remain processable; ordinary new duplicates no
+    // longer create them merely because there are multiple matching posts.
+    harness.database.records.claims[submitted.id].status = 'admin_review'
+    harness.database.records.foundCards.latest.status = 'admin_review'
 
     harness.context.openid = 'admin-openid'
     await harness.handler({
@@ -1805,7 +1811,10 @@ describe('backend API handler contract', () => {
     expect(matches[0].officialStoragePoint).toBeUndefined()
     expect(matches[0].storagePhotoUrl).toBeUndefined()
     const claim = await run('submitClaim', { cardId: published.id, privateFeature: '需要管理员核对' })
-    expect(claim.status).toBe('admin_review')
+    expect(claim.status).toBe('ready_for_pickup')
+    // Exercise an existing legacy review independently of optional clue mismatch.
+    harness.database.records.claims[claim.id].status = 'admin_review'
+    harness.database.records.foundCards[published.id].status = 'admin_review'
     await expect(run('confirmClaimHandover', { claimId: claim.id })).rejects.toThrow()
     await expect(
       run('reviewClaim', { claimId: claim.id, decision: 'approved', reasonCode: 'manual_verification' }),

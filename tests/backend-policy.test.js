@@ -103,7 +103,7 @@ describe('backend claim state primitives', () => {
     ).toThrow('3次上限')
   })
 
-  it('routes ambiguity, retries, and missing private evidence to review', () => {
+  it('reviews rejected retries but not duplicate posts or optional private descriptions', () => {
     expect(
       claim.claimNeedsAdminReview({
         ambiguousMatch: false,
@@ -119,7 +119,7 @@ describe('backend claim state primitives', () => {
         expectedFeature: '',
         featureMatch: false,
       }),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       claim.claimNeedsAdminReview({
         ambiguousMatch: false,
@@ -135,7 +135,7 @@ describe('backend claim state primitives', () => {
         expectedFeature: 'blue sleeve',
         featureMatch: false,
       }),
-    ).toBe(true)
+    ).toBe(false)
     expect(claim.reviewReasonsForDecision('approved')).toContain('identity_verified')
     expect(claim.reviewReasonsForDecision('rejected')).toContain('suspected_fraud')
     expect(() => claim.reviewReasonsForDecision('other')).toThrow('审核决定')

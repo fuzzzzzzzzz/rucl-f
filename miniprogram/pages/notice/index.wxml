@@ -27,7 +27,7 @@
   <view class="neo-card">
     <view class="section-title">系统能做什么</view><view class="rule" />
     <view class="item">1. 帮助拾卡者发布结构化记录，并把姓名和学号隐藏后展示。</view>
-    <view class="item">2. 核对用户填写的姓名和学号，显示最新一条对应记录。</view>
+    <view class="item">2. 使用账号已绑定的学号匹配，显示最新一条对应记录；姓名与特点供本人核对，不作为普通认领的人工审核门槛。</view>
     <view class="item">3. 有存放照片或卡片已在工作人员处时，向对应认领者显示领取信息。</view>
     <view class="item">4. 记录领取、感谢、举报和管理员处理结果。</view>
     <view class="important">系统只核对用户填写的信息是否一致，不是学校统一身份认证。领取时仍应携带有效校园证件，并以现场工作人员的核对结果为准。</view>

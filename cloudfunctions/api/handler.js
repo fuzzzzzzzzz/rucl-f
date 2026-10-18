@@ -851,7 +851,7 @@ async function createFoundCard(openid, input) {
     .where({ studentHmac: data.studentHmac, status: 'active' })
     .limit(20)
     .get()
-  const matchingReports = lostReports.data.filter((report) => report.nameHmac === data.nameHmac)
+  const matchingReports = lostReports.data
   if (matchingReports.length) {
     await Promise.all(
       matchingReports.map((report) =>
@@ -891,13 +891,13 @@ async function listPublicCards(openid) {
 async function findMatches(openid) {
   const user = await requireActiveUser(openid)
   requireVerifiedIdentity(user)
-  const digest = user.studentHmac
+  const digest = requireText(user.studentHmac, '已绑定学号', 128)
   const result = await db
     .collection('foundCards')
     .where({ studentHmac: digest, status: _.in(['pending_match', 'matched']) })
     .limit(10)
     .get()
-  const matches = result.data.filter((card) => card.nameHmac === user.nameHmac)
+  const matches = result.data
   const latestCard = selectLatestCard(matches)
   await audit(openid, 'match.searched', '', { count: matches.length, selectedLatest: Boolean(latestCard) })
   if (!latestCard) return []
@@ -917,7 +917,7 @@ async function createLostReport(openid, input) {
     .count()
   if (count.total >= 3) throw new Error('今日登记次数已达上限')
 
-  const digest = user.studentHmac
+  const digest = requireText(user.studentHmac, '已绑定学号', 128)
   const personNameHmac = user.nameHmac
   const existing = await db
     .collection('lostReports')
@@ -953,7 +953,7 @@ async function createLostReport(openid, input) {
     .where({ studentHmac: data.studentHmac, status: _.in(['pending_match', 'matched']) })
     .limit(10)
     .get()
-  const matchingCards = matches.data.filter((card) => card.nameHmac === data.nameHmac)
+  const matchingCards = matches.data
   if (matchingCards.length) {
     await Promise.all(matchingCards.map((card) => createMatchMessage(openid, created._id, card)))
     await Promise.all(
@@ -1294,7 +1294,7 @@ async function submitClaim(openid, input) {
   const user = await requireActiveUser(openid)
   requireVerifiedIdentity(user)
   const cardId = requireText(input.cardId, '卡片记录', 64)
-  const requestedDigest = user.studentHmac
+  const requestedDigest = requireText(user.studentHmac, '已绑定学号', 128)
   const featureText = String(input.privateFeature || '')
     .trim()
     .slice(0, 300)
@@ -1305,6 +1305,7 @@ async function submitClaim(openid, input) {
     existingBefore.data &&
     [...ACTIVE_CLAIM_STATUSES, 'returned'].includes(normalizeClaimWorkflowStatus(existingBefore.data.status))
   ) {
+    if (existingBefore.data.studentHmac !== requestedDigest) throw new Error('绑定身份与该校园卡不匹配')
     const card = await getOptionalDocument(db.collection('foundCards').doc(existingBefore.data.cardId))
     const storageReady = Boolean(card.data && (await hasApprovedPickupStorage(db, card.data)))
     const status = privateClaimStatus(existingBefore.data.status, storageReady)
@@ -1330,7 +1331,7 @@ async function submitClaim(openid, input) {
     })
     .limit(20)
     .get()
-  const matchingCards = possibleMatches.data.filter((card) => card.nameHmac === user.nameHmac)
+  const matchingCards = possibleMatches.data
   const latestMatchingCard = selectLatestCard(matchingCards)
   if (!latestMatchingCard || latestMatchingCard._id !== cardId) {
     throw new Error('该卡片不是最新记录，请重新查询后确认')
@@ -1353,6 +1354,7 @@ async function submitClaim(openid, input) {
           existing.data &&
           [...ACTIVE_CLAIM_STATUSES, 'returned'].includes(normalizeClaimWorkflowStatus(existing.data.status))
         ) {
+          if (existing.data.studentHmac !== requestedDigest) throw new Error('绑定身份与该校园卡不匹配')
           claimStatus = privateClaimStatus(
             existing.data.status,
             await hasApprovedPickupStorage(transaction, card.data || {}),
@@ -1392,13 +1394,9 @@ async function submitClaim(openid, input) {
         )
         const decision = resolveBasicClaimDecision({
           studentMatch,
-          nameMatch,
           identityConfirmed: normalizeProfileBindingStatus(user) === 'locked',
           ambiguousMatch: claimNeedsAdminReview({
-            ambiguousMatch,
             retry: attemptPlan.retry,
-            expectedFeature: expectedText,
-            featureMatch,
           }),
         })
         if (decision === 'rejected') throw new Error('绑定身份与该校园卡不匹配')
@@ -1542,6 +1540,7 @@ async function listMyClaims(openid) {
       ...(projection.officialStoragePoint ? { officialStoragePoint: projection.officialStoragePoint } : {}),
       ...(projection.storagePhotoUrl ? { storagePhotoUrl: projection.storagePhotoUrl } : {}),
       ...(projection.awaitingOfficialTransfer ? { awaitingOfficialTransfer: true } : {}),
+      ...(claim.pickupIssue?.status ? { pickupIssueStatus: claim.pickupIssue.status } : {}),
     }
   })
   return records.filter(Boolean)
@@ -1726,7 +1725,15 @@ async function transferFoundCardToOfficial(openid, input) {
         await transaction
           .collection('claims')
           .doc(card.data.activeClaimId)
-          .update({ data: { status: 'ready_for_pickup', officialTransferredAt: db.serverDate() } })
+          .update({
+            data: {
+              status: 'ready_for_pickup',
+              officialTransferredAt: db.serverDate(),
+              ...(claim.data.pickupIssue?.status === 'reported'
+                ? { pickupIssue: { ...claim.data.pickupIssue, status: 'resolved', resolvedAt: db.serverDate() } }
+                : {}),
+            },
+          })
       }
     }
     if (card.data.storagePhotoFileId && card.data.storagePhotoFileId !== storagePhotoFileId) {
@@ -1756,7 +1763,7 @@ async function transferFoundCardToOfficial(openid, input) {
       body: '请进入“我的认领”查看地点，并携带有效校园证件领取。',
       relatedCardId: cardId,
       relatedClaimId: claimToNotify._id,
-      dedupeKey: `claim:${claimToNotify._id}:official-transfer`,
+      dedupeKey: `claim:${claimToNotify._id}:official-transfer:${claimToNotify.pickupIssue?.reportedAt ? timestamp(claimToNotify.pickupIssue.reportedAt) : 'initial'}`,
     })
   }
   await audit(openid, 'found_card.transferred_official', cardId)
@@ -1781,12 +1788,70 @@ async function screenThanks(openid, value) {
   }
 }
 
+async function reportPickupIssue(openid, input) {
+  const user = await requireActiveUser(openid)
+  requireVerifiedIdentity(user)
+  const boundDigest = requireText(user.studentHmac, '已绑定学号', 128)
+  const claimId = requireText(input.claimId, '认领申请', 64)
+  const reasonCode = requireChoice(input.reasonCode, ['not_found', 'wrong_location', 'unavailable'], '领取反馈')
+  let idempotent = false
+  let messageId
+  await withTransactionRetry(() =>
+    db.runTransaction(async (transaction) => {
+      const claim = await transaction.collection('claims').doc(claimId).get()
+      if (!claim.data || claim.data.applicantOpenid !== openid || claim.data.studentHmac !== boundDigest) {
+        throw new Error('只能反馈本人认领的校园卡')
+      }
+      const card = await transaction.collection('foundCards').doc(claim.data.cardId).get()
+      if (
+        !card.data ||
+        card.data.activeClaimId !== claimId ||
+        !['ready_for_pickup', 'awaiting_official_transfer'].includes(claim.data.status) ||
+        ['returned', 'closed'].includes(card.data.status)
+      )
+        throw new Error('该认领当前不能提交领取反馈，请刷新后重试')
+      if (claim.data.pickupIssue?.status === 'reported') {
+        idempotent = true
+        return
+      }
+      // Fixed choices avoid collecting additional student text. One message
+      // per 24h bounds repeat notifications even after a finder correction.
+      const lastReportedAt = timestamp(claim.data.pickupIssue?.reportedAt)
+      if (lastReportedAt && now() - lastReportedAt < 86400000)
+        throw new Error('已提醒过拾卡者，请稍后查看；仍有争议可举报')
+      await transaction
+        .collection('claims')
+        .doc(claimId)
+        .update({
+          data: {
+            pickupIssue: { status: 'reported', reasonCode, reportedAt: new Date(now()) },
+            updatedAt: db.serverDate(),
+          },
+        })
+      messageId = await enqueueMessage(transaction, {
+        recipientOpenid: claim.data.publisherOpenid,
+        kind: 'pickup_issue',
+        title: '失主反馈尚未取到校园卡',
+        body: '请核实卡片是否仍在原处，并在“我发布的招领”更新实际官方存放地点。交接尚未完成。',
+        relatedCardId: claim.data.cardId,
+        relatedClaimId: claimId,
+        dedupeKey: `claim:${claimId}:pickup-issue:${Math.floor(now() / 86400000)}`,
+      })
+    }),
+  )
+  if (messageId) await deliverOutbox(messageId)
+  await audit(openid, 'claim.pickup_issue', claimId, { reasonCode, idempotent })
+  return { status: 'reported', idempotent }
+}
+
 async function confirmClaimHandover(openid, input) {
   const user = await requireActiveUser(openid)
   requireVerifiedIdentity(user)
   const claimId = requireText(input.claimId, '认领申请', 64)
+  const boundDigest = requireText(user.studentHmac, '已绑定学号', 128)
   const preliminary = await db.collection('claims').doc(claimId).get()
   if (!preliminary.data || preliminary.data.applicantOpenid !== openid) throw new Error('只能完成自己的认领任务')
+  if (preliminary.data.studentHmac !== boundDigest) throw new Error('绑定身份与该校园卡不匹配')
   const preliminaryCard = await db.collection('foundCards').doc(preliminary.data.cardId).get()
   const effectiveStatus = privateClaimStatus(
     preliminary.data.status,
@@ -1804,19 +1869,21 @@ async function confirmClaimHandover(openid, input) {
     return { status: 'returned', alreadyCompleted: true, thanksAccepted: Boolean(handover.data.thanksText) }
   }
 
-  const proofReference = privateUploadReference(input.proofUploadToken, 'handover_proof')
-  const proofUpload = await requirePrivateUpload(db, openid, proofReference)
-  const proofFileId = proofUpload.fileId
-
-  const proof = await cloud.downloadFile({ fileID: proofFileId })
-  if (!proof.fileContent || proof.fileContent.length === 0 || proof.fileContent.length > 8 * 1024 * 1024) {
-    throw new Error('取卡照片无效或超过8MB')
+  const proofReference = privateUploadReference(input.proofUploadToken, 'handover_proof', true)
+  const proofUpload = proofReference ? await requirePrivateUpload(db, openid, proofReference) : null
+  const proofFileId = proofUpload?.fileId || ''
+  let proofHash = ''
+  if (proofFileId) {
+    const proof = await cloud.downloadFile({ fileID: proofFileId })
+    if (!proof.fileContent || proof.fileContent.length === 0 || proof.fileContent.length > 8 * 1024 * 1024) {
+      throw new Error('取卡照片无效或超过8MB')
+    }
+    proofHash = crypto.createHash('sha256').update(proof.fileContent).digest('hex')
   }
-  const proofHash = crypto.createHash('sha256').update(proof.fileContent).digest('hex')
   const [publisherHandovers, applicantHandovers, duplicateProof, card, thanks] = await Promise.all([
     db.collection('handovers').where({ publisherOpenid: preliminary.data.publisherOpenid }).limit(50).get(),
     db.collection('handovers').where({ applicantOpenid: openid }).limit(50).get(),
-    db.collection('handovers').where({ proofHash }).limit(1).get(),
+    proofHash ? db.collection('handovers').where({ proofHash }).limit(1).get() : Promise.resolve({ data: [] }),
     db.collection('foundCards').doc(preliminary.data.cardId).get(),
     screenThanks(openid, input.thanksText),
   ])
@@ -1870,7 +1937,7 @@ async function confirmClaimHandover(openid, input) {
       nowMs,
     })
     if (!completion.alreadyCompleted) {
-      await consumePrivateUpload(transaction, openid, proofReference, proofFileId)
+      if (proofReference) await consumePrivateUpload(transaction, openid, proofReference, proofFileId)
       const completedClaim = completion.completedClaim
       messageIds.push(
         await enqueueMessage(transaction, {
@@ -2499,7 +2566,7 @@ async function listAdminOperations(openid) {
   await requireAdmin(openid)
   const [reports, risks, deletionRequests, feedback] = await Promise.all([
     db.collection('recordReports').where({ status: 'pending' }).limit(50).get(),
-    db.collection('handovers').where({ officialPointVerified: false }).limit(50).get(),
+    db.collection('handovers').where({ riskStatus: 'review' }).limit(50).get(),
     db.collection('dataDeletionRequests').where({ status: 'pending' }).limit(50).get(),
     db.collection('feedback').where({ status: 'pending' }).limit(50).get(),
   ])
@@ -2514,7 +2581,7 @@ async function listAdminOperations(openid) {
       ...reportEvidence.get(item._id),
     })),
     risks: risks.data
-      .filter((item) => ['review', 'normal'].includes(item.riskStatus))
+      .filter((item) => item.riskStatus === 'review')
       .map((item) => ({
         id: item._id,
         cardId: item.cardId,
@@ -3008,6 +3075,7 @@ const ACTION_HANDLERS = Object.freeze({
   reviewClaim,
   transferFoundCardToOfficial,
   confirmClaimHandover,
+  reportPickupIssue,
   completeHandover,
   closeOwnRecord,
   reportRecord,
@@ -3057,6 +3125,7 @@ const ACTION_POLICIES = Object.freeze({
   reviewClaim: { actor: 'admin' },
   transferFoundCardToOfficial: { actor: 'active' },
   confirmClaimHandover: { actor: 'verified' },
+  reportPickupIssue: { actor: 'verified' },
   completeHandover: { actor: 'admin' },
   closeOwnRecord: { actor: 'active' },
   reportRecord: { actor: 'active' },

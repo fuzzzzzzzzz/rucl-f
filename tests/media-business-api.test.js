@@ -368,7 +368,11 @@ describe('real media moderation at business API boundaries', () => {
     const card = await run(h, 'createFoundCard', { ...found(scene.uploadToken), privateFeature: '蓝色卡套' })
     h.context.openid = 'owner'
     const claim = await run(h, 'submitClaim', { cardId: card.id, privateFeature: '红色卡套' })
-    expect(claim.status).toBe('admin_review')
+    expect(claim.status).toBe('ready_for_pickup')
+    // Retain replay coverage for legacy reviews without turning a clue mismatch
+    // back into a mandatory administrator task.
+    h.database.records.claims[claim.id].status = 'admin_review'
+    h.database.records.foundCards[card.id].status = 'admin_review'
     h.context.openid = 'admin'
     const input = { claimId: claim.id, decision: 'approved', reasonCode: 'manual_verification' }
     expect(await run(h, 'reviewClaim', input)).toMatchObject({ status: 'ready_for_pickup', idempotent: false })

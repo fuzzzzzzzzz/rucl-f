@@ -102,6 +102,7 @@ export interface ClaimSummary {
   officialStoragePoint?: string
   storagePhotoUrl?: string
   awaitingOfficialTransfer?: boolean
+  pickupIssueStatus?: 'reported' | 'resolved'
 }
 
 export interface AchievementProgress {

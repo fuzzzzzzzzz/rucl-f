@@ -192,7 +192,7 @@ describe('security hardening domain', () => {
     expect(records.foundCards['card-photo'].status).toBe('returned')
   })
 
-  it('lets only the owner or an admin complete a handover and requires owner proof', async () => {
+  it('lets only the owner or an admin complete a handover, with proof optional', async () => {
     const records = {
       claims: {
         'claim-1': {
@@ -246,10 +246,6 @@ describe('security hardening domain', () => {
       }),
     ).rejects.toThrow('拾卡者不能认领自己发布的卡')
     records.claims['claim-1'].publisherOpenid = 'finder-1'
-    await expect(
-      completeHandoverRecords({ ...baseOptions, actorOpenid: 'owner-1', actorRole: 'student', proofFileId: '' }),
-    ).rejects.toThrow('请拍摄已经取到校园卡的照片')
-
     const completed = await completeHandoverRecords({
       ...baseOptions,
       actorOpenid: 'owner-1',

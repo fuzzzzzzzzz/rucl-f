@@ -30,6 +30,8 @@ export function clearedProfileIdentityFields() {
 export function clearedClaimDisclosure() {
   return {
     claimedCardId: '',
+    activeClaimId: '',
+    pickupIssueStatus: '',
     informationRevealed: false,
     revealedStoragePhotoUrl: '',
     revealedStoragePoint: '',

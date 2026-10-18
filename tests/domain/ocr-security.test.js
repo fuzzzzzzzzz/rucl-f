@@ -37,6 +37,7 @@ function loadCloudFunction({
   failCleanupJob = false,
   authorization = {},
   user = { openid: 'owner-123', creditStatus: 'normal' },
+  detections = [{ DetectedText: 'recognized' }],
 } = {}) {
   const source = fs.readFileSync(path.join(root, 'cloudfunctions/processCardImage/index.js'), 'utf8')
   const deleteFile = vi.fn(async () => {
@@ -108,7 +109,7 @@ function loadCloudFunction({
         const response = new EventEmitter()
         response.setEncoding = vi.fn()
         callback(response)
-        response.emit('data', JSON.stringify({ Response: { TextDetections: [{ DetectedText: 'recognized' }] } }))
+        response.emit('data', JSON.stringify({ Response: { TextDetections: detections } }))
         response.emit('end')
       },
     }
@@ -147,6 +148,32 @@ function loadCloudFunction({
 }
 
 describe('OCR cloud function limits', () => {
+  it('preserves only minimal valid confidence and geometry alongside compatible OCR lines', async () => {
+    const harness = loadCloudFunction({
+      authorization: { transport: 'inline' },
+      detections: [
+        {
+          DetectedText: '周明远',
+          Confidence: 98,
+          ItemPolygon: { X: 100, Y: 200, Width: 80, Height: 25 },
+          AdvancedInfo: 'private provider metadata',
+        },
+        { DetectedText: '类别 本科生', Confidence: 101, ItemPolygon: { X: 1, Y: 2, Width: -1, Height: 25 } },
+      ],
+    })
+    const result = await harness.main({
+      uploadToken,
+      contentBase64: Buffer.from([255, 216, 255, 217]).toString('base64'),
+    })
+    expect(result).toEqual({
+      ocrLines: ['周明远', '类别 本科生'],
+      ocrDetections: [
+        { text: '周明远', confidence: 98, box: { x: 100, y: 200, width: 80, height: 25 } },
+        { text: '类别 本科生' },
+      ],
+      requiresPublisherConfirmation: true,
+    })
+  })
   it('accepts the full 2MiB transport budget without regex stack overflow', () => {
     const bytes = Buffer.alloc(2 * 1024 * 1024)
     bytes.set([255, 216, 255])
@@ -161,6 +188,7 @@ describe('OCR cloud function limits', () => {
     const harness = loadCloudFunction({ authorization: { transport: 'inline' } })
     await expect(harness.main({ uploadToken, contentBase64 })).resolves.toEqual({
       ocrLines: ['recognized'],
+      ocrDetections: [{ text: 'recognized' }],
       requiresPublisherConfirmation: true,
     })
     expect(harness.downloadFile).not.toHaveBeenCalled()

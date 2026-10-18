@@ -146,8 +146,8 @@ async function withTransactionRetry(operation, options = {}) {
   throw new Error('transaction retry exhausted')
 }
 
-function resolveBasicClaimDecision({ studentMatch, nameMatch, identityConfirmed, ambiguousMatch }) {
-  if (!identityConfirmed || !studentMatch || !nameMatch) return 'rejected'
+function resolveBasicClaimDecision({ studentMatch, identityConfirmed, ambiguousMatch }) {
+  if (!identityConfirmed || !studentMatch) return 'rejected'
   return ambiguousMatch ? 'review' : 'approved'
 }
 
@@ -313,7 +313,6 @@ async function completeHandoverRecords({
   if (!isAdmin && completingOpenid !== claim.data.applicantOpenid) {
     throw new Error('只有认领人或管理员可以完成交接')
   }
-  if (!isAdmin && !proofFileId) throw new Error('请拍摄已经取到校园卡的照片')
 
   if (claim.data.status === 'returned') {
     const handover = await transaction.collection('handovers').doc(claimId).get()

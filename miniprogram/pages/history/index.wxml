@@ -9,7 +9,7 @@
       <view class="meta"><text>{{item.campusName}}</text><text class="number">{{item.foundAt}}</text></view>
       <view class="location"><b>拾取地点</b><text>{{item.pickupSummary}}</text></view>
       <view class="location storage"><b>存放地点</b><text>{{item.storageSummary}}</text></view>
-      <button wx:if="{{item.needsOfficialTransfer}}" class="transfer-button" data-id="{{item.id}}" data-campus="{{item.campusId}}" disabled="{{!!busyKey}}" bindtap="goTransfer">登记已转交的官方地点</button>
+      <button wx:if="{{item.status !== 'returned' && item.status !== 'closed'}}" class="transfer-button" data-id="{{item.id}}" data-campus="{{item.campusId}}" disabled="{{!!busyKey}}" bindtap="goTransfer">更新实际官方存放地点</button>
       <view wx:if="{{item.status !== 'returned' && item.status !== 'closed'}}" class="record-actions"><button data-id="{{item.id}}" loading="{{busyKey === 'close:' + item.id}}" disabled="{{!!busyKey}}" bindtap="closeItem">关闭记录</button></view>
     </view>
   </block>

@@ -22,7 +22,12 @@ import type {
   UserProfileInput,
 } from '../shared/models'
 import { updateCurrentAccountSummary, waitForCloudReady } from '../shared/startup-session'
-import { IMAGE_SAFETY_CONSENT_VERSION, requestContentSafetyConsent } from '../shared/content-safety-consent'
+import {
+  CONTENT_SAFETY_CONSENT_VERSION,
+  IMAGE_SAFETY_CONSENT_VERSION,
+  requestContentSafetyConsent,
+  requestFoundSubmissionSafetyConsent,
+} from '../shared/content-safety-consent'
 import { selectApiFunction } from '../shared/api-routing'
 import type { CardStatus } from '../shared/workflow'
 import { withDeadline } from '../shared/async-control'
@@ -99,7 +104,14 @@ interface CloudPublicCard {
 
 interface ImageProcessingResult {
   ocrLines?: string[]
+  ocrDetections?: OcrTextDetection[]
   requiresPublisherConfirmation?: boolean
+}
+
+interface OcrTextDetection {
+  text: string
+  confidence?: number
+  box?: { x: number; y: number; width: number; height: number }
 }
 
 interface CloudFoundHistory extends Omit<FoundHistoryItem, 'campusName' | 'foundAt'> {
@@ -146,7 +158,10 @@ export function buildCloudFoundCardInput(input: FoundCardInput, assets: CloudAss
   }
 }
 
-export function extractCardIdentity(lines: string[] = []): { name: string; studentNumber: string } {
+export function extractCardIdentity(
+  lines: string[] = [],
+  detections?: OcrTextDetection[],
+): { name: string; studentNumber: string } {
   const normalized = lines
     .map((line) =>
       String(line || '')
@@ -170,23 +185,87 @@ export function extractCardIdentity(lines: string[] = []): { name: string; stude
   studentNumber ||= normalized.map(numberFromText).find(Boolean) || ''
 
   const ignored =
-    /中[国國]人民大[学學]|校[园園]卡|[学學]生卡|本科生|[硕碩]士生|博士生|教[职職]工|[学學][号號]|[学學]生[号號]|[证證][号號]|[编編][号號]|姓名|名字|[类類][别別]|照片|[无無]法[识識][别別]/
+    /大[学學]|[学學]院|校[园園]|[学學]生卡|本科生|[硕碩]士生|博士生|教[职職]工|[学學][号號]|[学學]生[号號]|[证證][号號]|[编編][号號]|姓名|名字|[类類][别別]|照片|[无無]法[识識][别別]/
   const normalizedName = (line: string) => line.replace(/\s+/g, '').replace(/^(?:姓名|名字)[:：]?/, '')
-  let name = ''
-  for (let index = 0; index < normalized.length && !name; index += 1) {
-    const compact = normalized[index].replace(/\s+/g, '')
-    if (/^(?:姓名|名字)[:：]?$/.test(compact) && normalized[index + 1]) {
-      const candidate = normalizedName(normalized[index + 1])
-      if (/^[\u4e00-\u9fa5·]{2,6}$/.test(candidate) && !ignored.test(candidate)) name = candidate
-      continue
-    }
-    if (/^(?:姓名|名字)[:：]?/.test(compact)) {
-      const candidate = normalizedName(compact)
-      if (/^[\u4e00-\u9fa5·]{2,6}$/.test(candidate) && !ignored.test(candidate)) name = candidate
-    }
+  const isName = (text: string) => /^[\u4e00-\u9fa5·]{2,6}$/.test(text) && !ignored.test(text)
+  // Never flatten supplied evidence back into a high-confidence text-only guess.
+  const hasMetadata = Array.isArray(detections) && detections.length > 0
+  const evidence: OcrTextDetection[] = hasMetadata ? detections : normalized.map((text) => ({ text }))
+  const reliable = (item: OcrTextDetection) =>
+    !hasMetadata || (typeof item.confidence === 'number' && item.confidence >= 85 && item.confidence <= 100)
+  const uniqueName = (names: string[]) => {
+    const unique = Array.from(new Set(names))
+    return unique.length === 1 ? unique[0] : ''
   }
-  name ||=
-    normalized.map(normalizedName).find((line) => /^[\u4e00-\u9fa5·]{2,6}$/.test(line) && !ignored.test(line)) || ''
+  const explicit: string[] = []
+  let hasNameLabel = false
+  evidence.forEach((item, index) => {
+    const compact = item.text.replace(/\s+/g, '')
+    if (!/^(?:姓名|名字)[:：]?/.test(compact)) return
+    hasNameLabel = true
+    if (!reliable(item)) return
+    const separate = /^(?:姓名|名字)[:：]?$/.test(compact)
+    const values =
+      separate && hasMetadata
+        ? evidence.filter((value) => {
+            const label = item.box
+            const box = value.box
+            if (
+              !label ||
+              !box ||
+              ![label.x, label.y, label.width, label.height, box.x, box.y, box.width, box.height].every(Number.isFinite)
+            )
+              return false
+            const row = Math.max(label.height, box.height)
+            if (row <= 0) return false
+            const gap = box.y - label.y
+            return (
+              (Math.abs(gap) <= row * 0.6 &&
+                box.x >= label.x + label.width * 0.5 &&
+                box.x <= label.x + label.width + row * 8) ||
+              (gap >= row * 0.5 && gap <= row * 2 && Math.abs(box.x - label.x) <= row * 3)
+            )
+          })
+        : [separate ? evidence[index + 1] : item]
+    for (const value of values) {
+      if (!value || !reliable(value)) continue
+      const candidate = normalizedName(value.text)
+      if (isName(candidate)) explicit.push(candidate)
+    }
+  })
+  let name = uniqueName(explicit)
+  if (!hasNameLabel) {
+    const category = /[类類][别別]|本科生|[硕碩]士生|博士生|教[职職]工/
+    const candidates = evidence.filter((item, index) => {
+      if (!isName(normalizedName(item.text)) || !reliable(item)) return false
+      if (!hasMetadata) {
+        // Legacy responses need both a neighboring category and a nearby student number.
+        return (
+          normalized.some((text, anchor) => category.test(text) && Math.abs(anchor - index) === 1) &&
+          normalized.some(
+            (text, anchor) => numberFromText(text) === studentNumber && studentNumber && Math.abs(anchor - index) <= 3,
+          )
+        )
+      }
+      const box = item.box
+      if (!box || ![box.x, box.y, box.width, box.height].every(Number.isFinite) || box.width <= 0 || box.height <= 0)
+        return false
+      const nearBelow = (anchor: OcrTextDetection, maxRows: number) => {
+        const other = anchor.box
+        if (!other || !reliable(anchor)) return false
+        const row = Math.max(box.height, other.height)
+        const gap = other.y - box.y
+        return gap >= -row * 0.25 && gap <= row * maxRows && Math.abs(other.x - box.x) <= row * 4
+      }
+      return (
+        evidence.some((anchor) => category.test(anchor.text) && nearBelow(anchor, 3)) &&
+        evidence.some(
+          (anchor) => numberFromText(anchor.text) === studentNumber && studentNumber && nearBelow(anchor, 5),
+        )
+      )
+    })
+    name = uniqueName(candidates.map((item) => normalizedName(item.text)))
+  }
   return { name, studentNumber }
 }
 
@@ -450,9 +529,11 @@ async function beginPrivateUpload(
   entry: PrivateImageEntry,
   deadline: number,
   consentVersion: string,
+  submission?: FoundSubmissionConsent,
 ): Promise<PrivateUploadResult> {
   const guard = () => {
     checkPhotoAccount(entry)
+    if (submission) checkFoundSubmissionConsent(submission, submission.action, entry.path)
     if (Date.now() >= deadline) throw new PrivateImagePendingError(PHOTO_UNKNOWN_MESSAGE)
   }
   await waitForCloudControlReady()
@@ -486,16 +567,25 @@ async function beginPrivateUpload(
   return result
 }
 
-async function waitForPrivateImage(entry: PrivateImageEntry, fresh: boolean): Promise<string> {
+async function waitForPrivateImage(
+  entry: PrivateImageEntry,
+  fresh: boolean,
+  submission?: FoundSubmissionConsent,
+): Promise<string> {
   try {
     // Reading and deciding on consent is the student's time, not server processing time.
-    const consentVersion = fresh ? await requestContentSafetyConsent('uploadPrivateImage', entry.kind) : undefined
+    if (submission) checkFoundSubmissionConsent(submission, submission.action, entry.path)
+    const consentVersion = fresh
+      ? submission
+        ? IMAGE_SAFETY_CONSENT_VERSION
+        : await requestContentSafetyConsent('uploadPrivateImage', entry.kind)
+      : undefined
     checkPhotoAccount(entry)
     const deadline = Date.now() + PHOTO_WAIT_MS
     let receipt: PrivateUploadResult
     if (fresh) {
       if (consentVersion !== IMAGE_SAFETY_CONSENT_VERSION) throw new Error('需明确同意本次照片安全检查后才能上传')
-      entry.upload = beginPrivateUpload(entry, deadline, consentVersion)
+      entry.upload = beginPrivateUpload(entry, deadline, consentVersion, submission)
       // Promise.race observes both late resolutions and late rejections.
       receipt = await withDeadline(entry.upload, PHOTO_WAIT_MS, PHOTO_UPLOAD_UNKNOWN_MESSAGE)
     } else {
@@ -578,9 +668,14 @@ async function queryPrivateImage(entry: PrivateImageEntry, deadline: number): Pr
   }
 }
 
-async function uploadPrivateImage(filePath: string, kind: PrivateImageKind): Promise<string> {
+async function uploadPrivateImage(
+  filePath: string,
+  kind: PrivateImageKind,
+  submission?: FoundSubmissionConsent,
+): Promise<string> {
   if (!filePath) return ''
   await waitForCloudControlReady()
+  if (submission) checkFoundSubmissionConsent(submission, submission.action, filePath)
   const { accountId, environment } = currentPhotoAccount()
   for (const entry of privateImages.values()) {
     if (Date.now() >= entry.expiresAt) void discardPhoto(entry)
@@ -607,7 +702,7 @@ async function uploadPrivateImage(filePath: string, kind: PrivateImageKind): Pro
   }
   if (entry.wait) return entry.wait
   const activeEntry = entry
-  const waiting = waitForPrivateImage(activeEntry, fresh)
+  const waiting = waitForPrivateImage(activeEntry, fresh, submission)
   activeEntry.wait = waiting
   try {
     return await waiting
@@ -700,27 +795,79 @@ function privateBusinessGuard(hasPhoto: boolean, shouldContinue?: () => boolean,
   }
 }
 
+type FoundSubmissionAction = 'createFoundCard' | 'transferFoundCardToOfficial'
+
+// Private capability: never accepted from public callers, stored in a photo cache, or reused by another request.
+interface FoundSubmissionConsent {
+  action: FoundSubmissionAction
+  photoPath: string
+  active: boolean
+  guard: () => void
+}
+
+function checkFoundSubmissionConsent(
+  scope: FoundSubmissionConsent,
+  action: FoundSubmissionAction,
+  photoPath: string,
+): void {
+  if (!scope.active || scope.action !== action || scope.photoPath !== photoPath)
+    throw new Error('本次操作已取消，请重新提交')
+  scope.guard()
+}
+
+async function requestFoundSubmissionConsent(
+  action: FoundSubmissionAction,
+  photoPath: string,
+  guard: () => void,
+): Promise<FoundSubmissionConsent> {
+  guard()
+  await requestFoundSubmissionSafetyConsent(action)
+  guard()
+  return { action, photoPath, active: true, guard }
+}
+
+async function sendFoundSubmission<T>(
+  action: FoundSubmissionAction,
+  input: Record<string, unknown>,
+  scope: FoundSubmissionConsent,
+): Promise<T> {
+  await waitForCloudControlReady()
+  checkFoundSubmissionConsent(scope, action, scope.photoPath)
+  return sendCloudApi<T>(action, { ...input, contentSafetyConsentVersion: CONTENT_SAFETY_CONSENT_VERSION })
+}
+
 export async function createCloudFoundCard(
   input: FoundCardInput,
   shouldContinue?: () => boolean,
 ): Promise<{ id: string }> {
   await waitForCloudControlReady()
-  const guard = privateBusinessGuard(Boolean(input.storagePhotoPath), shouldContinue, () => storagePhotoUploadToken)
+  const photoPath = input.storagePhotoPath
+  const snapshot = {
+    ...input,
+    pickupLocation: { ...input.pickupLocation },
+    storageLocation: { ...input.storageLocation },
+  }
+  const guard = privateBusinessGuard(Boolean(photoPath), shouldContinue, () => storagePhotoUploadToken)
   let storagePhotoUploadToken = ''
+  let submission: FoundSubmissionConsent | undefined
   try {
-    if (input.storagePhotoPath) storagePhotoUploadToken = await uploadStoragePhoto(input.storagePhotoPath)
+    if (photoPath) {
+      submission = await requestFoundSubmissionConsent('createFoundCard', photoPath, guard)
+      storagePhotoUploadToken = await uploadPrivateImage(photoPath, 'storage_scene', submission)
+    }
     guard()
-    const result = await callCloudApi<{ id: string }>(
-      'createFoundCard',
-      buildCloudFoundCardInput(input, { storagePhotoUploadToken }),
-      guard,
-    )
+    const cloudInput = buildCloudFoundCardInput(snapshot, { storagePhotoUploadToken })
+    const result = submission
+      ? await sendFoundSubmission<{ id: string }>('createFoundCard', cloudInput, submission)
+      : await callCloudApi<{ id: string }>('createFoundCard', cloudInput, guard)
     completePrivateUpload(storagePhotoUploadToken)
     return result
   } catch (error) {
     if (!(error instanceof PrivateImageBusinessDeferredError))
       await discardPrivateUpload(storagePhotoUploadToken).catch(() => undefined)
     throw error
+  } finally {
+    if (submission) submission.active = false
   }
 }
 
@@ -751,13 +898,28 @@ export async function renewCloudLostReport(reportId: string): Promise<void> {
 }
 
 export async function listCloudMessages(): Promise<MessageSummary[]> {
-  const records =
-    await callCloudApi<Array<Omit<MessageSummary, 'createdAt'> & { createdAt?: string | Date }>>('listMessages')
+  const records = await callCloudApi<Array<Omit<MessageSummary, 'createdAt'> & { createdAt?: unknown }>>('listMessages')
   return records.map(({ createdAt, ...record }) => {
-    if (!createdAt) return record
-    const timestamp = createdAt instanceof Date ? createdAt.toISOString() : String(createdAt)
-    return { ...record, createdAt: timestamp.slice(0, 16).replace('T', ' ') }
+    const timestamp = messageTimestamp(createdAt)
+    // China has no daylight-saving changes; UTC arithmetic is portable in the mini-program runtime.
+    const chinaDate = new Date(timestamp + 8 * 60 * 60 * 1000)
+    return Number.isFinite(chinaDate.getTime())
+      ? { ...record, createdAt: chinaDate.toISOString().slice(0, 16).replace('T', ' ') }
+      : record
   })
+}
+
+function messageTimestamp(value: unknown): number {
+  if (value instanceof Date) return value.getTime()
+  if (typeof value === 'string')
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i.test(value)
+      ? Date.parse(value)
+      : NaN
+  if (!value || typeof value !== 'object') return NaN
+  if ('milliseconds' in value && typeof value.milliseconds === 'number') return value.milliseconds
+  if ('seconds' in value && typeof value.seconds === 'number') return value.seconds * 1000
+  if ('$date' in value) return typeof value.$date === 'number' ? value.$date : messageTimestamp(value.$date)
+  return NaN
 }
 
 export async function markCloudMessagesRead(messageIds: string[]): Promise<void> {
@@ -863,23 +1025,32 @@ export async function transferCloudFoundCardToOfficial(
   shouldContinue?: () => boolean,
 ): Promise<void> {
   await waitForCloudControlReady()
+  const selectedLocation = { ...storageLocation }
   const guard = privateBusinessGuard(Boolean(storagePhotoPath), shouldContinue, () => storagePhotoUploadToken)
   let storagePhotoUploadToken = ''
+  let submission: FoundSubmissionConsent | undefined
   try {
-    if (storagePhotoPath) storagePhotoUploadToken = await uploadStoragePhoto(storagePhotoPath)
+    if (storagePhotoPath) {
+      submission = await requestFoundSubmissionConsent('transferFoundCardToOfficial', storagePhotoPath, guard)
+      storagePhotoUploadToken = await uploadPrivateImage(storagePhotoPath, 'storage_scene', submission)
+    }
     guard()
-    await callCloudApi('transferFoundCardToOfficial', { cardId, storageLocation, storagePhotoUploadToken }, guard)
+    const cloudInput = { cardId, storageLocation: selectedLocation, storagePhotoUploadToken }
+    if (submission) await sendFoundSubmission('transferFoundCardToOfficial', cloudInput, submission)
+    else await callCloudApi('transferFoundCardToOfficial', cloudInput, guard)
     completePrivateUpload(storagePhotoUploadToken)
   } catch (error) {
     if (!(error instanceof PrivateImageBusinessDeferredError))
       await discardPrivateUpload(storagePhotoUploadToken).catch(() => undefined)
     throw error
+  } finally {
+    if (submission) submission.active = false
   }
 }
 
 export async function confirmCloudClaimHandover(
   claimId: string,
-  proofPath: string,
+  proofPath = '',
   thanksText = '',
   thanksPublic = false,
   shouldContinue?: () => boolean,
@@ -901,6 +1072,13 @@ export async function confirmCloudClaimHandover(
       await discardPrivateUpload(proofUploadToken).catch(() => undefined)
     throw error
   }
+}
+
+export async function reportCloudPickupIssue(
+  claimId: string,
+  reasonCode: 'not_found' | 'wrong_location' | 'unavailable',
+): Promise<{ status: 'reported'; idempotent: boolean }> {
+  return callCloudApi('reportPickupIssue', { claimId, reasonCode })
 }
 
 export async function closeCloudRecord(type: 'found' | 'lost', recordId: string, reason: string): Promise<void> {

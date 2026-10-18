@@ -45,8 +45,10 @@ function planClaimAttempt(existing, nowMs) {
   }
 }
 
-function claimNeedsAdminReview({ ambiguousMatch, retry, expectedFeature, featureMatch }) {
-  return Boolean(ambiguousMatch || retry || (expectedFeature && !featureMatch))
+function claimNeedsAdminReview({ retry }) {
+  // Duplicate posts are resolved by selecting the latest record. Optional
+  // descriptions and OCR names are not a second identity credential.
+  return Boolean(retry)
 }
 
 function reviewReasonsForDecision(decision) {

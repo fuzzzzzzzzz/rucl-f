@@ -18,8 +18,8 @@ const found = (): FoundCardInput => ({
   studentNumber: '2023200031',
   category: '本科生',
   campusId: 'zhongguancun',
-  pickupLocation: location,
-  storageLocation: location,
+  pickupLocation: { ...location },
+  storageLocation: { ...location },
   foundDate: '2026-10-14',
   feature: '',
   photoPath: '',
@@ -79,6 +79,140 @@ describe('real private photo client', () => {
     vi.unstubAllEnvs()
   })
   const actions = () => callFunction.mock.calls.map(([request]) => request.data.action)
+
+  it.each(['found', 'transfer'] as const)('combines text and chosen-photo consent once for %s', async (kind) => {
+    callFunction.mockImplementation(async ({ data }) => ({
+      result:
+        data.action === 'uploadPrivateImage'
+          ? { uploadToken: token, status: 'passed', expiresAt: Date.now() + 60_000 }
+          : { id: 'created' },
+    }))
+    if (kind === 'found') await service.createCloudFoundCard(found())
+    else await service.transferCloudFoundCardToOfficial('card', location, '/scene.jpg')
+    expect(wx.showModal).toHaveBeenCalledOnce()
+    const content = vi.mocked(wx.showModal).mock.calls[0][0]?.content || ''
+    for (const field of ['文字', '存放环境照片', 'OpenID', '分别', '本次提交', '拒绝', '不包含学号'])
+      expect(content).toContain(field)
+    expect(callFunction.mock.calls.at(-1)?.[0].data.input.contentSafetyConsentVersion).toBe('2026-09-16-text-v1')
+  })
+
+  it.each(['found', 'transfer'] as const)('refused %s submission never starts network or preparation', async (kind) => {
+    const compressImage = vi.fn()
+    Object.assign(wx, {
+      compressImage,
+      showModal: vi.fn((options: ModalOptions) => options.success({ confirm: false })),
+    })
+    await expect(
+      kind === 'found'
+        ? service.createCloudFoundCard(found())
+        : service.transferCloudFoundCardToOfficial('card', location, '/scene.jpg'),
+    ).rejects.toThrow('同意')
+    expect(actions()).toEqual([])
+    expect(compressImage).not.toHaveBeenCalled()
+    expect(wx.showModal).toHaveBeenCalledOnce()
+  })
+
+  it.each(['found', 'transfer'] as const)(
+    'account switch during combined %s modal prevents all network',
+    async (kind) => {
+      Object.assign(wx, {
+        showModal: vi.fn((options: ModalOptions) => {
+          app.globalData.accountId = 'account-2'
+          options.success({ confirm: true })
+        }),
+      })
+      await expect(
+        kind === 'found'
+          ? service.createCloudFoundCard(found())
+          : service.transferCloudFoundCardToOfficial('card', location, '/scene.jpg'),
+      ).rejects.toThrow('取消')
+      expect(actions()).toEqual([])
+    },
+  )
+
+  it('cancellation during combined consent prevents preparation and network', async () => {
+    let active = true
+    Object.assign(wx, {
+      showModal: vi.fn((options: ModalOptions) => {
+        active = false
+        options.success({ confirm: true })
+      }),
+    })
+    await expect(service.createCloudFoundCard(found(), () => active)).rejects.toThrow('取消')
+    expect(actions()).toEqual([])
+  })
+
+  it('an environment switch during combined consent prevents network', async () => {
+    Object.assign(wx, {
+      showModal: vi.fn((options: ModalOptions) => {
+        app.globalData.cloudEnvId = 'other-environment'
+        options.success({ confirm: true })
+      }),
+    })
+    await expect(service.createCloudFoundCard(found())).rejects.toThrow('取消')
+    expect(actions()).toEqual([])
+  })
+
+  it('does not reuse combined consent for another selected photo or submission', async () => {
+    callFunction.mockImplementation(async ({ data }) => ({
+      result:
+        data.action === 'uploadPrivateImage'
+          ? { uploadToken: token, status: 'passed', expiresAt: Date.now() + 60_000 }
+          : { id: 'created' },
+    }))
+    await service.createCloudFoundCard(found())
+    await service.createCloudFoundCard({ ...found(), storagePhotoPath: '/new-scene.jpg' })
+    expect(wx.showModal).toHaveBeenCalledTimes(2)
+    expect(actions()).toEqual(['uploadPrivateImage', 'createFoundCard', 'uploadPrivateImage', 'createFoundCard'])
+  })
+
+  it('binds the submitted fields and photo to the snapshot shown at combined consent', async () => {
+    const input = found()
+    const originalStorage = { ...input.storageLocation }
+    Object.assign(wx, {
+      showModal: vi.fn((options: ModalOptions) => {
+        input.name = '不同的姓名'
+        input.storageLocation.detail = '不同的地点'
+        input.storagePhotoPath = '/different.jpg'
+        options.success({ confirm: true })
+      }),
+    })
+    callFunction.mockImplementation(async ({ data }) => ({
+      result:
+        data.action === 'uploadPrivateImage'
+          ? { uploadToken: token, status: 'passed', expiresAt: Date.now() + 60_000 }
+          : { id: 'created' },
+    }))
+    await service.createCloudFoundCard(input)
+    expect(callFunction.mock.calls.at(-1)?.[0].data.input).toMatchObject({
+      name: '张三',
+      storageLocation: originalStorage,
+    })
+    expect(wx.showModal).toHaveBeenCalledOnce()
+  })
+
+  it('requires a fresh combined modal on an old-token retry, and refusal cannot query it', async () => {
+    const first = service.createCloudFoundCard(found()).catch((error) => error)
+    await vi.advanceTimersByTimeAsync(20_001)
+    expect(await first).toBeInstanceOf(service.PrivateImagePendingError)
+    callFunction.mockClear()
+    Object.assign(wx, { showModal: vi.fn((options: ModalOptions) => options.success({ confirm: false })) })
+    const refused = service.createCloudFoundCard(found()).catch((error) => error)
+    await vi.advanceTimersByTimeAsync(20_001)
+    expect((await refused).message).toContain('同意')
+    expect(actions()).toEqual([])
+    expect(wx.showModal).toHaveBeenCalledOnce()
+    Object.assign(wx, { showModal: vi.fn((options: ModalOptions) => options.success({ confirm: true })) })
+    callFunction.mockImplementation(async ({ data }) => ({
+      result:
+        data.action === 'getPrivateImageStatus'
+          ? { status: 'passed', expiresAt: Date.now() + 60_000 }
+          : { id: 'created' },
+    }))
+    await service.createCloudFoundCard(found())
+    expect(wx.showModal).toHaveBeenCalledOnce()
+    expect(actions()).toEqual(['getPrivateImageStatus', 'createFoundCard'])
+  })
 
   it('stops pending publication and retries only its old token', async () => {
     const first = service.createCloudFoundCard(found())
@@ -505,12 +639,21 @@ describe('real private photo client', () => {
         callFunction.mockImplementation(async ({ data }) => ({
           result:
             data.action === 'listMyClaims'
-              ? []
+              ? [
+                  {
+                    id: 'claim',
+                    cardId: 'card',
+                    status: 'ready_for_pickup',
+                    campusId: 'zhongguancun',
+                    createdAt: '2026-10-18',
+                  },
+                ]
               : data.action === 'uploadPrivateImage'
                 ? { uploadToken: token, status: 'pending', expiresAt: Date.now() + 60_000 }
                 : { status: 'pending', expiresAt: Date.now() + 60_000 },
         }))
       page.onShow()
+      if (kind === 'claims') await vi.advanceTimersByTimeAsync(1)
       Object.assign(page.data, { detail: '服务台', photoPath: '/scene.jpg', proofPaths: { claim: '/proof.jpg' } })
       const request =
         kind === 'transfer' ? page.submit() : page.confirmReceived({ currentTarget: { dataset: { id: 'claim' } } })

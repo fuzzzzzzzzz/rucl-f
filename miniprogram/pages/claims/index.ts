@@ -141,8 +141,8 @@ Page({
   async confirmReceived(e: WechatMiniprogram.TouchEvent) {
     if (this.data.busyKey || this.data.photoBusyId) return
     const claimId = String(e.currentTarget.dataset.id || '')
-    const proofPath = this.data.proofPaths[claimId]
-    if (!proofPath) return wx.showToast({ title: '请先现场拍摄已经取到的校园卡', icon: 'none' })
+    const proofPath = this.data.proofPaths[claimId] || ''
+    if (!this.data.claims.some((claim) => claim.id === claimId && claim.status === 'ready_for_pickup')) return
     const lifetime = claimsLifetime.capture()
     if (!claimsLifetime.isActive(lifetime)) return
     try {
@@ -150,14 +150,17 @@ Page({
         const confirmed = await new Promise<boolean>((resolve) => {
           wx.showModal({
             title: '确认已经取到卡',
-            content: '照片只作为交接记录，不能代替学校身份核验；确认后本次任务将结束。',
+            content:
+              '请拿到本人校园卡后再确认，确认后本次任务将结束。取卡照片选填，只用于处理争议，不能代替学校身份核验。',
+            confirmText: '已取到卡',
+            cancelText: '还没取到',
             success: (result) => resolve(result.confirm),
             fail: () => resolve(false),
           })
         })
         if (!confirmed) return
         if (!claimsLifetime.isActive(lifetime)) return
-        this.setData({ [`photoCheckStatuses.${claimId}`]: '正在确认照片安全检查结果，请稍候…' })
+        this.setData({ [`photoCheckStatuses.${claimId}`]: proofPath ? '正在确认照片安全检查结果，请稍候…' : '' })
         const result = await confirmMyClaimHandover(
           claimId,
           proofPath,
