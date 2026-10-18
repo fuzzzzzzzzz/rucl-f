@@ -25,7 +25,7 @@ describe('personal operator compliance', () => {
 
     expect(home).toContain('非中国人民大学官方平台')
     expect(notice).toContain('张一凡（个人开发者）')
-    expect(notice).toContain('fuz138886@gmail.com')
+    expect(notice).toContain('1366937005@qq.com')
     expect(notice).toContain('2026年7月19日')
     expect(notice).toContain('版本：1.0')
     expect(notice).toContain('举报经核实')
@@ -33,6 +33,17 @@ describe('personal operator compliance', () => {
     expect(privacy).toContain('个人信息处理者')
     expect(privacy).toContain('不收集微信手机号')
     expect(privacy).toContain('安全审计日志最多保存60天')
+  })
+
+  it('keeps the displayed and copied contact email consistent', () => {
+    for (const file of [
+      'miniprogram/pages/notice/index.wxml',
+      'miniprogram/pages/notice/index.ts',
+      'miniprogram/pages/privacy/index.wxml',
+    ]) {
+      expect(source(file)).toContain('1366937005@qq.com')
+      expect(source(file)).not.toContain('fuz138886@gmail.com')
+    }
   })
 
   it('uses the current brand and omits an inapplicable under-14 notice', () => {

@@ -18,7 +18,7 @@
   <view class="neo-card">
     <view class="section-title">运营者信息</view><view class="rule" />
     <view class="item"><b>个人信息处理者：</b>张一凡（个人开发者）</view>
-    <view class="item"><b>联系与投诉邮箱：</b><text class="link" bindtap="copyEmail">fuz138886@gmail.com</text></view>
+    <view class="item"><b>联系与投诉邮箱：</b><text class="link" bindtap="copyEmail">1366937005@qq.com</text></view>
     <view class="item"><b>生效日期：</b>2026年7月19日</view>
     <view class="item"><b>规则版本：</b>版本：1.0</view>
     <view class="muted">“生效日期”表示本说明从哪一天开始适用；“版本”用于区分以后修改过的说明。</view>

@@ -15,12 +15,14 @@
 
   <view wx:if="{{registered}}" class="neo-card">
     <view>已有生效中的失卡登记。</view>
+    <view class="registration-note">登记有效期间，有人发布学号匹配的校园卡时会生成站内消息。允许微信通知后，可收到一次微信提醒。</view>
     <button class="register-entry" loading="{{busyKey === 'renew'}}" disabled="{{!!busyKey}}" bindtap="renewLostRegistration">续期失卡登记</button>
   </view>
 
   <view wx:if="{{notificationEligible}}" class="neo-card">
-    <view>操作已成功。你可以主动开启一次微信服务通知。</view>
-    <button class="neo-button" loading="{{busyKey === 'notifications'}}" disabled="{{!!busyKey}}" bindtap="enableWechatNotifications">开启一次微信服务通知</button>
+    <view>{{registered ? '失卡信息已登记，可补充开启一次微信找卡提醒。' : '认领已提交，可开启一次微信进展提醒。'}}</view>
+    <view class="registration-note">微信提醒需要你的允许；未允许时仍可查看站内消息。</view>
+    <button class="neo-button" loading="{{busyKey === 'notifications'}}" disabled="{{!!busyKey}}" bindtap="enableWechatNotifications">开启一次微信提醒</button>
   </view>
 
   <view wx:if="{{!informationRevealed}}" class="locked">
@@ -68,10 +70,10 @@
       <textarea class="field short-textarea" maxlength="160" value="{{lostLocation}}" disabled="{{!!busyKey}}" placeholder="例如：东区食堂一层" bindinput="onLostLocation" />
       <text class="label">卡套或卡片特点（选填） <text class="en">[ CARD DETAILS · OPTIONAL ]</text></text>
       <textarea class="field short-textarea" maxlength="300" value="{{lostFeature}}" disabled="{{!!busyKey}}" placeholder="例如：蓝色卡套、背面有贴纸" bindinput="onLostFeature" />
-      <view class="registration-note">补充信息仅用于找卡，不会公开。</view>
+      <view class="registration-note">补充信息仅用于找卡，不会公开。点击后先登记，再申请一次微信通知；拒绝微信通知不影响登记，匹配结果仍会保存在站内消息中。</view>
       <view class="claim-actions">
         <button disabled="{{!!busyKey}}" bindtap="hideLostRegistration">取消</button>
-        <button class="claim-submit" loading="{{busyKey === 'register'}}" disabled="{{!!busyKey}}" bindtap="registerLost">确认登记</button>
+        <button class="claim-submit" loading="{{busyKey === 'register'}}" disabled="{{!!busyKey}}" bindtap="registerLost">登记找卡并开启提醒</button>
       </view>
     </view>
 

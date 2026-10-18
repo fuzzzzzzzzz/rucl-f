@@ -3,6 +3,6 @@ Page({
     wx.navigateTo({ url: '/pages/privacy/index' })
   },
   copyEmail() {
-    wx.setClipboardData({ data: 'fuz138886@gmail.com' })
+    wx.setClipboardData({ data: '1366937005@qq.com' })
   },
 })

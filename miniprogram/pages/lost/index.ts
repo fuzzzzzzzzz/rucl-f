@@ -19,6 +19,14 @@ const pageStateRequests = createLatestRequestGate()
 const searchRequests = createLatestRequestGate()
 const lostLifetime = createPageLifetimeGate()
 
+async function requestNotificationPermission() {
+  try {
+    return await requestWechatNotification()
+  } catch {
+    return 'unavailable' as const
+  }
+}
+
 function requestReportReason(title: string): Promise<string | null> {
   return new Promise((resolve) => {
     wx.showModal({
@@ -50,7 +58,7 @@ Page({
   },
   async onShow() {
     const lifetime = lostLifetime.activate()
-    this.setData({ ...clearedClaimDisclosure(), results: [], searched: false })
+    this.setData({ ...clearedClaimDisclosure(), results: [], searched: false, notificationEligible: false })
     this.getTabBar()?.setData({ selected: 1 })
     const generation = pageStateRequests.begin()
     try {
@@ -107,6 +115,7 @@ Page({
       this.setData({
         registered: Boolean(activeReport),
         activeLostReportId: activeReport?.id || '',
+        notificationEligible: Boolean(activeReport),
         ...clearedClaimDisclosure(),
         ...(readyClaim
           ? {
@@ -218,8 +227,15 @@ Page({
           activeLostReportId: result.id,
           notificationEligible: true,
         })
+        const permission = await requestNotificationPermission()
+        if (!lostLifetime.isActive(lifetime)) return
+        this.setData({ notificationEligible: permission !== 'accepted' })
         wx.showToast({
-          title: result.matchCount ? `已登记，发现${result.matchCount}条匹配信息` : '已登记，找到后会提醒你',
+          title: result.matchCount
+            ? `已登记，发现${result.matchCount}条匹配信息`
+            : permission === 'accepted'
+              ? '已登记，找到后微信提醒'
+              : '已登记，微信提醒未开启',
           icon: 'none',
           duration: 2500,
         })
@@ -380,14 +396,23 @@ Page({
     }
   },
   async enableWechatNotifications() {
+    if (this.data.busyKey) return
+    if ((!this.data.registered || !this.data.activeLostReportId) && !this.data.activeClaimId) {
+      this.setData({ showRegistration: true, notificationEligible: false })
+      wx.showToast({ title: '请先登记找卡，再开启提醒', icon: 'none' })
+      return
+    }
+    const lifetime = lostLifetime.capture()
+    if (!lostLifetime.isActive(lifetime)) return
     try {
       await runExclusiveAction(this, 'notifications', async () => {
-        const permission = await requestWechatNotification()
+        const permission = await requestNotificationPermission()
+        if (!lostLifetime.isActive(lifetime)) return
         wx.showToast({
-          title: permission === 'accepted' ? '提醒已开启' : '未开启提醒，可稍后在设置中重试',
+          title: permission === 'accepted' ? '已允许一次微信提醒' : '微信提醒未开启，可点击重试',
           icon: 'none',
         })
-        this.setData({ notificationEligible: false })
+        this.setData({ notificationEligible: permission !== 'accepted' })
       })
     } catch {
       wx.showToast({ title: '提醒设置暂不可用', icon: 'none' })
